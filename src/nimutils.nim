@@ -128,6 +128,9 @@ type
     (x is seq) or (x is array)
 
 proc flatten*[T](arr: Flattenable, res: var seq[T]) =
+  ## Given arbitrarily nested arrays, flatten into a single array.
+  ## Passing a pre-allocated value into the var parameter will
+  ## generally remove the need to specify T.
   for entry in arr.items:
     when typeof(arr[0]) is T:
       res.add(entry)
@@ -137,5 +140,8 @@ proc flatten*[T](arr: Flattenable, res: var seq[T]) =
       raise newException(ValueError, "nope")
 
 proc flatten*[T](arr: Flattenable): seq[T] =
+  ## Given arbitrarily nested arrays, flatten into a single array.
+  ## Generally, you will need to specify the type parameter;
+  ## result types don't get inferred in Nim.
   result = newSeq[T]()
   flatten[T](arr, result)
