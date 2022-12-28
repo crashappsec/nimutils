@@ -1,0 +1,5 @@
+secureRand	nimutils/random.html#secureRand.t	random: secureRand[T](): T	
+randInt	nimutils/random.html#randInt	random: randInt(): int	
+getRandomWords	nimutils/random.html#getRandomWords,int	random: getRandomWords(number = 4): string	
+intToWords	nimutils/random.html#intToWords,int	random: intToWords(i: int; elideLeadingZeros = true): string	
+wordsToInt	nimutils/random.html#wordsToInt,string	random: wordsToInt(s: string): Option[int]	
