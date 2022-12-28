@@ -4,12 +4,12 @@ import os
 import std/wordwrap
 import strutils
 
-import options
-export options
+# The name flatten conflicts with a method in the options module.
+from options import get, Option, isSome, isNone
+export get, Option, isSome, isNone
 
 {.warning[UnusedImport]: off.}
 import nimutils/[box, random, unicodeid]
-
 
 template unreachable*() =
   let info = instantiationInfo()
@@ -123,3 +123,19 @@ proc indentAndWrap*(str: string, indent: int, maxWidth = 80): string =
 
   return lines.join("\n")
 
+type
+  Flattenable[T] = concept x
+    (x is seq) or (x is array)
+
+proc flatten*[T](arr: Flattenable, res: var seq[T]) =
+  for entry in arr.items:
+    when typeof(arr[0]) is T:
+      res.add(entry)
+    elif (typeof(arr[0]) is seq) or (typeof(arr[0]) is array):
+      flatten(entry, res)
+    else:
+      raise newException(ValueError, "nope")
+
+proc flatten*[T](arr: Flattenable): seq[T] =
+  result = newSeq[T]()
+  flatten[T](arr, result)

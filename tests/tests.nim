@@ -132,3 +132,13 @@ To run these tests, simply execute `nimble test`.
     for line in res.split("\n"):
       check len(line) <= 78
     check removeSpaces(s) == removeSpaces(res)
+
+  test "flatten":
+    var
+      x = @[@[@[1, 2, 3], @[4,5,6]], @[@[7, 8, 9], @[10 ,11, 12]]]
+      y: seq[int]
+
+    flatten(x, y)
+    check y == @[1,2,3,4,5,6,7,8,9,10,11,12]
+    y = flatten[int](x)
+    check y == @[1,2,3,4,5,6,7,8,9,10,11,12]
