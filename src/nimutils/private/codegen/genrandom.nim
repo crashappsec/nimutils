@@ -280,7 +280,8 @@ proc intToWords*(i: int, elideLeadingZeros=true): string =
     if elideLeadingZeros and n == 0:
       break
     ix = n and binIndexMask
-    assert ix == (n and 0xffff), errStr
+    when not defined(release):
+      assert ix == (n and 0xffff), errStr
             
     words.add(binDict[ix])
     n = n shr 16
