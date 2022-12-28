@@ -41,7 +41,6 @@ proc getOrElse*[T](x: Option[T], y: T): T {.inline.} =
   ## ultimate reason why one might use this.
   getOrElseActual(x, y)
 
-
 template dirWalk*(recursive: bool, body: untyped) =
   ## This is a helper function that helps one unify code when a
   ## program might need to do either a single dir walk or a recursive
@@ -51,16 +50,15 @@ template dirWalk*(recursive: bool, body: untyped) =
   ## into the calling scope.
   var item {.inject.}: string
 
-  let walker = when recursive: walkDirRec else: walkDir
-
-  for i in walker(path):
-    when recursive:
+  when recursive:
+    for i in walkDirRec(path):
       item = i
-    else:
+      body
+  else:
+    for i in walkDir(path):
       item = i.path
-
-    body
-
+      body
+    
 template unixTimeInMS*(): uint64 =
   ## Return the current Unix epoch in miliseconds.  That is, this
   ## function will return the number of miliseconds since Jan 1, 1970
