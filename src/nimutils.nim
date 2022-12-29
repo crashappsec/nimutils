@@ -137,8 +137,8 @@ proc flatten*[T](arr: Flattenable, res: var seq[T]) =
     elif (typeof(arr[0]) is seq) or (typeof(arr[0]) is array):
       flatten(entry, res)
     else:
-      raise newException(ValueError, "Cannot flatten " & $(typeof(arr[0])) &
-        " (expected " & $(T) & ")")
+      static:
+        error "Cannot flatten " & $(typeof(arr[0])) & " (expected " & $(T) & ")"
 
 proc flatten*[T](arr: Flattenable): seq[T] =
   ## Given arbitrarily nested arrays, flatten into a single array.
