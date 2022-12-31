@@ -114,3 +114,4 @@ proc peekRune*(s: Stream): Rune =
   let n = s.getPosition()
   result = s.readRune()
   s.setPosition(n)
+

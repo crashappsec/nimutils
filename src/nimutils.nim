@@ -4,12 +4,12 @@ import os
 import std/wordwrap
 import strutils
 
-import options
-export options
+# The name flatten conflicts with a method in the options module.
+from options import get, Option, isSome, isNone
+export get, Option, isSome, isNone
 
 {.warning[UnusedImport]: off.}
 import nimutils/[box, random, unicodeid]
-
 
 template unreachable*() =
   let info = instantiationInfo()
@@ -123,3 +123,26 @@ proc indentAndWrap*(str: string, indent: int, maxWidth = 80): string =
 
   return lines.join("\n")
 
+type
+  Flattenable[T] = concept x
+    (x is seq) or (x is array)
+
+proc flatten*[T](arr: Flattenable, res: var seq[T]) =
+  ## Given arbitrarily nested arrays, flatten into a single array.
+  ## Passing a pre-allocated value into the var parameter will
+  ## generally remove the need to specify T.
+  for entry in arr.items:
+    when typeof(arr[0]) is T:
+      res.add(entry)
+    elif (typeof(arr[0]) is seq) or (typeof(arr[0]) is array):
+      flatten(entry, res)
+    else:
+      static:
+        error "Cannot flatten " & $(typeof(arr[0])) & " (expected " & $(T) & ")"
+
+proc flatten*[T](arr: Flattenable): seq[T] =
+  ## Given arbitrarily nested arrays, flatten into a single array.
+  ## Generally, you will need to specify the type parameter;
+  ## result types don't get inferred in Nim.
+  result = newSeq[T]()
+  flatten[T](arr, result)
