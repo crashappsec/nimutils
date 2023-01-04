@@ -148,3 +148,21 @@ proc flatten*[T](arr: Flattenable): seq[T] =
   ## result types don't get inferred in Nim.
   result = newSeq[T]()
   flatten[T](arr, result)
+
+
+when defined(posix):
+  import posix
+  template unprivileged*(code: untyped) =
+    ## Run a block of code under the user's UID. Ie, make sure that if the
+    ## euid is 0, the code runs with the user's UID, not 0.
+    let
+      uid = getuid()
+      euid = geteuid()
+      gid = getgid()
+      egid = getegid()
+    if (uid != euid) or (gid != egid):
+      discard seteuid(uid)
+      discard setegid(gid)
+    code
+    if (uid != euid): discard seteuid(euid)
+    if (gid != egid): discard setegid(egid)
