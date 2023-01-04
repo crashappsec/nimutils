@@ -94,6 +94,8 @@ proc resolvePath*(inpath: string): string =
 
   if inpath == "": return getCurrentDir()
   while cur[^1] == '/':
+    if len(cur) == 1:
+      return "/"
     cur.setLen(len(cur) - 1)
   if cur[0] == '~':
     let ix = cur.find('/')
