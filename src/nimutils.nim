@@ -4,6 +4,11 @@ import os
 import std/wordwrap
 import strutils
 
+
+# Do NOT export logging, that needs to be explicitly imported.
+import nimutils/[box, random, topics, sinks, unicodeid]
+export box, random, sinks, topics, unicodeid
+
 # The name flatten conflicts with a method in the options module.
 from options import get, Option, isSome, isNone
 export get, Option, isSome, isNone
@@ -115,7 +120,7 @@ proc indentAndWrap*(str: string, indent: int, maxWidth = 80): string =
   ## Wrap to a fixed width, while still indenting.
   ## Probably can be done by fmt, but less clearly.
   let
-    s = wrapWords(str, maxWidth - indent, false)
+    s   = wrapWords(str, maxWidth - indent, false)
     pad = repeat(' ', indent)
 
   var lines = s.split("\n")
@@ -148,3 +153,35 @@ proc flatten*[T](arr: Flattenable): seq[T] =
   ## result types don't get inferred in Nim.
   result = newSeq[T]()
   flatten[T](arr, result)
+
+when false:
+ # TODO: a macro that, when a spec'd symbol is defined, prototypes
+ # a function, then emits the function with a new name.
+ # There also needs to be a macro to define the detour body.
+ # Syntactically, not quite sure how that works.
+ # one "easy" way would be to have something like:
+
+ # detour
+
+  macro wrapable*(debugFlag: string, body: untyped) =
+    let f = newIdentNode(debugFlag.strVal)
+    let b = body
+  
+    if body.kind != nnkProcDef:
+      error("Can only wrap procedures")
+
+    return quote do:
+      const `f` {.booldefine.} = false
+      when defined(`f`):
+        static:
+          echo "ON!"
+        proc f() =
+          echo "s'on"
+      else:
+        static:
+          echo "off"
+
+    proc f() {.wrapable("test").} =
+      echo "sup"
+
+    f()

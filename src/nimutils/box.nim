@@ -62,11 +62,11 @@ type
     Box* = ref object
         case kind*: MixedKind
         of MkFloat: f*: float64
-        of MkInt: i*: int64
-        of MkBool: b*: bool
-        of MkStr: s*: string
-        of MkSeq: c*: ListCrate
-        of MkObj: o*: RootRef # If we add in object types later.
+        of MkInt:   i*: int64
+        of MkBool:  b*: bool
+        of MkStr:   s*: string
+        of MkSeq:   c*: ListCrate
+        of MkObj:   o*: RootRef # If we add in object types later.
         of MkTable: t: TableCrate
     SomeTableRef = TableRef or OrderedTableRef
 
