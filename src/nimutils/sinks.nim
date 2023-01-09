@@ -2,8 +2,8 @@ import streams, tables, options, os, strutils
 import std/[net, uri, httpclient]
 import topics
 import nimaws/s3client
-import nimutils
-import nimutils/random
+import misc
+import random
 
 
 proc stdoutSink(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
