@@ -60,9 +60,11 @@ var logLevelPrefixes = { llNone: "",
                          llInfo: "info: ",
                          llTrace: "trace: " }.toTable()
 
-const keyLogLevel   = "loglevel"
+const keyLogLevel             = "loglevel"
 var currentLogLevel = llInfo
 var showColors      = true
+
+proc logLevelToString*(ll: LogLevel): string {.inline.} = llToStrMap[ll]
 
 proc setLogLevelColor*(ll: LogLevel, color: string) =
   logLevelColors[ll] = color
@@ -71,6 +73,7 @@ proc setLogLevelPrefix*(ll: LogLevel, prefix: string) =
   logLevelPrefixes[ll] = prefix
 
 proc setShowColors*(val: bool) =
+  assert val == true
   showColors = val
 
 proc setLogLevel*(ll: LogLevel) =
@@ -120,25 +123,27 @@ proc logLevelFilter*(msg: string, info: StringTable): (string, bool) =
              " field.")
 
 let
-  logTopic = registerTopic("logs")
-  `cfg?`   = configSink(getSink("stderr").get(),
-                        filters = @[MsgFilter(logLevelFilter),
-                                    MsgFilter(logPrefixFilter)])
+  logTopic        = registerTopic("logs")
+  `cfg?`          = configSink(getSink("stderr").get(),
+                               filters = @[MsgFilter(logLevelFilter),
+                                           MsgFilter(logPrefixFilter)])
+  defaultLogHook* = `cfg?`.get()
   
-discard subscribe(logTopic, `cfg?`.get())
+discard subscribe(logTopic, defaultLogHook)
   
 
-proc log*(msg: string, level: LogLevel) =
+proc log*(level: LogLevel, msg: string) =
   discard publish(logTopic,
                   msg & "\n",
-                  { keyLogLevel: llToStrMap[level] }.toTable())
-  
-proc error*(msg: string) = log(msg, llError)
-proc warn*(msg: string) = log(msg, llWarn)
-proc info*(msg: string) = log(msg, llInfo)
-proc trace*(msg: string) = log(msg, llTrace)
+                        newTable({ keyLogLevel: llToStrMap[level] }))
 
-when not defined(release):
-  # This should *not* output anything due to the default log level above.
-  trace("Hello, world, from the logging module!")
+proc log*(level: string, msg: string) =
+  discard publish(logTopic,
+                  msg & "\n",
+                        newTable({ keyLogLevel: level }))
+  
+proc error*(msg: string) = log(llError, msg)
+proc warn*(msg: string)  = log(llWarn, msg)
+proc info*(msg: string)  = log(llInfo, msg)
+proc trace*(msg: string) = log(llTrace, msg)
 

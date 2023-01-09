@@ -4,13 +4,13 @@
 ## While I'd like to improve this some day, it's just enough for
 ## Sami, while making it reusable for other single-threaded apps.
 
-import tables, sugar, options
+import tables, sugar, options, json, strutils
 
 type
   InitCallback*   = ((SinkConfig) -> bool)
   OutputCallback* = ((string, SinkConfig, StringTable) -> bool)
   CloseCallback*  = ((SinkConfig) -> bool)
-  StringTable*    = Table[string, string]
+  StringTable*    = TableRef[string, string]
   MsgFilter*      = ((string, StringTable) -> (string, bool))
   
   SinkRecord* = ref object
@@ -31,6 +31,7 @@ type
 
 var allSinks: Table[string, SinkRecord]
 var allTopics: Table[string, Topic]
+var revTopics: Table[Topic, string]
 
 proc subscribe*(topic: Topic, record: SinkConfig): Topic =
   if record notin topic.subscribers:
@@ -46,7 +47,7 @@ proc subscribe*(t: string, record: SinkConfig): Option[Topic] =
 
 proc registerSink*(name: string, record: SinkRecord) =
   allSinks[name] = record
-
+  
 proc getSink*(name: string): Option[SinkRecord] =
   if name in allSinks:
     return some(allSinks[name])
@@ -61,7 +62,7 @@ proc configSink*(s:         SinkRecord,
   if `config?`.isSome():
     config = `config?`.get()
   else:
-    config = initTable[string, string]()
+    config = newTable[string, string]()
     
   for k, v in config:
     if k notin s.keys: return none(SinkConfig) # Extraneous key.
@@ -81,8 +82,9 @@ proc configSink*(s:         SinkRecord,
 proc registerTopic*(name: string): Topic =
   if name in allTopics: return allTopics[name]
 
-  result = Topic()
-  allTopics[name] = result
+  result            = Topic()
+  allTopics[name]   = result
+  revTopics[result] = name
   
   
 proc unsubscribe*(topic: Topic, record: SinkConfig): bool =
@@ -103,12 +105,17 @@ proc unsubscribe*(topicName: string, record: SinkConfig): bool =
     
   return unsubscribe(allTopics[topicName], record)
 
-const emptyAux = initTable[string, string]()
-
 proc publish*(t: Topic,
               message: string,
-              aux: StringTable = emptyAux): bool =
+              aux:     StringTable = nil): bool {.discardable.} =
   var success = true
+  var tbl: StringTable
+
+  if aux == nil:
+    tbl = newTable[string, string]({"topic" : revTopics[t]})
+  else:
+    tbl = aux
+    tbl["topic"] = revTopics[t]
   
   for hook in t.subscribers:
     var
@@ -116,7 +123,7 @@ proc publish*(t: Topic,
       more: bool
     
     for filter in hook.filters:
-      (currentMsg, more) = filter(currentMsg, aux)
+      (currentMsg, more) = filter(currentMsg, tbl)
       if not more: break
 
     let fptr = hook.mySink.outputFunction
@@ -126,8 +133,31 @@ proc publish*(t: Topic,
     
 proc publish*(t:       string,
               message: string,
-              aux:     StringTable = emptyAux): bool =
+              aux:     StringTable = nil): bool {.discardable.} =
+  
   if t notin allTopics:
     return false
 
   return publish(allTopics[t], message, aux)
+
+proc prettyJson*(msg: string, extra: StringTable): (string, bool) =
+  try:
+    return (pretty(parseJson(msg)), true)
+  except:
+    return ("Error: Invalid Json formatting", false)
+
+proc addTopic*(msg: string, extra: StringTable): (string, bool) =
+  var lines                 = msg.split("\n")
+  var newLines: seq[string] = @[]
+
+  for line in lines:
+    newLines.add("  " & line)
+
+  let
+    topic   = extra["topic"]
+    body    = newLines.join("\n") & "\n"
+    prefix  = "[[start " & topic & "]] \n"
+    postfix = "[[end " & topic & "]]\n"
+    newstr  =  prefix & body & postfix
+    
+  return (newstr, true)

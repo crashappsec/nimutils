@@ -9,7 +9,10 @@ from options import get, Option, isSome, isNone
 export get, Option, isSome, isNone
 
 {.warning[UnusedImport]: off.}
-import nimutils/[box, random, unicodeid]
+import nimutils/[box, random, unicodeid, topics, sinks]
+export box, random, unicodeid
+export random
+export 
 
 template unreachable*() =
   let info = instantiationInfo()
