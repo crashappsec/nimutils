@@ -10,7 +10,7 @@ type
   InitCallback*   = ((SinkConfig) -> bool)
   OutputCallback* = ((string, SinkConfig, StringTable) -> bool)
   CloseCallback*  = ((SinkConfig) -> bool)
-  StringTable*    = TableRef[string, string]
+  StringTable*    = OrderedTableRef[string, string]
   MsgFilter*      = ((string, StringTable) -> (string, bool))
   
   SinkRecord* = ref object
@@ -62,7 +62,7 @@ proc configSink*(s:         SinkRecord,
   if `config?`.isSome():
     config = `config?`.get()
   else:
-    config = newTable[string, string]()
+    config = newOrderedTable[string, string]()
     
   for k, v in config:
     if k notin s.keys: return none(SinkConfig) # Extraneous key.
@@ -112,7 +112,7 @@ proc publish*(t: Topic,
   var tbl: StringTable
 
   if aux == nil:
-    tbl = newTable[string, string]({"topic" : revTopics[t]})
+    tbl = newOrderedTable[string, string]({"topic" : revTopics[t]})
   else:
     tbl = aux
     tbl["topic"] = revTopics[t]

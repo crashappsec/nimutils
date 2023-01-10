@@ -135,15 +135,23 @@ discard subscribe(logTopic, defaultLogHook)
 proc log*(level: LogLevel, msg: string) =
   discard publish(logTopic,
                   msg & "\n",
-                        newTable({ keyLogLevel: llToStrMap[level] }))
+                        newOrderedTable({ keyLogLevel: llToStrMap[level] }))
 
 proc log*(level: string, msg: string) =
   discard publish(logTopic,
                   msg & "\n",
-                        newTable({ keyLogLevel: level }))
+                        newOrderedTable({ keyLogLevel: level }))
   
 proc error*(msg: string) = log(llError, msg)
 proc warn*(msg: string)  = log(llWarn, msg)
 proc info*(msg: string)  = log(llInfo, msg)
 proc trace*(msg: string) = log(llTrace, msg)
 
+when not defined(release):
+  let
+    debugTopic        = registerTopic("debug")
+    `debugHook?`      = configSink(getSink("stderr").get())
+    defaultDebugHook* = `debugHook?`.get()
+    
+  proc debug*(msg: string) =
+    discard publish(debugTopic, msg)
