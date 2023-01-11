@@ -4,7 +4,7 @@
 ## While I'd like to improve this some day, it's just enough for
 ## Sami, while making it reusable for other single-threaded apps.
 
-import tables, sugar, options, json, strutils
+import tables, sugar, options, json, strutils, ansi
 
 type
   InitCallback*   = ((SinkConfig) -> bool)
@@ -29,7 +29,8 @@ type
   Topic* = ref object
     subscribers: seq[SinkConfig]
 
-var allSinks: Table[string, SinkRecord]
+# Exported so you can 'patch' default sinks.
+var allSinks*: Table[string, SinkRecord]
 var allTopics: Table[string, Topic]
 var revTopics: Table[Topic, string]
 
@@ -156,8 +157,10 @@ proc addTopic*(msg: string, extra: StringTable): (string, bool) =
   let
     topic   = extra["topic"]
     body    = newLines.join("\n") & "\n"
-    prefix  = "[[start " & topic & "]] \n"
-    postfix = "[[end " & topic & "]]\n"
+    prefix  = ansi("font1", "BLUE").get() & "[[start " & topic & "]]\n" &
+              ansi("reset").get()
+    postfix = ansi("font1", "BLUE").get() & "[[end " & topic & "]]\n" &
+              ansi("reset").get()
     newstr  =  prefix & body & postfix
     
   return (newstr, true)

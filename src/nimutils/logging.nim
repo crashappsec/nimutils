@@ -1,5 +1,5 @@
-import tables, options
-import topics, sinks
+import tables, options, streams
+import topics, sinks, ansi
 
 type LogLevel* = enum 
   ## LogLevel describes what kind of messages you want to see.
@@ -22,37 +22,11 @@ const llToStrMap = { llNone: "none",
                      llInfo: "info",
                      llTrace: "trace" }.toTable()
 
-const ansiCodes = { "black"      : "\e[30m",
-                    "red"        : "\e[31m",
-                    "green"      : "\e[32m",
-                    "yellow"     : "\e[33m",
-                    "blue"       : "\e[34m",
-                    "magenta"    : "\e[35m",
-                    "cyan"       : "\e[36m",
-                    "white"      : "\e[37m",
-                    "BLACK"      : "\e[1;30m",
-                    "RED"        : "\e[1;31m",
-                    "GREEN"      : "\e[1;32m",
-                    "YELLOW"     : "\e[1;33m",
-                    "BLUE"       : "\e[1;34m",
-                    "MAGENTA"    : "\e[1;35m",
-                    "CYAN"       : "\e[1;36m",
-                    "WHITE"      : "\e[1;37m",
-                    "bg_black"   : "\e[30m",
-                    "bg_red"     : "\e[31m",
-                    "bg_green"   : "\e[32m",
-                    "bg_yellow"  : "\e[33m",
-                    "bg_blue"    : "\e[34m",
-                    "bg_magenta" : "\e[35m",
-                    "bg_cyan"    : "\e[36m",
-                    "bg_white"   : "\e[37m",
-                    "reset"      : "\e[0m" }.toTable()
-
 var logLevelColors = { llNone  : "",
-                       llError : ansiCodes["RED"],
-                       llWarn  : ansiCodes["YELLOW"],
-                       llInfo  : ansiCodes["GREEN"],
-                       llTrace : ansiCodes["CYAN"] }.toTable()
+                       llError : ansi("RED").get(),
+                       llWarn  : ansi("YELLOW").get(),
+                       llInfo  : ansi("GREEN").get(),
+                       llTrace : ansi("CYAN").get() }.toTable()
 
 var logLevelPrefixes = { llNone: "",
                          llError: "error: ",
@@ -86,7 +60,7 @@ proc setLogLevel*(ll: string) =
     raise newException(ValueError, "Invalid log level value: '" & ll & "'")
 
 proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
-  const reset = ansiCodes["reset"]
+  const reset = ansi("reset").get()
     
   if keyLogLevel in info:
     let llStr = info[keyLogLevel]
@@ -105,7 +79,31 @@ proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
     raise newException(ValueError, "Log prefix filter used w/o passing in " &
              "a valid value for 'loglevel' in the publish() call's 'aux' " &
              " field.")
-      
+
+proc stripColors*(msg: string, info: StringTable): (string, bool) =
+  var
+    i = 0
+    f: int
+    s: string = msg
+    r: string = ""
+  while true:
+    f = s.find('\e')
+    if f == -1:
+      r.add(s)
+      return (s, true)
+    r = s[0 ..< f]
+    s = s[f .. ^1]
+    f = s.find('m')
+    if f == -1:
+      return (s, true)
+    else:
+      s = s[f + 1 .. ^1]
+  
+proc colorFilter*(msg: string, info: StringTable): (string, bool) =
+  if showColors or '\e' notin msg:
+    return (msg, true)
+  else:
+    return stripColors(msg, info)
       
 proc logLevelFilter*(msg: string, info: StringTable): (string, bool) =
   if keyLogLevel in info:
