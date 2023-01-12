@@ -1,5 +1,48 @@
 import tables, options
 
+type AnsiCode* = enum
+  acBlack =        "30"
+  acRed =          "31"
+  acGreen =        "32"
+  acYellow =       "33"
+  acBlue =         "34"
+  acMagenta =      "35"
+  acCyan =         "36"
+  acWhite =        "37"
+  acBBlack =       "1;30"
+  acBRed =         "1;31"
+  acBGreen =       "1;32"
+  acBYellow =      "1;33"
+  acBBlue =        "1;34"
+  acBMagenta =     "1;35"
+  acBCyan =        "1;36"
+  acBWhite =       "1;37"
+  acBGBlack =      "30"
+  acBGRed =        "31"
+  acBgGreen =      "32"
+  acBGYellow =     "33"
+  acBGBlue =       "34"
+  acBGMagenta =    "35"
+  acBGCyan =       "36"
+  acBGWhite =      "37"
+  acBold =         "1"
+  acUnbold =       "22"
+  acInvert =       "7"
+  acUninvert =     "27"
+  acStrikethru =   "9"
+  acNostrikethru = "9"
+  acFont0 =        "10"
+  acFont1 =        "11"
+  acFont2 =        "12"
+  acFont3 =        "13"
+  acFont4 =        "14"
+  acFont5 =        "15"
+  acFont6 =        "16"
+  acFont7 =        "17"
+  acFont8 =        "18"
+  acFont9 =        "19"
+  acReset =        "0"
+  
 const ansiCodes = { "black"      : "\e[30m",
                     "red"        : "\e[31m",
                     "green"      : "\e[32m",
@@ -39,7 +82,7 @@ const ansiCodes = { "black"      : "\e[30m",
                     "font6"      : "\e[16m",
                     "font7"      : "\e[17m",
                     "font8"      : "\e[18m",
-                    "font9"      : "\e[19m",                                     
+                    "font9"      : "\e[19m",
                     "reset"      : "\e[0m" }.toTable()
 
 proc ansi*(s: varargs[string]): Option[string] =
