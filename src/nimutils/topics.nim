@@ -4,7 +4,8 @@
 ## While I'd like to improve this some day, it's just enough for
 ## Sami, while making it reusable for other single-threaded apps.
 
-import tables, sugar, options, json, strutils, ansi
+import tables, sugar, options, json, strutils, ansi, strutils, std/terminal,
+       unicodeid
 
 type
   InitCallback*   = ((SinkConfig) -> bool)
@@ -14,24 +15,27 @@ type
   MsgFilter*      = ((string, StringTable) -> (string, bool))
   
   SinkRecord* = ref object
+    name:           string
     initFunction*:   Option[InitCallback]
     outputFunction*: OutputCallback
     closeFunction*:  Option[CloseCallback]
     keys*:           Table[string, bool]
     
   SinkConfig* = ref object
-    mySink:   SinkRecord
-    filters:  seq[MsgFilter]
+    mySink*:  SinkRecord
+    filters*: seq[MsgFilter]
     config*:  StringTable
     private*: RootRef        # It's funny to make 'private' public,
                              # but externally written sinks can store
                              # state here, like file pointers.
   Topic* = ref object
-    subscribers: seq[SinkConfig]
-
-# Exported so you can 'patch' default sinks.
+    subscribers*: seq[SinkConfig]
+    
+proc getSinkName*(rec: SinkRecord): string = rec.name
+  
+# Exported so you can 'patch' default sinks, etc.
 var allSinks*: Table[string, SinkRecord]
-var allTopics: Table[string, Topic]
+var allTopics*: Table[string, Topic]
 var revTopics: Table[Topic, string]
 
 proc subscribe*(topic: Topic, record: SinkConfig): Topic =
@@ -47,6 +51,7 @@ proc subscribe*(t: string, record: SinkConfig): Option[Topic] =
   return some(subscribe(allTopics[t], record))
 
 proc registerSink*(name: string, record: SinkRecord) =
+  record.name = name
   allSinks[name] = record
   
 proc getSink*(name: string): Option[SinkRecord] =
@@ -106,7 +111,7 @@ proc unsubscribe*(topicName: string, record: SinkConfig): bool =
     
   return unsubscribe(allTopics[topicName], record)
 
-proc publish*(t: Topic,
+proc publish*(t:       Topic,
               message: string,
               aux:     StringTable = nil): bool {.discardable.} =
   var success = true
@@ -146,6 +151,20 @@ proc prettyJson*(msg: string, extra: StringTable): (string, bool) =
     return (pretty(parseJson(msg)), true)
   except:
     return ("Error: Invalid Json formatting", false)
+
+proc wrapToWidth*(msg: string, extra: StringTable): (string, bool) =
+  # Problem w/ this at the moment is it doesn't take ANSI codes into account.
+  var
+    w = if "width" in extra:
+          parseInt(extra["width"])
+        else:
+          terminalWidth()
+    i = if "indent" in extra:
+          parseInt(extra["indent"])
+        else:
+          2
+
+  return (indentWrap(msg, w, i), true)
 
 proc addTopic*(msg: string, extra: StringTable): (string, bool) =
   var lines                 = msg.split("\n")

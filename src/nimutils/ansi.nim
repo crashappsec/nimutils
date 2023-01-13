@@ -17,14 +17,14 @@ type AnsiCode* = enum
   acBMagenta =     "1;35"
   acBCyan =        "1;36"
   acBWhite =       "1;37"
-  acBGBlack =      "30"
-  acBGRed =        "31"
-  acBgGreen =      "32"
-  acBGYellow =     "33"
-  acBGBlue =       "34"
-  acBGMagenta =    "35"
-  acBGCyan =       "36"
-  acBGWhite =      "37"
+  acBGBlack =      "40"
+  acBGRed =        "41"
+  acBgGreen =      "42"
+  acBGYellow =     "43"
+  acBGBlue =       "44"
+  acBGMagenta =    "45"
+  acBGCyan =       "46"
+  acBGWhite =      "47"
   acBold =         "1"
   acUnbold =       "22"
   acInvert =       "7"
@@ -42,7 +42,19 @@ type AnsiCode* = enum
   acFont8 =        "18"
   acFont9 =        "19"
   acReset =        "0"
-  
+
+
+proc toAnsiCode*(codes: seq[AnsiCode]): string =
+  if len(codes) == 0:
+    return
+  result = "\e["
+
+  for i, item in codes:
+    if i != 0: result.add(";")
+    result.add($(item))
+
+  result.add("m")
+
 const ansiCodes = { "black"      : "\e[30m",
                     "red"        : "\e[31m",
                     "green"      : "\e[32m",
@@ -91,5 +103,5 @@ proc ansi*(s: varargs[string]): Option[string] =
   for item in s:
     if item in ansiCodes: res &= ansiCodes[item]
     else: return none(string)
-    
+
   return some(res)

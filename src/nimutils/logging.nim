@@ -34,11 +34,11 @@ var logLevelPrefixes = { llNone: "",
                          llInfo: "info: ",
                          llTrace: "trace: " }.toTable()
 
-const keyLogLevel             = "loglevel"
+const keyLogLevel   = "loglevel"
 var currentLogLevel = llInfo
 var showColors      = true
 
-proc logLevelToString*(ll: LogLevel): string {.inline.} = llToStrMap[ll]
+proc `$`*(ll: LogLevel): string = llToStrMap[ll]
 
 proc setLogLevelColor*(ll: LogLevel, color: string) =
   logLevelColors[ll] = color
@@ -47,7 +47,6 @@ proc setLogLevelPrefix*(ll: LogLevel, prefix: string) =
   logLevelPrefixes[ll] = prefix
 
 proc setShowColors*(val: bool) =
-  assert val == true
   showColors = val
 
 proc setLogLevel*(ll: LogLevel) =
@@ -58,6 +57,8 @@ proc setLogLevel*(ll: string) =
     setLogLevel(toLogLevelMap[ll])
   else:
     raise newException(ValueError, "Invalid log level value: '" & ll & "'")
+
+proc getLogLevel*(): LogLevel = currentLogLevel
 
 proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
   const reset = ansi("reset").get()

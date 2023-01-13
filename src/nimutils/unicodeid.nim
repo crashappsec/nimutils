@@ -6,8 +6,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022
 
-import streams
-import unicode
+import streams, unicode, strutils
 import unicodedb/properties
 
 proc isPatternSyntax*(r: Rune): bool =
@@ -115,3 +114,69 @@ proc peekRune*(s: Stream): Rune =
   result = s.readRune()
   s.setPosition(n)
 
+
+# This is hacked from the Nim std library to add indentation for
+# hanging lines.
+  
+proc olen(s: string; start, lastExclusive: int): int =
+  var i = start
+  result = 0
+  while i < lastExclusive:
+    inc result
+    let L = graphemeLen(s, i)
+    inc i, L
+
+proc indentWrap*( s: string,
+                  startingMaxLineWidth = 80,
+                  hangingIndent = 2,
+                  splitLongWords = true,
+                  seps: set[char] = Whitespace,
+                  newLine = "\n"): string {.noSideEffect.} =
+    
+  result           = newStringOfCap(s.len + s.len shr 6)
+  var spaceLeft    = startingMaxLineWidth
+  var lastSep      = ""
+  var maxLineWidth = startingMaxLineWidth
+
+  var i = 0
+  while true:
+    var j = i
+    let isSep = j < s.len and s[j] in seps
+    while j < s.len and (s[j] in seps) == isSep: inc(j)
+    if j <= i: break
+    #yield (substr(s, i, j-1), isSep)
+    if isSep:
+      lastSep.setLen 0
+      for k in i..<j:
+        if s[k] notin {'\L', '\C'}: lastSep.add s[k]
+      if lastSep.len == 0:
+        lastSep.add ' '
+        dec spaceLeft
+      else:
+        spaceLeft = spaceLeft - olen(lastSep, 0, lastSep.len)
+    else:
+      let wlen = olen(s, i, j)
+      if wlen > spaceLeft:
+        if splitLongWords and wlen > maxLineWidth:
+          var k = 0
+          while k < j - i:
+            if spaceLeft <= 0:
+              spaceLeft = maxLineWidth
+              result.add newLine
+              result.add repeat(Rune(' '), hangingIndent)
+              maxLineWidth = startingMaxLineWidth - hangingIndent
+            dec spaceLeft
+            let L = graphemeLen(s, k+i)
+            for m in 0 ..< L: result.add s[i+k+m]
+            inc k, L
+        else:
+          spaceLeft = maxLineWidth - wlen
+          result.add(newLine)
+          result.add repeat(Rune(' '), hangingIndent)
+          maxLineWidth = startingMaxLineWidth - hangingIndent
+          for k in i..<j: result.add(s[k])
+      else:
+        spaceLeft = spaceLeft - wlen
+        result.add(lastSep)
+        for k in i..<j: result.add(s[k])
+    i = j
