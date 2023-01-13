@@ -176,10 +176,10 @@ proc addTopic*(msg: string, extra: StringTable): (string, bool) =
   let
     topic   = extra["topic"]
     body    = newLines.join("\n") & "\n"
-    prefix  = ansi("font1", "BLUE").get() & "[[start " & topic & "]]\n" &
-              ansi("reset").get()
-    postfix = ansi("font1", "BLUE").get() & "[[end " & topic & "]]\n" &
-              ansi("reset").get()
-    newstr  =  prefix & body & postfix
+    prefix  = toAnsiCode(@[acFont1, acBBlue]) & "[[start " & topic & "]]\n" &
+              toAnsiCode(@[acReset])
+    postfix = toAnsiCode(@[acFont1, acBBlue]) & "[[end " & topic & "]]\n" &
+              toAnsiCode(@[acReset])
+    newstr  = prefix & body & postfix
     
   return (newstr, true)

@@ -23,10 +23,10 @@ const llToStrMap = { llNone: "none",
                      llTrace: "trace" }.toTable()
 
 var logLevelColors = { llNone  : "",
-                       llError : ansi("RED").get(),
-                       llWarn  : ansi("YELLOW").get(),
-                       llInfo  : ansi("GREEN").get(),
-                       llTrace : ansi("CYAN").get() }.toTable()
+                       llError : toAnsiCode(@[acBRed]),
+                       llWarn  : toAnsiCode(@[acBYellow]),
+                       llInfo  : toAnsiCode(@[acBGreen]),
+                       llTrace : toAnsiCode(@[acBCyan]), }.toTable()
 
 var logLevelPrefixes = { llNone: "",
                          llError: "error: ",
@@ -36,7 +36,6 @@ var logLevelPrefixes = { llNone: "",
 
 const keyLogLevel   = "loglevel"
 var currentLogLevel = llInfo
-var showColors      = true
 
 proc `$`*(ll: LogLevel): string = llToStrMap[ll]
 
@@ -45,9 +44,6 @@ proc setLogLevelColor*(ll: LogLevel, color: string) =
 
 proc setLogLevelPrefix*(ll: LogLevel, prefix: string) =
   logLevelPrefixes[ll] = prefix
-
-proc setShowColors*(val: bool) =
-  showColors = val
 
 proc setLogLevel*(ll: LogLevel) =
   currentLogLevel = ll
@@ -61,7 +57,7 @@ proc setLogLevel*(ll: string) =
 proc getLogLevel*(): LogLevel = currentLogLevel
 
 proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
-  const reset = ansi("reset").get()
+  const reset = toAnsiCode(@[acReset])
     
   if keyLogLevel in info:
     let llStr = info[keyLogLevel]
@@ -71,7 +67,7 @@ proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
         msgLevel = toLogLevelMap[llStr]
         prefix   = logLevelPrefixes[msgLevel]
 
-      let outstr = if showColors:
+      let outstr = if getShowColors():
                      logLevelColors[msgLevel] & prefix & reset & msg
                    else:
                      prefix & msg
@@ -81,31 +77,6 @@ proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
              "a valid value for 'loglevel' in the publish() call's 'aux' " &
              " field.")
 
-proc stripColors*(msg: string, info: StringTable): (string, bool) =
-  var
-    i = 0
-    f: int
-    s: string = msg
-    r: string = ""
-  while true:
-    f = s.find('\e')
-    if f == -1:
-      r.add(s)
-      return (s, true)
-    r = s[0 ..< f]
-    s = s[f .. ^1]
-    f = s.find('m')
-    if f == -1:
-      return (s, true)
-    else:
-      s = s[f + 1 .. ^1]
-  
-proc colorFilter*(msg: string, info: StringTable): (string, bool) =
-  if showColors or '\e' notin msg:
-    return (msg, true)
-  else:
-    return stripColors(msg, info)
-      
 proc logLevelFilter*(msg: string, info: StringTable): (string, bool) =
   if keyLogLevel in info:
     let llStr = info[keyLogLevel]
