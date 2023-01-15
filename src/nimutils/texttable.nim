@@ -208,7 +208,7 @@ proc formatOneLine(t:         TextTable,
                    colWidths: seq[int],
                    rowData:   seq[string]): string =
   let n = len(colWidths)
-  
+
   for colnum, col in colWidths:
     # getColSep figures out whether or not to write a left border.
     result.add(t.getColSep(colnum, n))
@@ -241,7 +241,7 @@ proc getOneRowWrap(t: TextTable, rownum: int, colWidths: seq[int]): string =
       maxRows  = high(int)
     
     # We only apply this when wrapping.
-    if len(item) > t.maxCellBytes:
+    if t.maxCellBytes > 0 and len(item) > t.maxCellBytes:
       maxRows = int(t.maxCellBytes/colwidths[colnum])
       thisCell = thisCell[0 .. maxRows]
       if len(thisCell[^1]) == colwidths[colnum]:
@@ -343,8 +343,10 @@ proc computeColWidths(t: var TextTable, maxWidth: int): seq[int] =
   # that is longest.  And, if that number is longer than the maximum
   # width set for that cel, then it won't allocate past that maximum
   # width.
-
-  # This loop is mostly fair, in that, for each loop, it reserves bytes for each 'hungry' column, equal to xtra / the # of hungry columns.
+  #
+  # This loop is mostly fair, in that, for each loop, it reserves
+  # bytes for each 'hungry' column, equal to xtra / the # of hungry
+  # columns.
   #
   # If all columns need that many bytes and still won't get enough
   # space to render their longest string without wrapping or
@@ -445,6 +447,54 @@ proc addRow*(t: var TextTable, row: seq[string]) =
 proc getColSpecs*(t: TextTable): seq[ColInfo] =
   return t.colWidths
 
+proc setTableBorders*(t: TextTable, val: bool) =
+  t.addTopBorder    = val
+  t.addBottomBorder = val
+  t.addLeftBorder   = val
+  t.addRightBorder  = val
+
+proc setNoBorders*(t: TextTable) =
+  t.setTableBorders(false)
+  t.colHeaderSep    = some(Rune(' '))
+  t.rowHeaderSep    = some(Rune(' '))
+  t.interSectionSep = some(Rune(' '))
+
+proc setNoColHeader*(t: TextTable) =
+  t.colHeaderSep = none(Rune)
+  t.colSep       = none(Rune)
+  t.headerColFmt = ""
+
+proc setNoFormatting*(t: TextTable) =
+  t.sepFmt       = ""
+  t.headerRowFmt = ""
+  t.headerColFmt = ""
+  t.evenRowFmt   = ""
+  t.oddRowFmt    = ""
+  t.evenColFmt   = ""
+  t.oddColFmt    = ""
+
+proc setNoRowHeader*(t: TextTable) =
+  t.rowHeaderSep = none(Rune)
+  t.rowSep       = none(Rune)
+  t.headerRowFmt = ""
+  t.headerRowAlign = none(ColAlignType)
+
+proc setNoHeaders*(t: TextTable) =
+  t.setNoColHeader()
+  t.setNoRowHeader()
+
+proc setLeftTableBorder*(t: TextTable, val: bool) =
+  t.addLeftBorder = val
+
+proc setRightTableBorder*(t: TextTable, val: bool) =
+  t.addRightBorder = val
+
+proc setTopTableBorder*(t: TextTable, val: bool) =
+  t.addTopBorder = val
+
+proc setBottomTableBorder*(t: TextTable, val: bool) =
+  t.addBottomBorder = val
+
 # 0 == flexible or autodetect; negative numbers measure from the back.
 proc newTextTable*(numColumns: int           = 0, 
                    fillWidth                 = false,
@@ -460,7 +510,7 @@ proc newTextTable*(numColumns: int           = 0,
                    eRowFmt: seq[AnsiCode]    = @[],
                    oRowFmt: seq[AnsiCode]    = @[],
                    eColFmt: seq[AnsiCode]    = @[],
-                   oColFmt: seq[AnsiCode]    = @[],                            
+                   oColFmt: seq[AnsiCode]    = @[], 
                    cSpecs:  seq[ColInfo]     = @[],
                    leftMargin                = " ",
                    rightMargin               = " ",

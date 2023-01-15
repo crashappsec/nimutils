@@ -14,6 +14,7 @@ const toLogLevelMap = { "none"    : llNone,
                         "warning" : llWarn,
                         "info"    : llInfo,
                         "inform"  : llInfo,
+                        "verbose" : llTrace,
                         "trace"   : llTrace }.toTable()
 
 const llToStrMap = { llNone: "none",

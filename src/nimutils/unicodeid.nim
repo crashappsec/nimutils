@@ -6,7 +6,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022
 
-import streams, unicode, strutils
+import streams, unicode, strutils, std/terminal
 import unicodedb/properties
 
 proc isPatternSyntax*(r: Rune): bool =
@@ -127,7 +127,7 @@ proc olen(s: string; start, lastExclusive: int): int =
     inc i, L
 
 proc indentWrap*( s: string,
-                  startingMaxLineWidth = 80,
+                  startingMaxLineWidth = -1,
                   hangingIndent = 2,
                   splitLongWords = true,
                   seps: set[char] = Whitespace,

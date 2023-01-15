@@ -24,16 +24,19 @@ proc staticListFiles*(arg: string): seq[string] =
   let
     lines = staticExec("ls -mp " & arg)
     line  = lines.replace("\n", " ")
-    
-  return split(line, ", ")
+    items = split(line, ",")
 
-template newFileTableBase(typeName: typeDesc, dir: static[string]): FileTable =
+  for item in items:
+    result.add(item.strip())
+
+template newFileTableBase(typeName: typeDesc, dir: static[string]): untyped =
   var ret: typeName[string, string] = `init typeName`[string, string]()
   
   for filename in staticListFiles(`dir`):
     if filename.endswith("/"): continue
     let
-      fileContents = staticRead(dir.joinPath(filename))
+      pathToFile   = dir.joinPath(filename)
+      fileContents = staticRead(pathToFile)
       key          = splitFile(filename).name
         
     ret[key] = fileContents
