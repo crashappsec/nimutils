@@ -1,13 +1,25 @@
 # Pretty basic table formatting. Works with fixed width unicode, though
 # I don't factor out non-printable spaces right now, I just count runes.
 
-import options, unicode, std/terminal, std/wordwrap, misc, ansi
+import options, unicode, std/terminal, misc, ansi, unicodeid
 
 type
-  ColAlignType* = enum AlignLeft, AlignCenter, AlignRight
+  WrapStyle*    = enum
+    ## - `WrapNone` leads to truncation.
+    ## - `WrapBlock` will merge any inbound lines coming in. and wrap them
+    ##   together (this is nim's default, oddly).
+    ## - `WrapLines` will wrap the lines of a cell one-by-one, leaving the
+    ##   existing line breaks intact.
+    ## - `WrapBlockHang` and `WrapLinesHang` are similar, except that
+    ##   wrapped lines have a two character hanging indent.
+    ##
+    ## Right now, the wrap style is just set on a per-table basis.
+    ## Eventually, we will add per-row, per-column and per-cell
+    ## overrides.
+    WrapNone, WrapBlock, WrapLines, WrapBlockHang, WrapLinesHang
                       
   ColInfo* = ref object
-    align*:           ColAlignType
+    align*:           AlignmentType
     minChr*:          int
     maxChr*:          int
     minAct, maxAct:   int
@@ -23,7 +35,7 @@ type
     oddRowFmt:       string
     evenColFmt:      string
     oddColFmt:       string
-    headerRowAlign:  Option[ColAlignType]
+    headerRowAlign:  Option[AlignmentType]
     numColumns:      int
     leftCellMargin:  string
     rightCellMargin: string
@@ -34,11 +46,11 @@ type
     intersectionSep: Option[Rune]
     flexColumns:     bool # Are the alloc'd columns firm, or ragged?
     fillWidth:       bool
-    defaultWrap:     bool
     addTopBorder:    bool
     addLeftBorder:   bool
     addBottomBorder: bool
     addRightBorder:  bool
+    wrapStyle:       WrapStyle
     maxCellBytes:    int
 
 const
@@ -133,42 +145,68 @@ proc addMargin(t: TextTable, contents: string): string =
   result = t.leftCellMargin & contents & t.rightCellMargin
 
 proc padAndAlignCell(t: TextTable,
-                     contents: string,
+                     instr: string,
                      row, col, colwidth: int): string =
-    let numRunes: int = len(contents.toRunes())
+    let
+      (ss, contents)        = instr.toSaver()
+      numRunes:     int     = width(contents)
+    var res:        string
+
+    assert ss != nil
     
     if numRunes >= colwidth:
-      return contents
+      return instr
     # colwidth does NOT include the cell margins.
-    var align: ColAlignType
+    var alignment: AlignmentType
     if row == 0 and t.headerRowAlign.isSome():
-      align = t.headerRowAlign.get()
+      alignment = t.headerRowAlign.get()
     else:
-      align = t.colwidths[col].align
+      alignment = t.colwidths[col].align
 
-    case align
-    of AlignLeft:
-      return alignLeft(contents, colwidth)
-    of AlignRight:
-      return align(contents, colwidth)
-    of AlignCenter:
+    res = align(contents, colwidth, alignment)
+
+    return res.restoreSaver(ss)  
+
+proc wrapLines(t: TextTable, instr: string, colwidth: int): seq[string] =
+  var (ss, contents) = instr.toSaver()
+  case t.wrapStyle
+  of WrapBlock:
+    let
+      wrapped        = indentWrap(contents, colwidth, hangingIndent = 0)
+      restored       = wrapped.restoreSaver(ss, true)
+    return restored.split(Rune('\n'))
+  of WrapLines:
+    let lines = contents.split(Rune('\n'))
+    result    = @[]
+    for line in lines:
       let
-        rightPad    = int((colwidth - numRunes)/2)
-        leftAlignTo = colwidth - rightPad
+        wrapped  = indentWrap(line, colwidth, hangingIndent = 0)
+        restored = wrapped.restoreSaver(ss, true)
+        zwsCount = wrapped.count(magicRune)
+      ss.stash = ss.stash[zwsCount .. ^1]
+      result.add(restored)
       
-      return align(alignLeft(contents, leftAlignTo), colwidth)
-
-proc truncate*(contents: string, width: int): string =
-  let asRunes = contents.toRunes()
-  if len(asRunes) <= width:
-    return contents
-
-  result = $(asRunes[0 ..< (width - 1)])
-  result.add(ellipsisRune)
-
-proc wrapLines(contents: string, colwidth: int): seq[string] =
-  return wrapwords(contents, colwidth).split(Rune('\n'))
-  
+  of WrapBlockHang:
+    let
+      wrapped   = indentWrap(contents, colwidth, hangingIndent = 2)
+      restored  = wrapped.restoreSaver(ss, true)
+    return restored.split(Rune('\n'))
+  of WrapLinesHang:
+    let lines = contents.split(Rune('\n'))
+    result    = @[]
+    for line in lines:
+      let
+        wrapped  = indentWrap(line, colwidth, hangingIndent = 2)
+        restored = wrapped.restoreSaver(ss, true)
+        zwsCount = wrapped.count(magicRune)
+      ss.stash = ss.stash[zwsCount .. ^1]
+      result.add(restored)
+  else:
+    # WrapNone short circuits additional logic to truncate lines if we
+    # get too big, so it never calls wrapLines(), it just skips to
+    # any potential truncation.
+    unreachable 
+    
 proc getRowSeparator(t:         TextTable,
                      forHeader: bool,
                      colwidths: seq[int]): string =
@@ -237,17 +275,19 @@ proc getOneRowWrap(t: TextTable, rownum: int, colWidths: seq[int]): string =
 
   for colnum, item in rawRowData:
     var
-      thisCell = wrapLines(item, colwidths[colnum])
+      thisCell = wrapLines(t, item, colwidths[colnum])
       maxRows  = high(int)
-    
+
     # We only apply this when wrapping.
-    if t.maxCellBytes > 0 and len(item) > t.maxCellBytes:
+    
+    if t.maxCellBytes > 0 and width(item) > t.maxCellBytes:
       maxRows = int(t.maxCellBytes/colwidths[colnum])
       thisCell = thisCell[0 .. maxRows]
-      if len(thisCell[^1]) == colwidths[colnum]:
+      if width(thisCell[^1]) == colwidths[colnum]:
         thisCell[^1] = truncate(thisCell[^1] & " ", len(thisCell[^1]))
       else:
         thisCell[^1] = thisCell[^1] & $(ellipsisRune)
+    
     rowData.add(thisCell)
     if len(thisCell) > numLines:
       numLines = len(thisCell)
@@ -415,7 +455,7 @@ proc render*(t: var TextTable, maxWidth = -2): string =
     else:
       result.add(rowSep)
 
-    if t.defaultWrap and i != len(t.rows):
+    if t.wrapStyle != WrapNone and i != len(t.rows):
       result.add(t.getOneRowWrap(i, colWidths))
     elif i != len(t.rows):
       result.add(t.getOneRow(i, colWidths))
@@ -430,7 +470,7 @@ proc addRow*(t: var TextTable, row: seq[string]) =
     
   for i, item in row:
     let
-      l     = len(item.toRunes())     
+      l     = colWidth(item)
       w     = t.colWidths[i]
     if w.table == nil:
       raise newException(ValueError,
@@ -477,7 +517,7 @@ proc setNoRowHeader*(t: TextTable) =
   t.rowHeaderSep = none(Rune)
   t.rowSep       = none(Rune)
   t.headerRowFmt = ""
-  t.headerRowAlign = none(ColAlignType)
+  t.headerRowAlign = none(AlignmentType)
 
 proc setNoHeaders*(t: TextTable) =
   t.setNoColHeader()
@@ -497,13 +537,13 @@ proc setBottomTableBorder*(t: TextTable, val: bool) =
 
 # 0 == flexible or autodetect; negative numbers measure from the back.
 proc newTextTable*(numColumns: int           = 0, 
+                   rows:    seq[seq[string]] = @[],
                    fillWidth                 = false,
                    rowHeaderSep              = some(Rune('-')),
                    colHeaderSep              = some(Rune(' ')),
                    rowSep                    = none(Rune),
                    colSep                    = some(Rune(' ')),
                    interSectionSep           = some(Rune('-')),
-                   rows:    seq[seq[string]] = @[],
                    sepFmt:  seq[AnsiCode]    = @[], 
                    rHdrFmt: seq[AnsiCode]    = @[],
                    cHdrFmt: seq[AnsiCode]    = @[],
@@ -518,8 +558,8 @@ proc newTextTable*(numColumns: int           = 0,
                    addBottomBorder           = false,
                    addLeftBorder             = false,
                    addRightBorder            = false,
-                   headerRowAlign            = none(ColAlignType),
-                   wrapByDefault             = true,
+                   headerRowAlign            = none(AlignmentType),
+                   wrapStyle                 = WrapLines,
                    maxCellBytes              = 0): TextTable =
   if len(cSpecs) != 0: 
     if numColumns != 0 and len(cSpecs) != numColumns:
@@ -537,6 +577,7 @@ proc newTextTable*(numColumns: int           = 0,
       if len(row) != numColumns:
         raise newException(ValueError, "Found row w/ non-conforming # of cols")
 
+  result.fillWidth       = fillWidth
   result.rowHeaderSep    = rowHeaderSep
   result.colHeaderSep    = colHeaderSep
   result.rowSep          = rowSep
@@ -552,7 +593,7 @@ proc newTextTable*(numColumns: int           = 0,
   result.colWidths       = cSpecs
   result.leftCellMargin  = leftMargin
   result.rightCellMargin = rightMargin
-  result.defaultWrap     = wrapByDefault
+  result.wrapStyle       = wrapStyle
   result.headerRowAlign  = headerRowAlign
   result.addTopBorder    = addTopBorder
   result.addBottomBorder = addBottomBorder
@@ -564,8 +605,9 @@ proc newTextTable*(numColumns: int           = 0,
 
 
 when isMainModule:
-  var testTable = newTextTable(0, true, rHdrFmt = @[acFont2, acBgCyan],
-                               wrapByDefault = true)
+  var testTable = newTextTable(0,
+                               fillWidth = true,
+                               rHdrFmt = @[acFont2, acBgCyan])
 
   testTable.addRow(@["Col 0", "Col 1", "Col 2"])
   testTable.addRow(@["color", "true", "set the color"])
