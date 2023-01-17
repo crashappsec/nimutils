@@ -184,8 +184,7 @@ proc wrapLines(t: TextTable, instr: string, colwidth: int): seq[string] =
         restored = wrapped.restoreSaver(ss, true)
         zwsCount = wrapped.count(magicRune)
       ss.stash = ss.stash[zwsCount .. ^1]
-      result.add(restored)
-      
+      result.add(restored.split(Rune('\n')))
   of WrapBlockHang:
     let
       wrapped   = indentWrap(contents, colwidth, hangingIndent = 2)
@@ -200,7 +199,7 @@ proc wrapLines(t: TextTable, instr: string, colwidth: int): seq[string] =
         restored = wrapped.restoreSaver(ss, true)
         zwsCount = wrapped.count(magicRune)
       ss.stash = ss.stash[zwsCount .. ^1]
-      result.add(restored)
+      result.add(restored.split(Rune('\n')))
   else:
     # WrapNone short circuits additional logic to truncate lines if we
     # get too big, so it never calls wrapLines(), it just skips to
@@ -282,11 +281,12 @@ proc getOneRowWrap(t: TextTable, rownum: int, colWidths: seq[int]): string =
     
     if t.maxCellBytes > 0 and width(item) > t.maxCellBytes:
       maxRows = int(t.maxCellBytes/colwidths[colnum])
-      thisCell = thisCell[0 .. maxRows]
-      if width(thisCell[^1]) == colwidths[colnum]:
-        thisCell[^1] = truncate(thisCell[^1] & " ", len(thisCell[^1]))
-      else:
-        thisCell[^1] = thisCell[^1] & $(ellipsisRune)
+      if len(thisCell) > maxRows:
+        thisCell = thisCell[0 .. maxRows]
+        if width(thisCell[^1]) == colwidths[colnum]:
+          thisCell[^1] = truncate(thisCell[^1] & " ", len(thisCell[^1]))
+        else:
+          thisCell[^1] = thisCell[^1] & $(ellipsisRune)
     
     rowData.add(thisCell)
     if len(thisCell) > numLines:
@@ -307,17 +307,25 @@ proc getOneRowWrap(t: TextTable, rownum: int, colWidths: seq[int]): string =
 proc newColSpec*(table: TextTable,
                  align = AlignLeft,
                  minChr = 3,
-                 maxChr = high(int)): ColInfo =
+                 maxChr = high(int),
+                 colNum = -1
+                ): ColInfo =
 
   if minChr > maxChr:
     raise newException(ValueError, "minChr can't be > maxChr")
     
-  return ColInfo(table:  table,
-                 minChr: minChr,
-                 maxChr: maxChr,
-                 align:  align,
-                 minAct: high(int),
-                 maxAct: 0)
+  result = ColInfo(table:  table,
+                   minChr: minChr,
+                   maxChr: maxChr,
+                   align:  align,
+                   minAct: high(int),
+                   maxAct: 0)
+
+  if colNum > -1:
+    while len(table.colWidths) <= colNum:
+      table.colWidths.add(table.newColSpec())
+
+    table.colWidths[colNum] = result
                       
 proc computeColWidths(t: var TextTable, maxWidth: int): seq[int] =
   # Currently, we don't try to do anything too fancy. First, we assume
