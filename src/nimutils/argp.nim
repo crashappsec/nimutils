@@ -30,17 +30,17 @@
 ##
 ##   - Optional flag values (too unintuitive for me as a user)
 
-
-import unicode, options, sugar, tables, os, misc
+import unicode, options, sugar, tables, os, misc, box
 import strutils except strip
 
 type
-  ArgFlagKind = enum afBinary, afPair, afChoice, afStrArg
-  BinaryCallback = (bool)        -> void
-  StrCallback    = (string)      -> void
-  StrArrCallback = (seq[string]) -> void
-  CmdCallback    = (ArgResult)   -> void
-  DeferredFlags  = Table[string, Option[string]]
+  ArgFlagKind* = enum afBinary, afPair, afChoice, afStrArg
+  BinaryCallback* = ()            -> void
+  PairCallback*   = (bool)        -> void
+  StrCallback*    = (string)      -> void
+  StrArrCallback* = (seq[string]) -> void
+  CmdCallback*    = (ArgResult)   -> void
+  DeferredFlags*  = Table[string, Option[string]]
   FlagInfo = ref object
     seen:  bool
     long:  string
@@ -52,7 +52,7 @@ type
     of afPair:
       positive:       bool
       negativeFlag:   FlagInfo
-      pairCallback:   BinaryCallback
+      pairCallback:   PairCallback
     of afChoice:
       choices:        seq[string]
       chosen:         string
@@ -137,7 +137,7 @@ proc addPairedFlag*(ctx:      ArgSpec,
                     short:    Rune,
                     negShort: Rune,
                     long:     string,
-                    callback: BinaryCallback = nil): ArgSpec {.discardable.} =
+                    callback: PairCallback = nil): ArgSpec {.discardable.} =
   var
     shortAsStr = $(short)
     negAsStr   = $(negShort)
@@ -167,7 +167,7 @@ proc addPairedFlag*(ctx:      ArgSpec,
                     short:    char,
                     negShort: char,
                     long:     string,
-                    callback: BinaryCallback = nil): ArgSpec {.discardable.} =
+                    callback: PairCallback = nil): ArgSpec {.discardable.} =
   return addPairedFlag(ctx, Rune(short), Rune(negShort), long, callback)
     
 proc addChoiceFlag*(ctx:           ArgSpec,
@@ -754,7 +754,7 @@ proc commit*(result: ArgResult) =
       case spec.kind
       of afBinary:
         if spec.binCallback != nil:
-          spec.binCallback(spec.seen)
+          spec.binCallback()
       of afPair:
         if spec.pairCallback != nil:
           if spec.positive:
@@ -900,8 +900,31 @@ proc getStrValue*(res: ArgResult, flagname: string): Option[string] =
       "' doesn't take a string argument.")
     
 proc getCurrentCommandName*(res: ArgResult): Option[string] =
-  return res.command
+  if res.command.isSome():
+    return res.subresult.get().linkedSpec.commandName
+  else:
+    return none(string)
 
+proc getArgs*(res: ArgResult): seq[string] =
+  return res.args
+
+proc getFlags*(res: ArgResult, recursive=true): TableRef[string, string] =
+  result  = newTable[string, string]()
+  var cur = res
+
+  while true:
+    for key, value in res.flags:
+      case value.kind
+      of afBinary, afPair:
+        result[key] = ""
+      of afChoice:
+        result[key] = value.chosen
+      of afStrArg:
+        result[key] = value.value
+    if not recursive: return
+    if cur.subresult.isNone(): return
+    cur = cur.subresult.get()
+  
 proc getSubcommand*(res: ArgResult): Option[ArgResult] =
   return res.subresult
     
@@ -915,8 +938,8 @@ when isMainModule:
   proc setPublishDefaults(s: bool) =
     echo "Set publish defaults = ", s
 
-  proc gotHelpFlag(s: bool) =
-    echo "Arg to gotHelpFlag is redundant, remove it."
+  proc gotHelpFlag() =
+    echo "help!"
 
   proc setLogLevel(s: string) =
     echo "Set log level = ", s
