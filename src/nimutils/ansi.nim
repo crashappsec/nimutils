@@ -21,7 +21,7 @@ type AnsiCode* = enum
   acWhite =        "37"
   acBBlack =       "1;30"
   acBrown =        "38;5;94"
-  acPurple =       "38;2;94"  
+  acPurple =       "38;2;94"
   acBRed =         "1;31"
   acBGreen =       "1;32"
   acBYellow =      "1;33"
@@ -61,7 +61,7 @@ proc toAnsiCode*(codes: seq[AnsiCode]): string =
     discard
   else:
     if not showColors: return ""
-  
+
   if len(codes) == 0:
     return
   result = "\e["

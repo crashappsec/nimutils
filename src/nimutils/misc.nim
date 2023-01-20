@@ -57,7 +57,7 @@ template dirWalk*(recursive: bool, body: untyped) =
     for i in walkDir(path):
       item = i.path
       body
-    
+
 template unixTimeInMS*(): uint64 =
   ## Return the current Unix epoch in miliseconds.  That is, this
   ## function will return the number of miliseconds since Jan 1, 1970

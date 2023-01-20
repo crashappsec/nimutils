@@ -12,7 +12,7 @@ proc stdoutSink(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
 
 proc addStdoutSink*() =
   registerSink("stdout", SinkRecord(outputFunction: stdoutSink))
-               
+
 proc stdErrSink(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
   stderr.write(msg)
   return true
@@ -31,7 +31,7 @@ proc fileSinkInit(record: SinkConfig): bool =
     of "w": mode = fmWrite
     of "a": mode = fmAppend
     else: return false
-      
+
   var stream     = newFileStream(filename, mode)
   record.private = cast[RootRef](stream)
 
@@ -41,7 +41,7 @@ proc fileSinkInit(record: SinkConfig): bool =
 proc fileSinkOut(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
   try:
     var stream = cast[FileStream](cfg.private)
-    
+
     stream.write(msg)
     return true
   except:
@@ -50,7 +50,7 @@ proc fileSinkOut(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
 proc fileSinkClose(cfg: SinkConfig): bool =
   try:
     var stream = cast[FileStream](cfg.private)
-    
+
     stream.close()
     return true
   except:
@@ -71,7 +71,7 @@ proc addFileSink*() =
   record.outputFunction = fileSinkOut
   record.closeFunction  = some(CloseCallback(fileSinkClose))
   record.keys           = keys
-  
+
   registerSink("file", record)
 
 var awsClientCache: Table[string, S3Client]
@@ -81,18 +81,18 @@ proc s3SinkInit(record: SinkConfig): bool =
     let
       uid    = record.config["uid"]
       secret = record.config["secret"]
-    
+
     awsClientCache[record.config["cacheid"]] = newS3Client((uid, secret))
-      
+
   return true
-  
+
 proc s3SinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
   var extra  = if "cacheid" in record.config: record.config["cacheid"] else: ""
   var client = if extra != "":
                  awsClientCache[extra]
                else:
                  let
-                   uid    = record.config["uid"]                   
+                   uid    = record.config["uid"]
                    secret = record.config["secret"]
                  newS3Client((uid, secret))
   try:
@@ -108,14 +108,14 @@ proc s3SinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
       objParts: seq[string] = @[ts, randVal]
 
     if extra != "": objParts.add(extra)
-    
+
     objParts.add(tail)
 
     let
       newTail = objParts.join("-")
       newPath = joinPath(head, newTail)
       res     = client.putObject(bucket, newPath, msg)
-      
+
     if res.code == Http200:
       return true
     else:
@@ -127,7 +127,7 @@ proc s3SinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
 
 proc s3SinkClose(record: SinkConfig): bool =
   if "cacheid" in record.config: record.config.del("cacheid")
-      
+
 proc addS3Sink*() =
   var
     record = SinkRecord()
@@ -153,7 +153,7 @@ proc postSinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
                  newHttpClient(sslContext=newContext(verifyMode=CVerifyPeer))
                else:
                  newHttpClient()
-                 
+
   if client == nil: return false
 
   if "headers" in record.config:
@@ -169,7 +169,7 @@ proc postSinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
         key = line[0 ..< ix].strip()
         val = line[ix + 1 .. ^1].strip()
       tups.add((key, val))
-      
+
     if len(headers) != 0:
       client.headers = newHTTPHeaders(tups)
 
@@ -179,7 +179,7 @@ proc postSinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
     return true
   else:
     return false
-  
+
 proc addPostSink*() =
   var
     record = SinkRecord()
@@ -192,7 +192,7 @@ proc addPostSink*() =
   record.keys           = keys
 
   registerSink("post", record)
-  
+
 proc addDefaultSinks*() =
   addStdoutSink()
   addStderrSink()
@@ -214,7 +214,7 @@ when isMainModule:
     cferr     = configSink(getSink("stderr").get()).get()
     s3sink    = getSink("s3").get()
     cfs3      = configSink(s3sink, some(s3Conf)).get()
-                           
+
   discard subscribe(testTopic, cffile)
   discard subscribe(testTopic, cferr)
   discard subscribe(testTopic, cfs3)

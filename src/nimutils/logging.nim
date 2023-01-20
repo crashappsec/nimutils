@@ -1,7 +1,7 @@
 import tables, options, streams
 import topics, sinks, ansi
 
-type LogLevel* = enum 
+type LogLevel* = enum
   ## LogLevel describes what kind of messages you want to see.
   llNone, llError, llWarn, llInfo, llTrace
 
@@ -59,7 +59,7 @@ proc getLogLevel*(): LogLevel = currentLogLevel
 
 proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
   const reset = toAnsiCode(@[acReset])
-    
+
   if keyLogLevel in info:
     let llStr = info[keyLogLevel]
 
@@ -99,9 +99,9 @@ let
                                filters = @[MsgFilter(logLevelFilter),
                                            MsgFilter(logPrefixFilter)])
   defaultLogHook* = `cfg?`.get()
-  
+
 discard subscribe(logTopic, defaultLogHook)
-  
+
 
 proc log*(level: LogLevel, msg: string) =
   discard publish(logTopic,
@@ -112,7 +112,7 @@ proc log*(level: string, msg: string) =
   discard publish(logTopic,
                   msg & "\n",
                         newOrderedTable({ keyLogLevel: level }))
-  
+
 proc error*(msg: string) = log(llError, msg)
 proc warn*(msg: string)  = log(llWarn, msg)
 proc info*(msg: string)  = log(llInfo, msg)
@@ -123,6 +123,6 @@ when not defined(release):
     debugTopic        = registerTopic("debug")
     `debugHook?`      = configSink(getSink("stderr").get())
     defaultDebugHook* = `debugHook?`.get()
-    
+
   proc debug*(msg: string) =
     discard publish(debugTopic, msg)
