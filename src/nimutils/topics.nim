@@ -13,14 +13,14 @@ type
   CloseCallback*  = ((SinkConfig) -> bool)
   StringTable*    = OrderedTableRef[string, string]
   MsgFilter*      = ((string, StringTable) -> (string, bool))
-  
+
   SinkRecord* = ref object
     name:           string
     initFunction*:   Option[InitCallback]
     outputFunction*: OutputCallback
     closeFunction*:  Option[CloseCallback]
     keys*:           Table[string, bool]
-    
+
   SinkConfig* = ref object
     mySink*:  SinkRecord
     filters*: seq[MsgFilter]
@@ -30,9 +30,9 @@ type
                              # state here, like file pointers.
   Topic* = ref object
     subscribers*: seq[SinkConfig]
-    
+
 proc getSinkName*(rec: SinkRecord): string = rec.name
-  
+
 # Exported so you can 'patch' default sinks, etc.
 var allSinks*: Table[string, SinkRecord]
 var allTopics*: Table[string, Topic]
@@ -47,37 +47,37 @@ proc subscribe*(topic: Topic, record: SinkConfig): Topic =
 proc subscribe*(t: string, record: SinkConfig): Option[Topic] =
   if t notin allTopics:
     return none(Topic)
-  
+
   return some(subscribe(allTopics[t], record))
 
 proc registerSink*(name: string, record: SinkRecord) =
   record.name = name
   allSinks[name] = record
-  
+
 proc getSink*(name: string): Option[SinkRecord] =
   if name in allSinks:
     return some(allSinks[name])
 
   return none(SinkRecord)
-  
+
 proc configSink*(s:         SinkRecord,
                  `config?`: Option[StringTable] = none(StringTable),
                  filters:   seq[MsgFilter] = @[]): Option[SinkConfig] =
   var config: StringTable
-  
+
   if `config?`.isSome():
     config = `config?`.get()
   else:
     config = newOrderedTable[string, string]()
-    
+
   for k, v in config:
     if k notin s.keys: return none(SinkConfig) # Extraneous key.
-    
+
   for k, v in s.keys:
     if v and k notin config: return none(SinkConfig) # Required key missing.
 
   let confObj = SinkConfig(mySink: s, config: config, filters: filters)
-  
+
   if s.initFunction.isSome():
     let fptr = s.initFunction.get()
     if not fptr(confObj):
@@ -91,8 +91,8 @@ proc registerTopic*(name: string): Topic =
   result            = Topic()
   allTopics[name]   = result
   revTopics[result] = name
-  
-  
+
+
 proc unsubscribe*(topic: Topic, record: SinkConfig): bool =
   let ix = topic.subscribers.find(record)
 
@@ -102,13 +102,13 @@ proc unsubscribe*(topic: Topic, record: SinkConfig): bool =
   if record.mySink.closeFunction.isSome():
     let fptr = record.mySink.closeFunction.get()
     return fptr(record)
-     
+
   return true
 
 proc unsubscribe*(topicName: string, record: SinkConfig): bool =
   if topicName notin allTopics:
     return false
-    
+
   return unsubscribe(allTopics[topicName], record)
 
 proc publish*(t:       Topic,
@@ -122,25 +122,25 @@ proc publish*(t:       Topic,
   else:
     tbl = aux
     tbl["topic"] = revTopics[t]
-  
+
   for hook in t.subscribers:
     var
       currentMsg = message # Each hook gets to filter seprately
       more: bool
-    
+
     for filter in hook.filters:
       (currentMsg, more) = filter(currentMsg, tbl)
       if not more: break
 
     let fptr = hook.mySink.outputFunction
-    
+
     if not fptr(currentMsg, hook, aux):
       success = false # TODO, allow registering a handler for this.
-    
+
 proc publish*(t:       string,
               message: string,
               aux:     StringTable = nil): bool {.discardable.} =
-  
+
   if t notin allTopics:
     return false
 
@@ -181,5 +181,5 @@ proc addTopic*(msg: string, extra: StringTable): (string, bool) =
     postfix = toAnsiCode(@[acFont1, acBBlue]) & "[[end " & topic & "]]\n" &
               toAnsiCode(@[acReset])
     newstr  = prefix & body & postfix
-    
+
   return (newstr, true)

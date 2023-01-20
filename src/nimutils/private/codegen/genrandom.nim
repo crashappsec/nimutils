@@ -9,7 +9,7 @@
 ## same results twice.
 ##
 ## This is meant to be run once only :)
-## 
+##
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022
 
@@ -282,7 +282,7 @@ proc intToWords*(i: int, elideLeadingZeros=true): string =
     ix = n and binIndexMask
     when not defined(release):
       assert ix == (n and 0xffff), errStr
-            
+
     words.add(binDict[ix])
     n = n shr 16
 
@@ -292,14 +292,14 @@ proc wordsToInt*(s: string): Option[int] =
   ## Given a sequence of up to 4 words coming from our dictionary, map
   ## them to their respective bits, outputting integers
 
-  var 
+  var
     l = s.split("-")
     res = 0
 
   assert len(l) <= sizeof(int) shl 1, "Cannot accept more than 4 words per call"
-    
+
   while len(l) != 0:
-    let 
+    let
       word = l.pop()
       n = binarySearch(binDict, word)
     if n == -1:

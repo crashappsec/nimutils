@@ -98,7 +98,7 @@ template addFlag(ctx: ArgSpec, name: string, fi: FlagInfo) =
                 "Duplicate flag: --" & name
     raise newException(ValueError, msg)
   ctx.flags[name] = fi
-  
+
 proc newArgSpec*(subOptional = false, defaultCmd = false): ArgSpec =
   ArgSpec(commands:    default(Table[string, ArgSpec]),
           flags:       default(Table[string, FlagInfo]),
@@ -132,7 +132,7 @@ proc addBinaryFlag*(ctx:      ArgSpec,
                     long:     string,
                     callback: BinaryCallback = nil): ArgSpec {.discardable.} =
     return addBinaryFlag(ctx, Rune(short), long, callback)
-    
+
 proc addPairedFlag*(ctx:      ArgSpec,
                     short:    Rune,
                     negShort: Rune,
@@ -169,7 +169,7 @@ proc addPairedFlag*(ctx:      ArgSpec,
                     long:     string,
                     callback: PairCallback = nil): ArgSpec {.discardable.} =
   return addPairedFlag(ctx, Rune(short), Rune(negShort), long, callback)
-    
+
 proc addChoiceFlag*(ctx:           ArgSpec,
                     short:         Rune,
                     long:          string,
@@ -187,7 +187,7 @@ proc addChoiceFlag*(ctx:           ArgSpec,
                           choices:        @choices,
                           chosen:         "",
                           choiceCallback: callback)
-    
+
   ctx.addFlag(shortAsStr, choicefi)
   ctx.addFlag(long,       choicefi)
 
@@ -199,9 +199,9 @@ proc addChoiceFlag*(ctx:           ArgSpec,
                         short:        none(Rune),
                         linkedChoice: some(choicefi))
       ctx.addFlag(item, fi)
-      
+
   return ctx
-    
+
 proc addChoiceFlag*(ctx:           ArgSpec,
                     short:         char,
                     long:          string,
@@ -209,7 +209,7 @@ proc addChoiceFlag*(ctx:           ArgSpec,
                     flagPerChoice: bool,
                     callback:      StrCallback = nil): ArgSpec {.discardable.} =
   return addChoiceFlag(ctx, Rune(short), long, choices, flagPerChoice, callback)
-  
+
 proc addFlagWithStrArg*(ctx:      ArgSpec,
                         short:    Rune,
                         long:     string,
@@ -225,13 +225,13 @@ proc addFlagWithStrArg*(ctx:      ArgSpec,
   ctx.addFlag(shortAsStr, fi)
   ctx.addFlag(long,       fi)
   return ctx
-    
+
 proc addFlagWithStrArg*(ctx:      ArgSpec,
                         short:    char,
                         long:     string,
                         callback: StrCallback = nil): ArgSpec {.discardable.} =
   return addFlagWithStrArg(ctx, Rune(short), long, callback)
-  
+
 proc addCommand*(ctx:          ArgSpec,
                  name:         string,
                  aliases:      openarray[string] = [],
@@ -243,7 +243,7 @@ proc addCommand*(ctx:          ArgSpec,
                       maxArgs:     0,
                       defaultCmd:  allowDefault,
                       cmdCallback: callback)
-    
+
     if name in ctx.commands:
       raise newException(ValueError, "Duplicate command name: " & name)
     ctx.commands[name] = result
@@ -251,14 +251,14 @@ proc addCommand*(ctx:          ArgSpec,
       if alias in ctx.commands:
         raise newException(ValueError, "Duplicate command name: " & alias)
       ctx.commands[alias] = result
-      
+
 proc addArgs*(ctx:      ArgSpec,
               min:      int = 0,
               max:      int = high(int),
               callback: StrArrCallback = nil): ArgSpec {.discardable.} =
   if min < 0 or max < 0 or min > max:
     raise newException(ValueError, "Invalid arguments")
-    
+
   ctx.minArgs     = min
   ctx.maxArgs     = max
   ctx.argCallback = callback
@@ -275,8 +275,8 @@ proc getCmdErrorPrefix(ctx: ParseCtx, i: int): string =
 
   if cmdCtx.endIx > i:
     return ""
-    
-  result = "" 
+
+  result = ""
 
   while cmdCtx.endIx < i:
     if atTop:
@@ -287,7 +287,7 @@ proc getCmdErrorPrefix(ctx: ParseCtx, i: int): string =
     cmdCtx = cmdCtx.subresult.get()
 
   result &= ": "
-    
+
 proc noMoreArgsInCmdCheck(ctx: ParseCtx, locIfError: int) =
   if ctx.curCmdSpec.minArgs > ctx.curCmdResult.args.len():
     raise newException(ValueError,
@@ -295,8 +295,8 @@ proc noMoreArgsInCmdCheck(ctx: ParseCtx, locIfError: int) =
                          "Not enough arguments given.")
 
 proc parseArgError(ctx: ParseCtx, index: int) =
-  # It's a bad command or sub-command name, or spurious args.  
-  if ctx.curCmdSpec.maxArgs == 0: 
+  # It's a bad command or sub-command name, or spurious args.
+  if ctx.curCmdSpec.maxArgs == 0:
     if len(ctx.curCmdSpec.commands) != 0:
       raise newException(ValueError,
                          ctx.getCmdErrorPrefix(index) &
@@ -343,16 +343,16 @@ proc setCommandBoundaries(ctx: ParseCtx, ix: int) =
       ctx.curCmdResult.subresult = some(newSub)
       ctx.curCmdResult           = newSub
       ctx.curCmdSpec             = newSub.linkedSpec
-      
+
       setCommandBoundaries(ctx, i + 1)
-      
+
       ctx.curCmdSpec   = savedSpec
       ctx.curCmdResult = savedRes
       return
   # We found none of our valid sub-commands.  If we allow a default
   # command (that, in SAMI, we fully resolve after reading the config
   # file), then we mark that's what we got.  Otherwise, we error.
-      
+
   if ctx.curCmdSpec.defaultCmd:
     ctx.curCmdResult.noExplicitSub = true
   elif not ctx.curCmdSpec.subOptional:
@@ -364,7 +364,7 @@ proc setCommandBoundaries(ctx: ParseCtx, ix: int) =
     raise newException(ValueError,
                        ctx.getCmdErrorPrefix(len(ctx.args)) &
                          "No command found. Expected one of " & s.join(", "))
-    
+
   ctx.curCmdResult.endIx = len(ctx.args)
 
 proc findBestSpec(ctx: ParseCtx,
@@ -401,7 +401,7 @@ proc findBestSpec(ctx: ParseCtx,
   else:
     # Exact match found in the right context.
     return some(spec.flags[name])
-    
+
 proc findFlagInfo(ctx: ParseCtx, name: string): Option[FlagInfo] =
   let
     savedSpec   = ctx.curCmdSpec
@@ -420,9 +420,9 @@ proc setFlagValue(ctx: ParseCtx, spec: FlagInfo, value: string) =
     # Note this might be a little unclear if we did --log-level=info
     # and then go on to do --warn, but ok for now.
     raise newException(ValueError, "Duplicate flag value: " & spec.long)
-    
+
   spec.seen = true
-  
+
   case spec.kind
   of afChoice:
     if value notin spec.choices:
@@ -435,7 +435,7 @@ proc setFlagValue(ctx: ParseCtx, spec: FlagInfo, value: string) =
   else:
     raise newException(ValueError, "For flag: " & spec.long &
       "': string argument is not allowed.")
-      
+
 
 proc setFlagValue(ctx: ParseCtx, spec: FlagInfo) =
   case spec.kind
@@ -469,23 +469,23 @@ proc setUnmatchedFlag(ctx: ParseCtx, name: string, value: Option[string]) =
     else:
       raise newException(ValueError, "Duplicate flag provided: " & name)
   ctx.unmatchedFlags[name] = value
-  
+
 proc setFlagValue(ctx: ParseCtx, name: string, value: string) =
   let `spec?` = ctx.findFlagInfo(name)
   if `spec?`.isNone():
     ctx.setUnmatchedFlag(name, some(value))
   else:
     ctx.setFlagValue(`spec?`.get(), value)
-  
+
 proc parseFlag(ctx: ParseCtx, name: string): string =
   # Return "" if fully parsed, the name if we're waiting on an argument.
   var
-    s = name.strip() 
+    s = name.strip()
     ix: int
 
   if s == "-":
     return # One dash alone is a no-op, needed to allow null strings in flags.
-    
+
   while s[0] == '-':
     s = s[1 .. ^1]
     if len(s) == 0:
@@ -516,7 +516,7 @@ proc parseFlag(ctx: ParseCtx, name: string): string =
       else:
         # Got afChoice or afStrArg, so waiting on an argument.
         return s
-  
+
 proc parseCurrentCommand(ctx: ParseCtx) =
   var
     flagsDone   = false # We have not seen -- this command / subcommand.
@@ -594,7 +594,7 @@ proc sanityCheckUnmatchedFlags(ctx: ParseCtx): bool =
       for k, _ in ctx.unmatchedFlags:
         msg &= k
     raise newException(ValueError, msg)
-      
+
   for flag, `val?` in ctx.unmatchedFlags:
     echo "Sanity checking flag: ", flag
     var found = false
@@ -617,7 +617,7 @@ proc sanityCheckUnmatchedFlags(ctx: ParseCtx): bool =
       else:
         raise newException(ValueError, "Invalid flag: --" & flag &
           "= " & `val?`.get())
-        
+
   return false # Still have resolution that needs to happen.
 
 proc mostlyParse*(ctx:            ArgSpec,
@@ -625,7 +625,7 @@ proc mostlyParse*(ctx:            ArgSpec,
                   topHasDefault = false,
                   clobberOk     = false): (ArgResult, bool) =
   ## You probably don't want this version of parsing.
-  ## 
+  ##
   ## This version of parse allows for some last-minute ambiguity.
   ## Specifically, it's designed to return if the final sub-command
   ## (which can be the top level command) is not explicitly specified.
@@ -737,7 +737,7 @@ proc mostlyParse*(ctx:            ArgSpec,
     res = res.subresult.get()
 
   res.stash = ctx # Keep this around.
-  
+
   return (argRes, `areWeDone?`)
 
 proc commit*(result: ArgResult) =
@@ -748,7 +748,7 @@ proc commit*(result: ArgResult) =
   ## If there are subcommands, we then descend into the selected
   ## subcommand and start over.
   var cur = result
-  
+
   while true:
     for flag, spec in cur.flags:
       case spec.kind
@@ -788,7 +788,7 @@ proc applyDefault*(argRes: ArgResult, cmd: string) =
     var possibleCmds: seq[string] = @[]
     for k, _ in ambiguousArg.linkedSpec.commands:
       possibleCmds.add(k)
-      
+
     raise newException(ValueError, "Missing command.  Expected one of: " &
                        possibleCmds.join(", "))
   var
@@ -812,7 +812,7 @@ proc applyDefault*(argRes: ArgResult, cmd: string) =
       cmd & "'")
 
   ambiguousArg.command = some(cmd)
-  
+
   for flag, `value?` in flags:
     if flag notin spec.flags:
       raise newException(ValueError, "Invalid flag for command '" & cmd &
@@ -827,7 +827,7 @@ proc applyDefault*(argRes: ArgResult, cmd: string) =
 
   for k, _ in ctx.unmatchedFlags:
     ctx.unmatchedFlags.del(k)
-  
+
 proc parse*(ctx:             ArgSpec,
             inargs:          openarray[string] = [],
             topHasDefault = false,
@@ -837,14 +837,14 @@ proc parse*(ctx:             ArgSpec,
     var (res, done) = ctx.mostlyParse(inargs, topHasDefault, clobberOk)
 
     result = res
-    
+
     if done:
-      return 
+      return
 
     if defaultCmd != "":
       res.applyDefault(defaultCmd)
       return
-    
+
     case len(res.stash.unmatchedFlags)
     of 0:
       discard
@@ -871,7 +871,7 @@ proc parse*(ctx:             ArgSpec,
 proc getBoolValue*(res: ArgResult, flagname: string): Option[bool] =
   if flagname notin res.flags:
     return none(bool)
-    
+
   let fi = res.flags[flagname]
 
   case fi.kind
@@ -898,7 +898,7 @@ proc getStrValue*(res: ArgResult, flagname: string): Option[string] =
   else:
     raise newException(ValueError, "Flag '" & flagname &
       "' doesn't take a string argument.")
-    
+
 proc getCurrentCommandName*(res: ArgResult): Option[string] =
   if res.command.isSome():
     return res.subresult.get().linkedSpec.commandName
@@ -924,14 +924,14 @@ proc getFlags*(res: ArgResult, recursive=true): TableRef[string, string] =
     if not recursive: return
     if cur.subresult.isNone(): return
     cur = cur.subresult.get()
-  
+
 proc getSubcommand*(res: ArgResult): Option[ArgResult] =
   return res.subresult
-    
+
 when isMainModule:
   proc setColor(s: bool) =
     echo "Set color = ", s
-    
+
   proc setDryRun(s: bool) =
     echo "Set dry run = ", s
 
@@ -943,7 +943,7 @@ when isMainModule:
 
   proc setLogLevel(s: string) =
     echo "Set log level = ", s
-    
+
   proc setConfigFile(s: string) =
     echo "Set Config file = ", s
 
@@ -961,7 +961,7 @@ when isMainModule:
 
   proc cmdExtract(s: ArgResult) =
     echo "run extract"
-    
+
   proc cmdDelete(s: ArgResult) =
     echo "run delete"
 

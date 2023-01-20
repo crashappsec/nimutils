@@ -1,9 +1,9 @@
-isPatternSyntax	nimutils/unicodeid.html#isPatternSyntax,Rune	unicodeid: isPatternSyntax(r: Rune): bool	
-isPatternWhiteSpace	nimutils/unicodeid.html#isPatternWhiteSpace,Rune	unicodeid: isPatternWhiteSpace(r: Rune): bool	
-isOtherIdStart	nimutils/unicodeid.html#isOtherIdStart,Rune	unicodeid: isOtherIdStart(r: Rune): bool	
-isOtherIdContinue	nimutils/unicodeid.html#isOtherIdContinue,Rune	unicodeid: isOtherIdContinue(r: Rune): bool	
-isIdStart	nimutils/unicodeid.html#isIdStart,Rune,bool	unicodeid: isIdStart(r: Rune; underscoreOk: bool = true): bool	
-isIdContinue	nimutils/unicodeid.html#isIdContinue,Rune	unicodeid: isIdContinue(r: Rune): bool	
-isValidId	nimutils/unicodeid.html#isValidId,string	unicodeid: isValidId(s: string): bool	
-readRune	nimutils/unicodeid.html#readRune,Stream	unicodeid: readRune(s: Stream): Rune	
-peekRune	nimutils/unicodeid.html#peekRune,Stream	unicodeid: peekRune(s: Stream): Rune	
+isPatternSyntax	nimutils/unicodeid.html#isPatternSyntax,Rune	unicodeid: isPatternSyntax(r: Rune): bool
+isPatternWhiteSpace	nimutils/unicodeid.html#isPatternWhiteSpace,Rune	unicodeid: isPatternWhiteSpace(r: Rune): bool
+isOtherIdStart	nimutils/unicodeid.html#isOtherIdStart,Rune	unicodeid: isOtherIdStart(r: Rune): bool
+isOtherIdContinue	nimutils/unicodeid.html#isOtherIdContinue,Rune	unicodeid: isOtherIdContinue(r: Rune): bool
+isIdStart	nimutils/unicodeid.html#isIdStart,Rune,bool	unicodeid: isIdStart(r: Rune; underscoreOk: bool = true): bool
+isIdContinue	nimutils/unicodeid.html#isIdContinue,Rune	unicodeid: isIdContinue(r: Rune): bool
+isValidId	nimutils/unicodeid.html#isValidId,string	unicodeid: isValidId(s: string): bool
+readRune	nimutils/unicodeid.html#readRune,Stream	unicodeid: readRune(s: Stream): Rune
+peekRune	nimutils/unicodeid.html#peekRune,Stream	unicodeid: peekRune(s: Stream): Rune

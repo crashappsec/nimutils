@@ -1,8 +1,8 @@
-unreachable	nimutils.html#unreachable.t	nimutils: unreachable()	
-getOrElse	nimutils.html#getOrElse,Option[T],T	nimutils: getOrElse[T](x: Option[T]; y: T): T	
-dirWalk	nimutils.html#dirWalk.t,bool,untyped	nimutils: dirWalk(recursive: bool; body: untyped)	
-unixTimeInMS	nimutils.html#unixTimeInMS.t	nimutils: unixTimeInMS(): uint64	
-resolvePath	nimutils.html#resolvePath,string	nimutils: resolvePath(inpath: string): string	
-clzll	nimutils.html#clzll,uint	nimutils: clzll(argc: uint): cint	
-log2	nimutils.html#log2,uint	nimutils: log2(s: uint): int	
-indentAndWrap	nimutils.html#indentAndWrap,string,int,int	nimutils: indentAndWrap(str: string; indent: int; maxWidth = 80): string	
+unreachable	nimutils.html#unreachable.t	nimutils: unreachable()
+getOrElse	nimutils.html#getOrElse,Option[T],T	nimutils: getOrElse[T](x: Option[T]; y: T): T
+dirWalk	nimutils.html#dirWalk.t,bool,untyped	nimutils: dirWalk(recursive: bool; body: untyped)
+unixTimeInMS	nimutils.html#unixTimeInMS.t	nimutils: unixTimeInMS(): uint64
+resolvePath	nimutils.html#resolvePath,string	nimutils: resolvePath(inpath: string): string
+clzll	nimutils.html#clzll,uint	nimutils: clzll(argc: uint): cint
+log2	nimutils.html#log2,uint	nimutils: log2(s: uint): int
+indentAndWrap	nimutils.html#indentAndWrap,string,int,int	nimutils: indentAndWrap(str: string; indent: int; maxWidth = 80): string

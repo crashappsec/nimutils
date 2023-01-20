@@ -141,7 +141,7 @@ proc peekRune*(s: Stream): Rune =
 
 type SpaceSaver* = ref object
   pre*:       string
-  postRunes*: seq[Rune]                
+  postRunes*: seq[Rune]
   stash*:     seq[seq[Rune]]
 
 proc toSaver*(orig: string): (SpaceSaver, string) =
@@ -189,7 +189,7 @@ proc toSaver*(orig: string): (SpaceSaver, string) =
 
 proc restoreSaver*(s: string, saver: SpaceSaver, errOk: bool = false): string =
   var nDbg = 0
-  
+
   if len(saver.stash) == 0:
     return s
 
@@ -223,7 +223,7 @@ proc count*[T](list: seq[T], target: T): int =
 
 proc count*(s: string, target: Rune): int =
   return s.toRunes().count(target)
-    
+
 proc truncate*(instr: string, w: int): string =
   let
     (ss, contents) = instr.toSaver()
@@ -234,19 +234,19 @@ proc truncate*(instr: string, w: int): string =
   var
     ix    = 0
     count = 0
-  
+
   while count < w:
     let chrlen = graphemeLen(contents, ix)
     if runeAt(contents, ix) != magicRune:
       count = count + 1
-    ix += chrlen    
+    ix += chrlen
     if ix >= len(contents):
       return instr
-      
+
   let truncated = contents[0 ..< ix]
 
   return truncated.restoreSaver(ss, true)
-  
+
 # This function, and indentWrap below, are from the Nim wordwrap
 # implementation, but are changed to 1) add indentation for hanging
 # lines as an options, and 2) not count zws toward width.
@@ -290,7 +290,7 @@ proc width*(pre: string): int =
   ## rewritten to not go through the overhead of the space saver.  Not
   ## every important right now.
   let (x, s) = pre.toSaver()
-  
+
   return olen(s, 0, len(s))
 
 proc colWidth*(pre: string): int =
@@ -302,7 +302,7 @@ proc colWidth*(pre: string): int =
   ## use toSaver() before, and restoreSaver() on the output.  It does
   ## handle zws though.
   let (x, s) = pre.toSaver()
-  
+
   var
     i    = 0
     last = len(s)
@@ -326,7 +326,7 @@ proc align*(s: string, w: int, kind: AlignmentType): string =
   let
     sWidth = width(s)
     padLen = w - sWidth
-    
+
   if sWidth > w:
     return s
 
@@ -344,7 +344,7 @@ proc align*(s: string, w: int, kind: AlignmentType): string =
       lpad    = repeat(Rune(' '), lpadlen)
       rpad    = repeat(Rune(' '), rpadlen)
     return lpad & s & rpad
-    
+
 proc indentWrap*( s: string,
                   startingMaxLineWidth = -1,
                   hangingIndent = 2,
@@ -353,7 +353,7 @@ proc indentWrap*( s: string,
                   newLine = "\n"): string {.noSideEffect.} =
   ## This wraps text.  Handles zws right, and can indent hanging lines.
   ## But if you want to ignore ANSI sequences, use the saver object.
-    
+
   result           = newStringOfCap(s.len + s.len shr 6)
   var spaceLeft    = startingMaxLineWidth
   var lastSep      = ""

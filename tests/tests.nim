@@ -144,4 +144,3 @@ To run these tests, simply execute `nimble test`.
     y = flatten[int](x)
     check y == @[1,2,3,4,5,6,7,8,9,10,11,12]
     check not compiles(y = flatten[int](z))
-      

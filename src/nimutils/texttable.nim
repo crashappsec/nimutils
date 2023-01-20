@@ -17,7 +17,7 @@ type
     ## Eventually, we will add per-row, per-column and per-cell
     ## overrides.
     WrapNone, WrapBlock, WrapLines, WrapBlockHang, WrapLinesHang
-                      
+
   ColInfo* = ref object
     align*:           AlignmentType
     minChr*:          int
@@ -57,7 +57,7 @@ const
   resetText        = "\e[0m"
   ellipsisRune     = Rune(0x2026)
   bareMinimumWidth = 1
-  
+
 # This one applies formatting to the text of a cell.  It assumes the
 # cell is fully paddded already, including the margin addition.
 proc paddedCellFormat(t: TextTable,
@@ -65,18 +65,18 @@ proc paddedCellFormat(t: TextTable,
                       col: int,
                       row: int): string {.inline.} =
   var format: string
-  
+
   if row == 0 and len(t.headerRowFmt) > 0:
     format = t.headerRowFmt
   elif col == 0 and len(t.headerColFmt) > 0:
-    format = t.headerColFmt 
+    format = t.headerColFmt
   elif len(t.evenRowFmt) > 0 and (row mod 2) == 0:
     format = t.evenRowFmt
   elif len(t.oddRowFmt) > 0 and (row mod 2) != 0:
     format = t.oddRowFmt
   else:
     return text
-       
+
   return format & text & resetText
 
 
@@ -85,13 +85,13 @@ proc separatorFormat(t: TextTable, sep: string): string =
     return t.sepFmt & sep & resetText
   else:
     return sep
-    
+
 # We're generally going to call these functions for each cell, from 0
 # to len(cols), inclusive.  Meaning, we call for the column that
 # doesn't actually exist to the right of the table, as that writes the
 # 'r' margin for the cell before, and the right table border if it's
 # desired.
-#    
+#
 # c == current column ix, n == len() columns, so one past the last index.
 # returns what to write, including "" if nothing.
 proc getColSep(t: TextTable, col: int, n: int): string =
@@ -101,7 +101,7 @@ proc getColSep(t: TextTable, col: int, n: int): string =
     if not t.addLeftBorder: return ""
   elif col == n:
     if not t.addRightBorder: return ""
-    
+
   if col <= 1:
     # By default, if no col header sep is explicitly provided we use
     # the non-header one.
@@ -139,7 +139,7 @@ proc computeTableOverhead(t: TextTable): int =
   if t.addRightBorder: sepChars = sepChars + 1
 
   return sepChars + totalMargin
-  
+
 
 proc addMargin(t: TextTable, contents: string): string =
   result = t.leftCellMargin & contents & t.rightCellMargin
@@ -153,7 +153,7 @@ proc padAndAlignCell(t: TextTable,
     var res:        string
 
     assert ss != nil
-    
+
     if numRunes >= colwidth:
       return instr
     # colwidth does NOT include the cell margins.
@@ -165,7 +165,7 @@ proc padAndAlignCell(t: TextTable,
 
     res = align(contents, colwidth, alignment)
 
-    return res.restoreSaver(ss)  
+    return res.restoreSaver(ss)
 
 proc wrapLines(t: TextTable, instr: string, colwidth: int): seq[string] =
   var (ss, contents) = instr.toSaver()
@@ -204,13 +204,13 @@ proc wrapLines(t: TextTable, instr: string, colwidth: int): seq[string] =
     # WrapNone short circuits additional logic to truncate lines if we
     # get too big, so it never calls wrapLines(), it just skips to
     # any potential truncation.
-    unreachable 
-    
+    unreachable
+
 proc getRowSeparator(t:         TextTable,
                      forHeader: bool,
                      colwidths: seq[int]): string =
     var ourSep, crossSep: Rune
-      
+
     if not t.rowSep.isSome():
       if not forHeader or not t.rowHeaderSep.isSome():
         return ""
@@ -226,7 +226,7 @@ proc getRowSeparator(t:         TextTable,
       # Add the separator to the left of this cell's contents.
       if i > 0  or t.addLeftBorder:
         result.add(crossSep)
-        
+
       # Add the contents at the full width including margins.
       let
         n   = colWidths[i] + len(t.leftCellMargin) + len(t.rightCellMargin)
@@ -251,7 +251,7 @@ proc formatOneLine(t:         TextTable,
     result.add(t.getColSep(colnum, n))
     var
       contents = if colnum > len(rowdata): "" else: rowData[colnum]
-      
+
     contents = truncate(contents, colwidths[colnum])
     contents = t.padAndAlignCell(contents, rownum, colnum, colwidths[colnum])
     contents = t.addMargin(contents)
@@ -260,10 +260,10 @@ proc formatOneLine(t:         TextTable,
   # possibly add a right border.
   result.add(t.getColSep(n, n))
   result.add("\n")
-    
+
 proc getOneRow(t: TextTable, rownum: int, colWidths: seq[int]): string =
   return t.formatOneLine(rownum, colWidths, t.rows[rownum])
-  
+
 proc getOneRowWrap(t: TextTable, rownum: int, colWidths: seq[int]): string =
   let
     rawRowData = t.rows[rownum]
@@ -278,7 +278,7 @@ proc getOneRowWrap(t: TextTable, rownum: int, colWidths: seq[int]): string =
       maxRows  = high(int)
 
     # We only apply this when wrapping.
-    
+
     if t.maxCellBytes > 0 and width(item) > t.maxCellBytes:
       maxRows = int(t.maxCellBytes/colwidths[colnum])
       if len(thisCell) > maxRows:
@@ -287,7 +287,7 @@ proc getOneRowWrap(t: TextTable, rownum: int, colWidths: seq[int]): string =
           thisCell[^1] = truncate(thisCell[^1] & " ", len(thisCell[^1]))
         else:
           thisCell[^1] = thisCell[^1] & $(ellipsisRune)
-    
+
     rowData.add(thisCell)
     if len(thisCell) > numLines:
       numLines = len(thisCell)
@@ -301,7 +301,7 @@ proc getOneRowWrap(t: TextTable, rownum: int, colWidths: seq[int]): string =
         oneLine.add("")
       else:
         oneLine.add(rowdata[colnum][i])
-        
+
     result.add(formatOneLine(t, rownum, colwidths, oneLine))
 
 proc newColSpec*(table: TextTable,
@@ -313,7 +313,7 @@ proc newColSpec*(table: TextTable,
 
   if minChr > maxChr:
     raise newException(ValueError, "minChr can't be > maxChr")
-    
+
   result = ColInfo(table:  table,
                    minChr: minChr,
                    maxChr: maxChr,
@@ -326,7 +326,7 @@ proc newColSpec*(table: TextTable,
       table.colWidths.add(table.newColSpec())
 
     table.colWidths[colNum] = result
-                      
+
 proc computeColWidths(t: var TextTable, maxWidth: int): seq[int] =
   # Currently, we don't try to do anything too fancy. First, we assume
   # every cell starts at the minimum width.
@@ -337,7 +337,7 @@ proc computeColWidths(t: var TextTable, maxWidth: int): seq[int] =
   #
   # After that, if fillWidth is true, we give out any leftover
   # characters to whoever's max hasn't been reached, evenly.
-  
+
   let
     wMax     = if maxWidth > 0: maxWidth else: terminalWidth() + maxWidth
     overhead = t.computeTableOverHead()
@@ -467,7 +467,7 @@ proc render*(t: var TextTable, maxWidth = -2): string =
       result.add(t.getOneRowWrap(i, colWidths))
     elif i != len(t.rows):
       result.add(t.getOneRow(i, colWidths))
-      
+
 proc addRow*(t: var TextTable, row: seq[string]) =
   if not t.flexColumns:
     if len(row) != t.numColumns:
@@ -475,7 +475,7 @@ proc addRow*(t: var TextTable, row: seq[string]) =
   while len(t.colWidths) < len(row):
     let spec = newColSpec(t)
     t.colWidths.add(spec)
-    
+
   for i, item in row:
     let
       l     = colWidth(item)
@@ -544,7 +544,7 @@ proc setBottomTableBorder*(t: TextTable, val: bool) =
   t.addBottomBorder = val
 
 # 0 == flexible or autodetect; negative numbers measure from the back.
-proc newTextTable*(numColumns: int           = 0, 
+proc newTextTable*(numColumns: int           = 0,
                    rows:    seq[seq[string]] = @[],
                    fillWidth                 = false,
                    rowHeaderSep              = some(Rune('-')),
@@ -552,13 +552,13 @@ proc newTextTable*(numColumns: int           = 0,
                    rowSep                    = none(Rune),
                    colSep                    = some(Rune(' ')),
                    interSectionSep           = some(Rune('-')),
-                   sepFmt:  seq[AnsiCode]    = @[], 
+                   sepFmt:  seq[AnsiCode]    = @[],
                    rHdrFmt: seq[AnsiCode]    = @[],
                    cHdrFmt: seq[AnsiCode]    = @[],
                    eRowFmt: seq[AnsiCode]    = @[],
                    oRowFmt: seq[AnsiCode]    = @[],
                    eColFmt: seq[AnsiCode]    = @[],
-                   oColFmt: seq[AnsiCode]    = @[], 
+                   oColFmt: seq[AnsiCode]    = @[],
                    cSpecs:  seq[ColInfo]     = @[],
                    leftMargin                = " ",
                    rightMargin               = " ",
@@ -569,7 +569,7 @@ proc newTextTable*(numColumns: int           = 0,
                    headerRowAlign            = none(AlignmentType),
                    wrapStyle                 = WrapLines,
                    maxCellBytes              = 0): TextTable =
-  if len(cSpecs) != 0: 
+  if len(cSpecs) != 0:
     if numColumns != 0 and len(cSpecs) != numColumns:
       raise newException(ValueError, "Provided column count != # of col specs")
     result = TextTable(flexColumns: false,
@@ -596,7 +596,7 @@ proc newTextTable*(numColumns: int           = 0,
   result.headerColFmt    = toAnsiCode(cHdrFmt)
   result.evenRowFmt      = toAnsiCode(eRowFmt)
   result.oddRowFmt       = toAnsiCode(oRowFmt)
-  result.evenColFmt      = toAnsiCode(eColFmt)  
+  result.evenColFmt      = toAnsiCode(eColFmt)
   result.oddColFmt       = toAnsiCode(oColFmt)
   result.colWidths       = cSpecs
   result.leftCellMargin  = leftMargin
@@ -622,4 +622,3 @@ when isMainModule:
   testTable.addRow(@["allow_external_config", "true", "This is a really long string that we're really going to want to either truncate or wrap. Let's see what happens."])
 
   echo testTable.render()
-  

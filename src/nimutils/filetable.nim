@@ -31,16 +31,16 @@ proc staticListFiles*(arg: string): seq[string] =
 
 template newFileTableBase(typeName: typeDesc, dir: static[string]): untyped =
   var ret: typeName[string, string] = `init typeName`[string, string]()
-  
+
   for filename in staticListFiles(`dir`):
     if filename.endswith("/"): continue
     let
       pathToFile   = dir.joinPath(filename)
       fileContents = staticRead(pathToFile)
       key          = splitFile(filename).name
-        
+
     ret[key] = fileContents
-    
+
   ret
 
 proc newFileTable*(dir: static[string]): FileTable =
@@ -48,7 +48,7 @@ proc newFileTable*(dir: static[string]): FileTable =
 
 proc newOrderedFileTable*(dir: static[string]): OrderedFileTable =
   return  newFileTableBase(OrderedTable, dir)
-    
+
 when isMainModule:
   const x = newFileTable("/Users/viega/dev/sami/src/help/")
 

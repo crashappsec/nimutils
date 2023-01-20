@@ -1,18 +1,18 @@
-MkInt	nimutils/box.html#MkInt	MixedKind.MkInt	
-MkStr	nimutils/box.html#MkStr	MixedKind.MkStr	
-MkFloat	nimutils/box.html#MkFloat	MixedKind.MkFloat	
-MkSeq	nimutils/box.html#MkSeq	MixedKind.MkSeq	
-MkBool	nimutils/box.html#MkBool	MixedKind.MkBool	
-MkTable	nimutils/box.html#MkTable	MixedKind.MkTable	
-MkObj	nimutils/box.html#MkObj	MixedKind.MkObj	
-MixedKind	nimutils/box.html#MixedKind	box: MixedKind	
-Packable	nimutils/box.html#Packable	box: Packable	
-Box	nimutils/box.html#Box	box: Box	
-arrItemType	nimutils/box.html#arrItemType,openArray[T]	box: arrItemType[T](a: openArray[T]): auto	
-arrItemType	nimutils/box.html#arrItemType,BoxAtom	box: arrItemType(a: BoxAtom): BoxAtom	
-unpack	nimutils/box.html#unpack,Box	box: unpack[T](box: Box): T	
-unpack	nimutils/box.html#unpack,Box,T	box: unpack[T](box: Box; result: var T)	
-hash	nimutils/box.html#hash,Box	box: hash(box: Box): Hash	
-pack	nimutils/box.html#pack,T	box: pack[T](x: T): Box	
-`$`	nimutils/box.html#$,Box	box: `$`(x: Box): string	
-boxToJson	nimutils/box.html#boxToJson,Box	box: boxToJson(b: Box): string	
+MkInt	nimutils/box.html#MkInt	MixedKind.MkInt
+MkStr	nimutils/box.html#MkStr	MixedKind.MkStr
+MkFloat	nimutils/box.html#MkFloat	MixedKind.MkFloat
+MkSeq	nimutils/box.html#MkSeq	MixedKind.MkSeq
+MkBool	nimutils/box.html#MkBool	MixedKind.MkBool
+MkTable	nimutils/box.html#MkTable	MixedKind.MkTable
+MkObj	nimutils/box.html#MkObj	MixedKind.MkObj
+MixedKind	nimutils/box.html#MixedKind	box: MixedKind
+Packable	nimutils/box.html#Packable	box: Packable
+Box	nimutils/box.html#Box	box: Box
+arrItemType	nimutils/box.html#arrItemType,openArray[T]	box: arrItemType[T](a: openArray[T]): auto
+arrItemType	nimutils/box.html#arrItemType,BoxAtom	box: arrItemType(a: BoxAtom): BoxAtom
+unpack	nimutils/box.html#unpack,Box	box: unpack[T](box: Box): T
+unpack	nimutils/box.html#unpack,Box,T	box: unpack[T](box: Box; result: var T)
+hash	nimutils/box.html#hash,Box	box: hash(box: Box): Hash
+pack	nimutils/box.html#pack,T	box: pack[T](x: T): Box
+`$`	nimutils/box.html#$,Box	box: `$`(x: Box): string
+boxToJson	nimutils/box.html#boxToJson,Box	box: boxToJson(b: Box): string
