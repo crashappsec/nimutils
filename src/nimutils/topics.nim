@@ -150,7 +150,17 @@ proc prettyJson*(msg: string, extra: StringTable): (string, bool) =
   try:
     return (pretty(parseJson(msg)), true)
   except:
-    return ("Error: Invalid Json formatting", false)
+    when not defined(release):
+      # This will help you figure out where and why you're
+      # sending something that isn't valid JSON
+      stderr.writeLine(getCurrentException().getStackTrace())
+      stderr.writeLine(getCurrentExceptionMsg())
+    return ("[Error: Invalid Json formatting] " & msg, false)
+
+proc fixNewline*(msg: string, extra: StringTable): (string, bool) =
+  if msg[^1] != '\n':
+    return (msg & "\n", true)
+  return (msg, true)
 
 proc wrapToWidth*(msg: string, extra: StringTable): (string, bool) =
   # Problem w/ this at the moment is it doesn't take ANSI codes into account.
