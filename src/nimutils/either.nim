@@ -30,7 +30,7 @@ proc isA*[T, U](x: Either[T, U], t: typedesc): bool =
     static:
       error("In call to isA(x: " & $(typeof(x)) & ", T), T must be of type " &
         $(typeof(x.tVal)) & " or " & $(typeof(x.uVal)))
-  
+
 proc left*[T, U](x: Either[T, U]): T =
   if x.isA(T):
     return x.tVal
@@ -60,7 +60,7 @@ proc `==`*[T, U](a, b: Either[T, U]): bool {.inline.} =
     return a.tVal == b.tVal
   elif b.isA(T):
       return false
-    
+
   if a.isA(U):
     if not b.isA(U):
       return false
@@ -69,7 +69,7 @@ proc `==`*[T, U](a, b: Either[T, U]): bool {.inline.} =
     return false
 
   raise newException(NeitherDefect, "Either objects are not initialized")
-    
+
 proc `$`*[T, U](self: Either[T, U]): string =
   if self.isA(T):
     result = "either("
@@ -80,7 +80,7 @@ proc `$`*[T, U](self: Either[T, U]): string =
     result.addQuoted(self.uVal)
     result.add(")")
   else:
-    raise newException(NeitherDefect, "Either objects are not initialized")    
+    raise newException(NeitherDefect, "Either objects are not initialized")
 
 macro EitherDecl*(name: untyped, x: typedesc, y: typedesc) =
   ## Declare a concrete Either type and set up auto-converters.
