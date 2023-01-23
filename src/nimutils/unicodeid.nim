@@ -23,7 +23,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022
 
-import streams, unicode, strutils, std/terminal
+import streams, unicode, strutils
 import unicodedb/properties
 
 const magicRune* = Rune(0x200b)

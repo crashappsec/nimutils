@@ -100,7 +100,7 @@ let
                                            MsgFilter(logPrefixFilter)])
   defaultLogHook* = `cfg?`.get()
 
-discard subscribe(logTopic, defaultLogHook)
+subscribe(logTopic, defaultLogHook)
 
 
 proc log*(level: LogLevel, msg: string) =

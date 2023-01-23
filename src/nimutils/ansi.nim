@@ -1,6 +1,3 @@
-import tables, options
-
-
 var showColors      = true
 
 proc setShowColors*(val: bool) =
@@ -56,7 +53,7 @@ type AnsiCode* = enum
   acReset =        "0"
 
 
-proc toAnsiCode*(codes: seq[AnsiCode]): string =
+proc toAnsiCode*(codes: openarray[AnsiCode]): string =
   when nimvm:
     discard
   else:

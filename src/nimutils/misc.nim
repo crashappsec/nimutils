@@ -1,8 +1,7 @@
-import macros
-import times
-import os
-import std/wordwrap
-import strutils
+## :Author: John Viega (john@crashoverride.com)
+## :Copyright: 2022-2023, Crash Override, Inc.
+##
+import macros, options, times, os, strutils
 
 # The name flatten conflicts with a method in the options module.
 from options import get, Option, isSome, isNone
@@ -24,21 +23,6 @@ template unreachable*() =
     doAssert(false, "Reached code the programmer thought was unreachable :(")
   finally:
     discard
-
-macro getOrElseActual(x: untyped, y: untyped): untyped =
-  return quote do:
-    if `x`.isSome():
-      `x`.get()
-    else:
-      `y`
-
-proc getOrElse*[T](x: Option[T], y: T): T {.inline.} =
-  ## Allows us to derefenrece an Option[] type if it isSome(), and if
-  ## not, set a default value instead.  This is intended to help make
-  ## lets using options more concise when we need a default.  Note
-  ## that you can make the second argument a code block, which is the
-  ## ultimate reason why one might use this.
-  getOrElseActual(x, y)
 
 template dirWalk*(recursive: bool, body: untyped) =
   ## This is a helper function that helps one unify code when a
@@ -110,20 +94,6 @@ proc clzll*(argc: uint): cint {.cdecl, importc: "__builtin_clzll".}
 proc log2*(s: uint): int = 63 - clzll(s)
 ## Calculate log base 2, truncating.
 
-proc indentAndWrap*(str: string, indent: int, maxWidth = 80): string =
-  ## Wrap to a fixed width, while still indenting.
-  ## Probably can be done by fmt, but less clearly.
-  let
-    s = wrapWords(str, maxWidth - indent, false)
-    pad = repeat(' ', indent)
-
-  var lines = s.split("\n")
-
-  for i in 0 ..< len(lines):
-    lines[i] = pad & lines[i]
-
-  return lines.join("\n")
-
 type
   Flattenable[T] = concept x
     (x is seq) or (x is array)
@@ -148,6 +118,17 @@ proc flatten*[T](arr: Flattenable): seq[T] =
   result = newSeq[T]()
   flatten[T](arr, result)
 
+template `?`*(x: typedesc): typedesc = Option[x]
+template `?`*[T](x: Option[T]): bool = x.isSome()
+
+when defined(autoOption):
+  converter toTOpt*[T](x: T): Option[T] =
+    some(x)
+
+template getOrElse*[T](x: Option[T], y: T): T =
+  ## When writing x.get(12), I think it's confusing.  This uses a
+  ## better name.
+  get(x, y)
 
 when defined(posix):
   import posix
@@ -165,3 +146,6 @@ when defined(posix):
     code
     if (uid != euid): discard seteuid(euid)
     if (gid != egid): discard setegid(egid)
+else:
+  template unprivileged*(code: untyped) =
+    code

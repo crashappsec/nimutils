@@ -38,13 +38,13 @@ var allSinks*: Table[string, SinkRecord]
 var allTopics*: Table[string, Topic]
 var revTopics: Table[Topic, string]
 
-proc subscribe*(topic: Topic, record: SinkConfig): Topic =
+proc subscribe*(topic: Topic, record: SinkConfig): Topic {.discardable.} =
   if record notin topic.subscribers:
     topic.subscribers.add(record)
 
   return topic
 
-proc subscribe*(t: string, record: SinkConfig): Option[Topic] =
+proc subscribe*(t: string, record: SinkConfig): Option[Topic] {.discardable.} =
   if t notin allTopics:
     return none(Topic)
 

@@ -8,7 +8,6 @@ import nimutils/random
 import tables
 import json
 import os
-import strutils
 
 proc removeSpaces(s: string): string =
   for c in s:
@@ -94,6 +93,42 @@ suite "boxing":
     check r == n
     check r.value == 666
 
+EitherDecl(EitherTest, string, int)
+
+suite "either":
+  setup:
+    let
+      x = 5
+      y = "test"
+
+  test "or?":
+    var z: EitherTest = x
+
+    var a = EitherTest(x)
+
+    check z == a
+    check z == x
+    check not z.isA(string)
+    check z.isA(int)
+
+    var m: EitherTest = z.get(int)
+
+    z = y
+
+    check z != a
+
+    check $(z) == "either(\"test\")"
+    check $(a) == "either(5)"
+
+    check z.isA(string) == true
+
+    var n: string = z.get(string)
+
+    check n == "test"
+    check m == EitherTest(5)
+    check m == 5
+    check m == x
+
 suite "misc":
   test "i got ids":
     check isValidId("ª")
@@ -118,20 +153,6 @@ suite "misc":
 
     check back == words
     echo "  Your words were: ", back
-
-  test "wrap":
-    let s = """
-This is just an example to get you started. You may wish to put all of your
-tests into a single file, or separate them into multiple `test1`, `test2`
-etc. files (better names are recommended, just make sure the name starts with
-the letter 't').
-
-To run these tests, simply execute `nimble test`.
-"""
-    let res = indentAndWrap(s, 4, 78)
-    for line in res.split("\n"):
-      check len(line) <= 78
-    check removeSpaces(s) == removeSpaces(res)
 
   test "flatten":
     var

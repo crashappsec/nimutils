@@ -1,5 +1,5 @@
 ## :Author: John Viega (john@crashoverride.com)
-## :Copyright: 2022
+## :Copyright: 2022, Crash Override, Inc.
 ##
 ## This module is for generic boxing of values, which is useful for
 ## compiler symbol tables, etc. However, this is also a more flexible

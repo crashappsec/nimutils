@@ -30,7 +30,7 @@
 ##
 ##   - Optional flag values (too unintuitive for me as a user)
 
-import unicode, options, sugar, tables, os, misc, box
+import unicode, options, sugar, tables, os, misc
 import strutils except strip
 
 type
