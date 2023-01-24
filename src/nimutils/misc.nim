@@ -51,8 +51,8 @@ template unixTimeInMS*(): uint64 =
   # it a float, I *have* to put a trailing zero. That in and of itself
   # is fine, but the error message when I don't sucks: 'Error: Invalid
   # indentation'
-  const toMS = 1000000.0
-  cast[uint64](epochTime() * toMS)
+  const toMS = 1000.0
+  uint64(epochTime() * toMS)
 
 proc tildeExpand(s: string): string {.inline.} =
   var homedir = os.getHomeDir()

@@ -1,8 +1,4 @@
-import std/sysrand
-import strutils
-import strformat
-import algorithm
-import options
+import strutils, strformat, algorithm, std/sysrand, misc, options
 
 template secureRand*[T](): T =
   ## Returns a uniformly distributed random value of any _sized_ type.
@@ -5668,6 +5664,54 @@ proc wordsToInt*(s: string): Option[int] =
 
   return some(res)
 
+const b32Map = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+template oneChrTS() =
+  str.add(b32Map[(ts and mask64) shr bits])
+  bits -= 5
+  mask64 = mask64 shr 5
+
+template oneChrRH() =
+  str.add(b32Map[(randHigh and mask16) shr bits])
+  bits -= 5
+  mask16 = mask16 shr 5
+
+template oneChrRL() =
+  str.add(b32Map[(randLow and mask64) shr bits])
+  bits -= 5
+  mask64 = mask64 shr 5
+
+proc getUlid*(dash = true): string =
+  var
+    randHigh = secureRand[uint16]()
+    randLow  = secureRand[uint64]()
+    ts       = unixTimeInMs()
+    str      = ""
+    mask64   = 0x3e00000000000'u64
+    mask16   = 0xf800'u16
+    bits     = 45
+
+  oneChrTS(); oneChrTS(); oneChrTS(); oneChrTS(); oneChrTS()
+  oneChrTS(); oneChrTS(); oneChrTS(); oneChrTS(); oneChrTS()
+  if dash:
+    str.add('-')
+  bits = 11
+  oneChrRH(); oneChrRH(); oneChrRH()
+
+  let frankenChar = ((randLow and 1) shl 4) and (randHigh shr 60)
+  str.add(b32Map[frankenChar])
+  mask64 = 0xf80000000000000'u64
+  bits   = 55
+
+  oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL()
+  oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL()
+  oneChrRL()
+  
+  result = str
+  
+  
 when isMainModule:
   echo getRandomWords()
   echo getRandomWords(3)
+  echo getUlid()
+  echo getUlid()
