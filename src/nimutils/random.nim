@@ -1,4 +1,4 @@
-import strutils, strformat, algorithm, std/sysrand, misc, options
+import strutils, strformat, algorithm, std/sysrand, misc, options, tables
 
 template secureRand*[T](): T =
   ## Returns a uniformly distributed random value of any _sized_ type.
@@ -5708,10 +5708,42 @@ proc getUlid*(dash = true): string =
   oneChrRL()
   
   result = str
-  
+
+const revB32Map: Table[char, uint64] =
+  { '0': 0x00'u64, '1': 0x01'u64, '2': 0x02'u64, '3': 0x03'u64, '4': 0x04'u64,
+    '5': 0x05'u64, '6': 0x06'u64, '7': 0x07'u64, '8': 0x08'u64, '9': 0x09'u64,
+    'A': 0x0a'u64, 'B': 0x0b'u64, 'C': 0x0c'u64, 'D': 0x0d'u64, 'E': 0x0e'u64,
+    'F': 0x0f'u64, 'G': 0x10'u64, 'H': 0x11'u64, 'J': 0x12'u64, 'K': 0x13'u64,
+    'M': 0x14'u64, 'N': 0x15'u64, 'P': 0x16'u64, 'Q': 0x17'u64, 'R': 0x18'u64,
+    'S': 0x19'u64, 'T': 0x1a'u64, 'V': 0x1b'u64, 'W': 0x1c'u64, 'X': 0x1d'u64,
+    'Y': 0x1e'u64, 'Z': 0x1f'u64, 'a': 0x0a'u64, 'b': 0x0b'u64, 'c': 0x0c'u64,
+    'd': 0x0d'u64, 'e': 0x0e'u64, 'f': 0x0f'u64, 'g': 0x10'u64, 'h': 0x11'u64,
+    'j': 0x12'u64, 'k': 0x13'u64, 'm': 0x14'u64, 'n': 0x15'u64, 'p': 0x16'u64,
+    'q': 0x17'u64, 'r': 0x18'u64, 's': 0x19'u64, 't': 0x1a'u64, 'v': 0x1b'u64,
+    'w': 0x1c'u64, 'x': 0x1d'u64, 'y': 0x1e'u64, 'z': 0x1f'u64
+  }.toTable()
+
+proc ulidToTimeStamp*(s: string): uint64 =
+  ## No error checking done on purpose.
+  result = revB32Map[s[0]] shl 45
+  result = result or revB32Map[s[1]] shl 40
+  result = result or revB32Map[s[2]] shl 35
+  result = result or revB32Map[s[3]] shl 30
+  result = result or revB32Map[s[4]] shl 25
+  result = result or revB32Map[s[5]] shl 20
+  result = result or revB32Map[s[6]] shl 15
+  result = result or revB32Map[s[7]] shl 10
+  result = result or revB32Map[s[8]] shl 5
+  result = result or revB32Map[s[9]]
+
   
 when isMainModule:
   echo getRandomWords()
   echo getRandomWords(3)
-  echo getUlid()
-  echo getUlid()
+  let x = getUlid()
+  echo unixTimeInMs()
+  echo x, " ", x.ulidToTimeStamp()
+  let y = getUlid()
+  echo y, " ", y.ulidToTimeStamp()
+  echo unixTimeInMs()
+  
