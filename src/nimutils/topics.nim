@@ -125,17 +125,21 @@ proc publish*(t:       Topic,
 
   for hook in t.subscribers:
     var
-      currentMsg = message # Each hook gets to filter seprately
+      skipPublish = false
+      currentMsg  = message # Each hook gets to filter seprately
       more: bool
 
     for filter in hook.filters:
       (currentMsg, more) = filter(currentMsg, tbl)
-      if not more: break
+      if not more:
+        skipPublish = true
+        break
 
-    let fptr = hook.mySink.outputFunction
+    if not skipPublish:
+      let fptr = hook.mySink.outputFunction
 
-    if not fptr(currentMsg, hook, aux):
-      success = false # TODO, allow registering a handler for this.
+      if not fptr(currentMsg, hook, aux):
+        success = false # TODO, allow registering a handler for this.
 
 proc publish*(t:       string,
               message: string,

@@ -5681,11 +5681,11 @@ template oneChrRL() =
   bits -= 5
   mask64 = mask64 shr 5
 
-proc getUlid*(dash = true): string =
+proc encodeUlid*(ts:       uint64,
+                 randHigh: uint16,
+                 randLow : uint64,
+                 dash    = true): string =
   var
-    randHigh = secureRand[uint16]()
-    randLow  = secureRand[uint64]()
-    ts       = unixTimeInMs()
     str      = ""
     mask64   = 0x3e00000000000'u64
     mask16   = 0xf800'u16
@@ -5706,8 +5706,16 @@ proc getUlid*(dash = true): string =
   oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL()
   oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL()
   oneChrRL()
-  
+
   result = str
+
+proc getUlid*(dash = true): string =
+  var
+    randHigh = secureRand[uint16]()
+    randLow  = secureRand[uint64]()
+    ts       = unixTimeInMs()
+
+  encodeUlid(ts, randHigh, randLow)
 
 const revB32Map: Table[char, uint64] =
   { '0': 0x00'u64, '1': 0x01'u64, '2': 0x02'u64, '3': 0x03'u64, '4': 0x04'u64,
@@ -5736,7 +5744,7 @@ proc ulidToTimeStamp*(s: string): uint64 =
   result = result or revB32Map[s[8]] shl 5
   result = result or revB32Map[s[9]]
 
-  
+
 when isMainModule:
   echo getRandomWords()
   echo getRandomWords(3)
@@ -5746,4 +5754,3 @@ when isMainModule:
   let y = getUlid()
   echo y, " ", y.ulidToTimeStamp()
   echo unixTimeInMs()
-  

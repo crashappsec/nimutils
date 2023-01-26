@@ -7,15 +7,15 @@ type LogLevel* = enum
 
 addDefaultSinks()
 
-const toLogLevelMap = { "none"    : llNone,
-                        "silent"  : llNone,
-                        "error"   : llError,
-                        "warn"    : llWarn,
-                        "warning" : llWarn,
-                        "info"    : llInfo,
-                        "inform"  : llInfo,
-                        "verbose" : llTrace,
-                        "trace"   : llTrace }.toTable()
+const toLogLevelMap* = { "none"    : llNone,
+                         "silent"  : llNone,
+                         "error"   : llError,
+                         "warn"    : llWarn,
+                         "warning" : llWarn,
+                         "info"    : llInfo,
+                         "inform"  : llInfo,
+                         "verbose" : llTrace,
+                         "trace"   : llTrace }.toTable()
 
 const llToStrMap = { llNone: "none",
                      llError: "error",
@@ -35,7 +35,7 @@ var logLevelPrefixes = { llNone: "",
                          llInfo: "info: ",
                          llTrace: "trace: " }.toTable()
 
-const keyLogLevel   = "loglevel"
+const keyLogLevel*  = "loglevel"
 var currentLogLevel = llInfo
 
 proc `$`*(ll: LogLevel): string = llToStrMap[ll]
