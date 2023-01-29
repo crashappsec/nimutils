@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.10"
+version       = "0.2.0"
 author        = "John Viega"
 description   = "Crash Øverride Nim utilities"
 license       = "Apache-2.0"
@@ -22,8 +22,9 @@ let s = "nimble doc --project" &
 task docs, "Build our docs":
   exec s
 
-let nimblePath = "~/.nimble/pkgs/nimutils-" & version & "/nimutils"
+# This doesn't work with nimble 2.
+# let nimblePath = "~/.nimble/pkgs/nimutils-" & version & "/nimutils"
 
-task link, "Symlink nimutils to ~/.nimble for local dev":
-  exec "set -x && rm -rf " & nimblePath
-  exec "set -x && ln -s $(pwd)/src/nimutils " & nimblePath
+# task link, "Symlink nimutils to ~/.nimble for local dev":
+#   exec "set -x && rm -rf " & nimblePath
+#   exec "set -x && ln -s $(pwd)/src/nimutils " & nimblePath
