@@ -24,6 +24,8 @@ const
     jankHdrFmt     = @[acFont2, acBCyan]
     jankEvenFmt    = @[acFont0, acBGCyan, acBBlack]
     jankOddFmt     = @[acFont0, acBGWhite, acBBlack]
+
+type Corpus* = OrderedFileTable
   
 when true:
   import formatstr
@@ -84,9 +86,6 @@ else:
         discard
       i = i + 1
     result &= s[curStart .. ^1]
-
-const helpPath   = staticExec("pwd") & "/help/"
-const helpCorpus = newOrderedFileTable(helpPath)
 
 type
   JankKind  = enum JankText, JankTable, JankHeader, JankCodeBlock
@@ -262,9 +261,9 @@ proc jankCodeBlock*(s: string, width: int): JankBlock =
   return JankBlock(kind: JankCodeBlock, content: t.render(width))
 
 
-proc parseJank*(s: string, width: int): seq[JankBlock]
+proc parseJank*(corpus: Corpus, s: string, width: int): seq[JankBlock]
 
-proc parseJankCtrl*(s: string, width: int): seq[JankBlock] =
+proc parseJankCtrl*(corpus: Corpus, s: string, width: int): seq[JankBlock] =
   var n = s[1 .. ^1]
   case s[0]
   of 't': # Table, plain, no headers or borders.
@@ -279,14 +278,14 @@ proc parseJankCtrl*(s: string, width: int): seq[JankBlock] =
     return @[jankHeader2(n)]
   of 'i', 'I':
     n = n.strip()
-    return parseJank(helpCorpus[n].strip(), width)
+    return parseJank(corpus, corpus[n].strip(), width)
   of 'c':
     n = n.strip()
     return @[jankCodeBlock(n, width)]
   else:
     raise newException(ValueError, "Janky jank option: '" & $(Rune(s[0])))
 
-proc parseJank*(s: string, width: int): seq[JankBlock] =
+proc parseJank*(corpus: Corpus, s: string, width: int): seq[JankBlock] =
   result = @[]
   var cur = s
 
@@ -309,13 +308,13 @@ proc parseJank*(s: string, width: int): seq[JankBlock] =
       let endDelim = cur.find("}%")
       if endDelim == -1:
         raise newException(ValueError, "Missing end delimiter for jankiness")
-      result.add(parseJankCtrl(cur[2 ..< endDelim], width))
+      result.add(parseJankCtrl(corpus, cur[2 ..< endDelim], width))
       cur = cur[(endDelim + 2) .. ^1]
     else:
       result.add(parseJankText(cur[0 .. nextBreak], width))
       cur = cur[nextBreak+1 .. ^1]
 
-proc getHelp*(inargs: seq[string]): string =
+proc getHelp*(corpus: Corpus, inargs: seq[string]): string =
   var
     jank:  seq[JankBlock] = @[]
     width                 = terminalWidth()
@@ -325,7 +324,7 @@ proc getHelp*(inargs: seq[string]): string =
     args = @["main"]
 
   for arg in args:
-    if arg == "topics" or arg notin helpCorpus:
+    if arg == "topics" or arg notin corpus:
       if arg != "topics":
          jank.add(jankHeader2("No such topic: '" & arg & "\n"))
          continue
@@ -333,7 +332,7 @@ proc getHelp*(inargs: seq[string]): string =
       var topics: seq[string] = @[]
       var widest              = 0
 
-      for key, _ in helpCorpus: topics.add(key)
+      for key, _ in corpus: topics.add(key)
 
       for item in topics:
         if len(item) > widest:
@@ -365,7 +364,7 @@ proc getHelp*(inargs: seq[string]): string =
     else:
       var processed = arg.replace('_', ' ')
       processed = $(Rune(processed[0]).toUpper()) & processed[1 .. ^1]
-      jank.add(parseJank(helpCorpus[arg].strip(), width))
+      jank.add(parseJank(corpus, corpus[arg].strip(), width))
 
   var msg = ""
 
