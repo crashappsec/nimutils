@@ -54,7 +54,7 @@ proc newOrderedFileTable*(dir: static[string]): OrderedFileTable =
 
   ftBase(dir)
   return ret
-  
+
 
 when isMainModule:
   const x = newFileTable("/Users/viega/dev/sami/src/help/")

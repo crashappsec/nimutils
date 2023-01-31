@@ -26,7 +26,7 @@ const
     jankOddFmt     = @[acFont0, acBGWhite, acBBlack]
 
 type Corpus* = OrderedFileTable
-  
+
 when true:
   import formatstr
 else:
@@ -207,7 +207,7 @@ proc parseJankTable*(s: string, width: int, plain: bool): JankBlock =
                        headerRowAlign  = some(AlignCenter),
                        wrapStyle       = WrapLines,
                        maxCellBytes    = 0)
-  
+
   if options.len != 0:
     let specs = options.split(Rune(':'))
     for i, item in specs:
@@ -257,7 +257,7 @@ proc jankCodeBlock*(s: string, width: int): JankBlock =
                              addBottomBorder = true,
                              headerRowAlign  = some(AlignLeft),
                              wrapStyle       = WrapLines,
-                             maxCellBytes    = 0) 
+                             maxCellBytes    = 0)
   return JankBlock(kind: JankCodeBlock, content: t.render(width))
 
 
