@@ -21,7 +21,6 @@ proc staticListFiles*(arg: string): seq[string] =
   # of testing.
   result = @[]
 
-  echo arg
   let
     lines = staticExec("ls -mp " & arg)
     line  = lines.replace("\n", " ")
