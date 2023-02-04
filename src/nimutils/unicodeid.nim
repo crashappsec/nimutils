@@ -23,7 +23,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022
 
-import streams, unicode, strutils
+import streams, unicode, strutils, std/terminal
 import unicodedb/properties
 
 const magicRune* = Rune(0x200b)
@@ -355,14 +355,19 @@ proc indentWrap*( s: string,
                   hangingIndent = 2,
                   splitLongWords = true,
                   seps: set[char] = Whitespace,
-                  newLine = "\n"): string {.noSideEffect.} =
+                  newLine = "\n"): string =
   ## This wraps text.  Handles zws right, and can indent hanging lines.
   ## But if you want to ignore ANSI sequences, use the saver object.
 
   result           = newStringOfCap(s.len + s.len shr 6)
-  var spaceLeft    = startingMaxLineWidth
+  var startWidth   = if startingMaxLineWidth < 1:
+                      terminalWidth() + startingMaxLineWidth
+                     else:
+                       startingMaxLineWidth
+
+  var spaceLeft    = startWidth
   var lastSep      = ""
-  var maxLineWidth = startingMaxLineWidth
+  var maxLineWidth = startWidth
 
   var i = 0
   while true:
@@ -390,7 +395,7 @@ proc indentWrap*( s: string,
               spaceLeft = maxLineWidth
               result.add newLine
               result.add repeat(Rune(' '), hangingIndent)
-              maxLineWidth = startingMaxLineWidth - hangingIndent
+              maxLineWidth = startWidth - hangingIndent
             dec spaceLeft
             let L = graphemeLen(s, k+i)
             for m in 0 ..< L: result.add s[i+k+m]
@@ -399,10 +404,34 @@ proc indentWrap*( s: string,
           spaceLeft = maxLineWidth - wlen
           result.add(newLine)
           result.add repeat(Rune(' '), hangingIndent)
-          maxLineWidth = startingMaxLineWidth - hangingIndent
+          maxLineWidth = startWidth - hangingIndent
           for k in i..<j: result.add(s[k])
       else:
         spaceLeft = spaceLeft - wlen
         result.add(lastSep)
         for k in i..<j: result.add(s[k])
     i = j
+
+proc perLineWrap*(s: string,
+                  startingMaxLineWidth = -1,
+                  firstHangingIndent   = 2,
+                  remainingIndents     = 0,
+                  splitLongWords       = true,
+                  seps: set[char]      = Whitespace,
+                  newLine              = "\n"): string =
+    let lines             = split(s, "\n")
+    var parts:seq[string] = @[]
+
+    for i, line in lines:
+      let
+        (saver, str) = line.toSaver()
+        wrapped      = str.indentWrap(startingMaxLineWidth,
+                                      if i == 0:
+                                        firstHangingIndent
+                                      else:
+                                        remainingIndents,
+                                      splitLongWords,
+                                      seps,
+                                      newLine)
+      parts.add(wrapped.restoreSaver(saver))
+    return parts.join("\n")
