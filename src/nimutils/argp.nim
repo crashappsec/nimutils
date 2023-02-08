@@ -75,6 +75,7 @@ type
     subresult:     Option[ArgResult]
     flags:         Table[string, FlagInfo]
     args:          seq[string]
+    origArgs:      seq[string]
     linkedSpec:    ArgSpec
     noExplicitSub: bool
     implicitStart: int
@@ -596,7 +597,6 @@ proc sanityCheckUnmatchedFlags(ctx: ParseCtx): bool =
     raise newException(ValueError, msg)
 
   for flag, `val?` in ctx.unmatchedFlags:
-    echo "Sanity checking flag: ", flag
     var found = false
 
     for cmd, spec in linkedSpec.commands:
@@ -713,6 +713,8 @@ proc mostlyParse*(ctx:            ArgSpec,
     else:
       args.add(item)
 
+  argRes.origArgs = args
+
   var ctx = ParseCtx(args:           args,
                      curCmdSpec:     ctx,
                      curCmdResult:   argRes,
@@ -791,9 +793,10 @@ proc applyDefault*(argRes: ArgResult, cmd: string) =
 
     raise newException(ValueError, "Missing command.  Expected one of: " &
                        possibleCmds.join(", "))
+
   var
     flags  = ctx.unmatchedFlags
-    slice  = ambiguousArg.args[ambiguousArg.implicitStart .. ^1]
+    slice  = argRes.origArgs[ambiguousArg.implicitStart .. ^1]
     spec   = ambiguousArg.linkedSpec.commands[cmd]
     newArg = ArgResult(command:    none(string),
                        subresult:  none(ArgResult),
@@ -802,7 +805,7 @@ proc applyDefault*(argRes: ArgResult, cmd: string) =
                        linkedSpec: spec)
 
   if len(slice) != 0:
-    ambiguousArg.args = ambiguousArg.args[0 ..< ambiguousArg.implicitStart]
+    ambiguousArg.args = argRes.origArgs[0 ..< ambiguousArg.implicitStart]
 
   if len(slice) > spec.maxArgs:
     raise newException(ValueError, "Too many arguments for default command '" &
@@ -825,8 +828,7 @@ proc applyDefault*(argRes: ArgResult, cmd: string) =
       ctx.setFlagValue(fi, value)
     newArg.flags[fi.long] = fi
 
-  for k, _ in ctx.unmatchedFlags:
-    ctx.unmatchedFlags.del(k)
+  ambiguousArg.subresult = some(newArg)
 
 proc parse*(ctx:             ArgSpec,
             inargs:          openarray[string] = [],

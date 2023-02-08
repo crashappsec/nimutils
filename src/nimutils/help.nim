@@ -27,7 +27,7 @@ const
 
 type Corpus* = OrderedFileTable
 
-when true:
+when false:
   import formatstr
 else:
   # I built this as a quick and dirty sanity check to see if
@@ -49,7 +49,9 @@ else:
     while i < limit:
       case s[i]
       of '\\':
-        i = i + 1
+        result &= s[curStart ..< i]
+        i        = i + 1
+        curStart = i
       of '{':
         result  &= s[curStart ..< i]
         i        = i + 1
@@ -80,8 +82,7 @@ else:
           if not found:
             raise newException(ValueError, "invalid specifier: '" & key & "'")
           result &= val
-          i        = i + 1
-          curstart = i
+          curstart = i + 1
       else:
         discard
       i = i + 1
@@ -260,6 +261,32 @@ proc jankCodeBlock*(s: string, width: int): JankBlock =
                              maxCellBytes    = 0)
   return JankBlock(kind: JankCodeBlock, content: t.render(width))
 
+proc jankNumList*(s: string, width: int): seq[JankBlock] =
+  let
+    processed = s.jankyFormat()
+    lines     = processed.split("\n")
+
+  for i, line in lines:
+    if line == "" and i + 1 == len(lines):
+      break
+    var numstr = $(i + 1) & ". "
+    var l      = numstr & line.strip()
+    result.add(JankBlock(kind: JankText,
+                         content: indentWrap(l, width, hangingIndent =
+                           len(numstr)) & "\n"))
+
+proc jankBulletList*(s: string, width: int): seq[JankBlock] =
+  let
+    processed = s.jankyFormat()
+    lines     = processed.split("\n")
+
+  for i, line in lines:
+    if line == "" and i + 1 == len(lines):
+      break
+    var l = " - " & line.strip()
+    result.add(JankBlock(kind: JankText,
+                         content: indentWrap(l, width,
+                                             hangingIndent = 3) & "\n"))
 
 proc parseJank*(corpus: Corpus, s: string, width: int): seq[JankBlock]
 
@@ -282,6 +309,12 @@ proc parseJankCtrl*(corpus: Corpus, s: string, width: int): seq[JankBlock] =
   of 'c':
     n = n.strip()
     return @[jankCodeBlock(n, width)]
+  of '#':
+    n = n.strip()
+    return jankNumList(n, width)
+  of '-':
+    n = n.strip()
+    return jankBulletList(n, width)
   else:
     raise newException(ValueError, "Janky jank option: '" & $(Rune(s[0])))
 
@@ -317,7 +350,7 @@ proc parseJank*(corpus: Corpus, s: string, width: int): seq[JankBlock] =
 proc getHelp*(corpus: Corpus, inargs: seq[string]): string =
   var
     jank:  seq[JankBlock] = @[]
-    width                 = terminalWidth()
+    width                 = terminalWidth() - 3
     args                  = inargs
 
   if len(args) == 0:
@@ -339,7 +372,7 @@ proc getHelp*(corpus: Corpus, inargs: seq[string]): string =
           widest = len(item)
 
       let
-        numCols          = max(int(terminalWidth() / (widest+3)), 1)
+        numCols          = max(int(width / (widest+3)), 1)
         remainder        = len(topics) mod numCols
       var
         table            = newTextTable(numCols)
@@ -360,7 +393,7 @@ proc getHelp*(corpus: Corpus, inargs: seq[string]): string =
         table.addRow(row)
       jank.add(jankHeader1("Available help topics:\n"))
       jank.add(JankBlock(kind: JankTable,
-                         content: table.render(max(terminalWidth(), 2*widest))))
+                         content: table.render(max(width, 2*widest))))
     else:
       var processed = arg.replace('_', ' ')
       processed = $(Rune(processed[0]).toUpper()) & processed[1 .. ^1]

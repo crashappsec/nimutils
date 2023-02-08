@@ -149,3 +149,7 @@ when defined(posix):
 else:
   template unprivileged*(code: untyped) =
     code
+
+proc copy*[T](data: sink T): ref T =
+  new result
+  result[] = data
