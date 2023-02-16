@@ -82,6 +82,26 @@ proc arrItemType*[T](a: openarray[T]): auto =
     return default(T)
 proc arrItemType*(a: BoxAtom): BoxAtom = a
 
+proc `==`*(box1, box2: Box): bool =
+  if box1.kind != box2.kind:
+    return false
+
+  case box1.kind:
+    of MkFloat:
+      return box1.f == box2.f
+    of MkInt:
+      return box1.i == box2.i
+    of MkBool:
+      return box1.b == box2.b
+    of MkStr:
+      return box1.s == box2.s
+    of MkSeq:
+      return box1.c.s == box2.c.s
+    of MkObj:
+      return box1.o == box2.o
+    of MkTable:
+      return box1.t.t == box2.t.t
+
 proc unpack*[T](box: Box): T =
     ## This recursively unpacks anything sitting in a Box, including
     ## custom code via the `Packable` interface.

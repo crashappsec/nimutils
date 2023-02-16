@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.10"
+version       = "0.2.2"
 author        = "John Viega"
 description   = "Crash Øverride Nim utilities"
 license       = "Apache-2.0"
@@ -12,6 +12,7 @@ srcDir        = "src"
 requires "nim >= 1.6.10"
 requires "unicodedb == 0.11.1"
 requires "https://github.com/viega/nimaws == 0.3.4"
+requires "https://github.com/guibar64/formatstr == 0.2.0"
 
 let s = "nimble doc --project" &
   " --git.url:https://github.com/crashappsec/nimutils.git" &
@@ -22,8 +23,9 @@ let s = "nimble doc --project" &
 task docs, "Build our docs":
   exec s
 
-let nimblePath = "~/.nimble/pkgs/nimutils-" & version & "/nimutils"
+# This doesn't work with nimble 2.
+# let nimblePath = "~/.nimble/pkgs/nimutils-" & version & "/nimutils"
 
-task link, "Symlink nimutils to ~/.nimble for local dev":
-  exec "set -x && rm -rf " & nimblePath
-  exec "set -x && ln -s $(pwd)/src/nimutils " & nimblePath
+# task link, "Symlink nimutils to ~/.nimble for local dev":
+#   exec "set -x && rm -rf " & nimblePath
+#   exec "set -x && ln -s $(pwd)/src/nimutils " & nimblePath

@@ -1,4 +1,6 @@
-var showColors      = true
+import os
+
+var showColors = if existsEnv("NO_COLOR"): false else: true
 
 proc setShowColors*(val: bool) =
   showColors = val
@@ -68,3 +70,5 @@ proc toAnsiCode*(codes: openarray[AnsiCode]): string =
     result.add($(item))
 
   result.add("m")
+
+proc toAnsiCode*(code: AnsiCode): string = toAnsiCode([code])

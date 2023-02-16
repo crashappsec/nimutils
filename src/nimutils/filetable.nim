@@ -7,8 +7,8 @@
 import tables, strutils, os
 
 type
-  FileTable        = Table[string, string]
-  OrderedFileTable = OrderedTable[string, string]
+  FileTable*        = Table[string, string]
+  OrderedFileTable* = OrderedTable[string, string]
 
 
 proc staticListFiles*(arg: string): seq[string] =
@@ -29,8 +29,7 @@ proc staticListFiles*(arg: string): seq[string] =
   for item in items:
     result.add(item.strip())
 
-template newFileTableBase(typeName: typeDesc, dir: static[string]): untyped =
-  var ret: typeName[string, string] = `init typeName`[string, string]()
+template ftBase(dir: static[string]) =
 
   for filename in staticListFiles(`dir`):
     if filename.endswith("/"): continue
@@ -41,13 +40,20 @@ template newFileTableBase(typeName: typeDesc, dir: static[string]): untyped =
 
     ret[key] = fileContents
 
-  ret
 
 proc newFileTable*(dir: static[string]): FileTable =
-  return newFileTableBase(Table, dir)
+  var ret: FileTable = initTable[string, string]()
+
+  ftBase(dir)
+  return ret
+
 
 proc newOrderedFileTable*(dir: static[string]): OrderedFileTable =
-  return  newFileTableBase(OrderedTable, dir)
+  var ret: OrderedFileTable = initOrderedTable[string, string]()
+
+  ftBase(dir)
+  return ret
+
 
 when isMainModule:
   const x = newFileTable("/Users/viega/dev/sami/src/help/")
