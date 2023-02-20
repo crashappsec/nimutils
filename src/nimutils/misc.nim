@@ -62,6 +62,9 @@ proc tildeExpand(s: string): string {.inline.} =
   if s == "":
     return homedir
 
+  if s.startsWith("/"):
+    return homedir & s
+
   let parentFolder = homedir.splitPath().head
 
   return os.joinPath(parentFolder, s)
