@@ -627,8 +627,8 @@ proc runCallbacks*(res: ArgResult) =
 
 proc ambiguousParse*(spec:          CommandSpec,
                      inargs:        openarray[string] = [],
-                     defaultCmd:    Option[string]    = none(string)):
-                       seq[ArgResult] =
+                     defaultCmd:    Option[string]    = none(string),
+                     runCallbacks:  bool              = true): seq[ArgResult] =
   ## This parse function accepts multiple parses, if a parse is
   ## ambiguous.
   ##
@@ -644,7 +644,9 @@ proc ambiguousParse*(spec:          CommandSpec,
   ## successfully parse.
   ##
   ## If there is only one and exactly one accepted parse, this will
-  ## run callbacks automatically when provided.
+  ## run callbacks automatically when provided, unless you set
+  ## the `runCallbacks` command to false, at which point you can
+  ## control when they run.
   ##
   ## If `inargs` is not provided, it is taken from the system-provided
   ## arguments.  In nim, this is commandLineParams(), but would be
@@ -665,7 +667,7 @@ proc ambiguousParse*(spec:          CommandSpec,
   try:
     var ctx = ParseCtx(args: args)
     ctx.parseOne(spec)
-    ctx.res.runCallbacks()
+    if runCallbacks: ctx.res.runCallbacks()
     return @[ctx.res]
   except ValueError:
     if getCurrentExceptionMsg() != errNoArg: raise
@@ -688,7 +690,8 @@ proc ambiguousParse*(spec:          CommandSpec,
 
   case len(validParses)
   of 0:  raise newException(ValueError, firstError)
-  of 1:  result[0].runCallbacks()
+  of 1:
+    if runCallbacks: result[0].runCallbacks()
   else:  discard
 
   result = @[]
@@ -853,4 +856,3 @@ when isMainModule:
   echo x.getBoolValue("publish-defaults")
   echo x.getValue("config-file")
   echo x.getArgs("delete")
-
