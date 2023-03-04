@@ -1,7 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022-2023, Crash Override, Inc.
 ##
-import macros, options, times, os, strutils
+import macros, times, os, strutils
 
 # The name flatten conflicts with a method in the options module.
 from options import get, Option, isSome, isNone
@@ -61,6 +61,9 @@ proc tildeExpand(s: string): string {.inline.} =
     homedir.setLen(len(homedir) - 1)
   if s == "":
     return homedir
+
+  if s.startsWith("/"):
+    return homedir & s
 
   let parentFolder = homedir.splitPath().head
 
