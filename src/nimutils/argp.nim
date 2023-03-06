@@ -324,9 +324,10 @@ proc addChoiceFlag*(cmd:           CommandSpec,
   ## The `name`, `aliases`, `callback` and `clobberOk` fields work
   ## as with other flag types.
 
-  result        = cmd
-  var flag     = newFlag(cmd, afChoice, name, clobberOk, aliases)
-  flag.choices = choices.toSeq()
+  result              = cmd
+  var flag            = newFlag(cmd, afChoice, name, clobberOk, aliases)
+  flag.choices        = choices.toSeq()
+  flag.choiceCallback = callback
   if flagPerChoice:
     for item in choices:
       var oneFlag = newFlag(cmd, afBinary, item, clobberOk, @[])
@@ -604,7 +605,7 @@ proc runCallbacks*(res: ArgResult) =
     of 1: name = item.propername
     else: name &= "." & item.propername
 
-    for k, v in item.flags:
+    for k, v in item.allPossibleFlags:
       let ix = res.parseCtx.flagCbs.find(v)
       if ix != -1:
         res.parseCtx.flagCbs.del(ix)
