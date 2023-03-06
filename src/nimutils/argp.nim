@@ -336,7 +336,8 @@ proc addFlagWithArg*(cmd:       CommandSpec,
                      name:      string,
                      aliases:   openarray[string] = [],
                      callback:  StrCallback       = nil,
-                     clobberOk: bool              = false): CommandSpec =
+                     clobberOk: bool              = false):
+                       CommandSpec {.discardable.} =
   ## This simply adds a flag that takes a required string argument.
   ## The arguments are identical in semantics as for other flag types.
 
@@ -688,14 +689,14 @@ proc ambiguousParse*(spec:          CommandSpec,
     except:
       discard
 
-  case len(validParses)
+  result = @[]
+  for item in validParses: result.add(item.res)
+  
+  case len(result)
   of 0:  raise newException(ValueError, firstError)
   of 1:
     if runCallbacks: result[0].runCallbacks()
   else:  discard
-
-  result = @[]
-  for item in validParses: result.add(item.res)
 
 proc parse*(spec:       CommandSpec,
             inargs:     openarray[string] = [],
