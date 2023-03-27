@@ -5673,13 +5673,25 @@ template oneChrTS() =
 
 template oneChrRH() =
   str.add(b32Map[(randHigh and mask16) shr bits])
-  bits -= 5
+  bits  -= 5
   mask16 = mask16 shr 5
 
-template oneChrRL() =
-  str.add(b32Map[(randLow and mask64) shr bits])
-  bits -= 5
-  mask64 = mask64 shr 5
+template oneChrU64() =
+  str.add(b32Map[(value and mask) shr bits])
+  bits += 5
+  mask = mask shl 5
+  
+proc base32Encode*(value: uint64): string =
+  var
+    str  =  ""
+    mask = 0x1f'u64
+    bits = 0'u64
+
+  oneChrU64(); oneChrU64(); oneChrU64(); oneChrU64(); oneChrU64()
+  oneChrU64(); oneChrU64(); oneChrU64(); oneChrU64(); oneChrU64()
+  oneChrU64(); oneChrU64(); oneChrU64()
+
+  result = str
 
 proc encodeUlid*(ts:       uint64,
                  randHigh: uint16,
@@ -5693,21 +5705,15 @@ proc encodeUlid*(ts:       uint64,
 
   oneChrTS(); oneChrTS(); oneChrTS(); oneChrTS(); oneChrTS()
   oneChrTS(); oneChrTS(); oneChrTS(); oneChrTS(); oneChrTS()
-  if dash:
-    str.add('-')
+  if dash: str.add('-')
   bits = 11
   oneChrRH(); oneChrRH(); oneChrRH()
 
   let frankenChar = ((randLow and 1) shl 4) and (randHigh shr 60)
   str.add(b32Map[frankenChar])
-  mask64 = 0xf80000000000000'u64
-  bits   = 55
 
-  oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL()
-  oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL(); oneChrRL()
-  oneChrRL()
+  result = str & base32Encode(randLow)
 
-  result = str
 
 proc getUlid*(dash = true): string =
   var

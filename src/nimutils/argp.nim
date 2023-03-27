@@ -611,7 +611,7 @@ proc runCallbacks*(res: ArgResult) =
         res.parseCtx.flagCbs.del(ix)
         case v.kind
         of afBinary:
-          if v.binCallback != nil and k in res.flags: v.binCallback()
+          if v.binCallback != nil: v.binCallback()
         of afPair:
           if v.pairCallback != nil:
             if k in res.flags:
@@ -619,10 +619,10 @@ proc runCallbacks*(res: ArgResult) =
             elif ("no-" & k) in res.flags:
               v.pairCallback(false)
         of afChoice:
-          if v.choiceCallback != nil and k in res.flags:
+          if v.choiceCallback != nil:
             v.choiceCallback(res.flags[k])
         of afStrArg:
-          if v.strCallback != nil and k in res.flags:
+          if v.strCallback != nil:
             v.strCallback(res.flags[k])
     if item.argCallback != nil: item.argCallback(res.args[name])
     if item.cmdCallback != nil: item.cmdCallback(res)
@@ -692,7 +692,7 @@ proc ambiguousParse*(spec:          CommandSpec,
 
   result = @[]
   for item in validParses: result.add(item.res)
-  
+
   case len(result)
   of 0:  raise newException(ValueError, firstError)
   of 1:
