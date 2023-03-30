@@ -16,13 +16,13 @@ const stdB32revMap  = [ 255, 255, 26, 27, 28, 29, 30, 31, 255, 255, 0, 1, 2, 3,
                         19, 20, 21, 22, 23, 24, 25 ]
 
 
-proc chop(i: uint): char = char(i and 0xff) 
+proc chop(i: uint): char = char(i and 0xff)
 
 macro declB32Encoder(modifier: static[string], mapname: untyped): untyped =
   var
     fun  = ident("base32" & modifier & "Encode")
     e32  = ident("e32" & modifier)
-  
+
   return quote do:
       proc `e32`(c: int): char {.inline.} =
         return `mapname`[c and 0x1f]
@@ -33,8 +33,8 @@ macro declB32Encoder(modifier: static[string], mapname: untyped): untyped =
           n  = s.len() div 5
           i  :  int = 0
           tmp1: int
-          tmp2: int                   
-    
+          tmp2: int
+
         while n != 0:
           n    = n - 1
           tmp1 = int(s[i])
@@ -59,7 +59,7 @@ macro declB32Encoder(modifier: static[string], mapname: untyped): untyped =
           result.add(`e32`(tmp1 or (tmp2 shr 5)))
           result.add(`e32`(tmp2))
 
-    
+
         if i == s.len(): return
         tmp1 = int(s[i])
         i    = i + 1
@@ -95,7 +95,7 @@ macro declB32Encoder(modifier: static[string], mapname: untyped): untyped =
         tmp1 = tmp2 shl 3
         result.add(`e32`(tmp1))
         if pad:
-          return result & "="        
+          return result & "="
 
 macro declB32Decoder(modifier: static[string], mapname: untyped): untyped =
   var
@@ -165,10 +165,10 @@ macro declB32Decoder(modifier: static[string], mapname: untyped): untyped =
                       (decodes[2] shl 1) or
                       (decodes[3] shr 4)))
       if i == s.len() or s[i] == '=': return
-  
+
       decodes[4] = `d32`(s[i])
       i          = i + 1
-  
+
       result.add(chop((decodes[3] shl 4) or decodes[4] shr 1))
       if i == s.len() or s[i] == '=': return
 
@@ -176,14 +176,14 @@ macro declB32Decoder(modifier: static[string], mapname: untyped): untyped =
       i          = i + 1
       decodes[6] = `d32`(s[i])
       i          = i + 1
-  
+
       result.add(chop((decodes[4] shl 7) or (decodes[5] shl 2) or
                       (decodes[6] shr 3)))
       if i == s.len() or s[i] == char('='): return
-  
+
       decodes[7] = `d32`(s[i])
-      result.add(chop((decodes[6] shl 5) or decodes[7]))  
-      
+      result.add(chop((decodes[6] shl 5) or decodes[7]))
+
 declB32Encoder("",  stdB32Map)
 declB32Encoder("v", goodB32Map)
 declB32Decoder("",  stdB32revMap)
@@ -237,7 +237,7 @@ when isMainModule:
   echo base32Encode("This is some string.")
   echo "KRUGS4ZANFZSA43PNVSSA43UOJUW4ZZO (is the answer)"
   echo base32Encode("This is some string")
-  echo "KRUGS4ZANFZSA43PNVSSA43UOJUW4ZY  (is the answer)"  
+  echo "KRUGS4ZANFZSA43PNVSSA43UOJUW4ZY  (is the answer)"
   echo base32Encode("This is some strin")
   echo "KRUGS4ZANFZSA43PNVSSA43UOJUW4    (is the answer)"
   echo base32Encode("This is some stri")
@@ -245,7 +245,7 @@ when isMainModule:
   echo base32Encode("This is some str")
   echo "KRUGS4ZANFZSA43PNVSSA43UOI       (is the answer)"
 
-  
+
   echo "-----"
   echo base32vEncode("This is some string.")
   echo base32vDecode(base32vEncode("1his is some string."))
@@ -269,4 +269,4 @@ when isMainModule:
   echo base32Decode(base32Encode("4his is some stri"))
   echo base32Encode("This is some str")
   echo base32Decode(base32Encode("5his is some str"))
-  
+

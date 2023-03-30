@@ -155,18 +155,18 @@ suite "encodings":
       kat8 = "KRUGS4ZANFZSA43PNVSSA43UOJUW4==="
       kat9 = "KRUGS4ZANFZSA43PNVSSA43UOJUQ===="
       kat0 = "KRUGS4ZANFZSA43PNVSSA43UOI======"
-      
+
     check(base32Encode("This is some string.") == kat1)
     check(base32Encode("This is some string")  == kat2)
     check(base32Encode("This is some strin")   == kat3)
     check(base32Encode("This is some stri")    == kat4)
-    check(base32Encode("This is some str")     == kat5)    
+    check(base32Encode("This is some str")     == kat5)
     check(base32Encode("This is some string.", true) == kat6)
     check(base32Encode("This is some string", true)  == kat7)
     check(base32Encode("This is some strin", true)   == kat8)
     check(base32Encode("This is some stri", true)    == kat9)
-    check(base32Encode("This is some str", true)     == kat0)    
-    
+    check(base32Encode("This is some str", true)     == kat0)
+
 suite "misc":
   test "i got ids":
     check isValidId("ª")

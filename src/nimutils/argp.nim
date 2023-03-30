@@ -620,10 +620,10 @@ proc runCallbacks*(res: ArgResult) =
               v.pairCallback(false)
         of afChoice:
           if v.choiceCallback != nil:
-            v.choiceCallback(res.flags[k])
+            v.choiceCallback(res.flags[v.properName])
         of afStrArg:
           if v.strCallback != nil:
-            v.strCallback(res.flags[k])
+            v.strCallback(res.flags[v.properName])
     if item.argCallback != nil: item.argCallback(res.args[name])
     if item.cmdCallback != nil: item.cmdCallback(res)
 
