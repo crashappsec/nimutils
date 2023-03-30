@@ -269,4 +269,3 @@ when isMainModule:
   echo base32Decode(base32Encode("4his is some stri"))
   echo base32Encode("This is some str")
   echo base32Decode(base32Encode("5his is some str"))
-
