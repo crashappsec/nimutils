@@ -4,7 +4,8 @@ import unittest
 import nimutils
 import nimutils/box
 import nimutils/unicodeid
-import nimutils/random
+import nimutils/randwords # large code size, not imported by default.
+import nimutils/either    # Not working well, not import by default.
 import tables
 import json
 import os
@@ -129,6 +130,43 @@ suite "either":
     check m == 5
     check m == x
 
+suite "encodings":
+  test "b32_padded":
+    var s = "This is a string that we're going to use to test base32."
+    for i in 0 ..< len(s):
+      check(base32Decode(base32Encode(s[0 .. i], true)) == s[0 .. i])
+    for i in 0 ..< len(s):
+      check(base32vDecode(base32vEncode(s[0 .. i], true)) == s[0 .. i])
+  test "b32_unpadded":
+    var s = "This is a string that we're going to use to test base32."
+    for i in 0 ..< len(s):
+      check(base32Decode(base32Encode(s[0 .. i])) == s[0 .. i])
+    for i in 0 ..< len(s):
+      check(base32vDecode(base32vEncode(s[0 .. i])) == s[0 .. i])
+  test "kat":
+    let
+      kat1 = "KRUGS4ZANFZSA43PNVSSA43UOJUW4ZZO"
+      kat2 = "KRUGS4ZANFZSA43PNVSSA43UOJUW4ZY"
+      kat3 = "KRUGS4ZANFZSA43PNVSSA43UOJUW4"
+      kat4 = "KRUGS4ZANFZSA43PNVSSA43UOJUQ"
+      kat5 = "KRUGS4ZANFZSA43PNVSSA43UOI"
+      kat6 = "KRUGS4ZANFZSA43PNVSSA43UOJUW4ZZO"
+      kat7 = "KRUGS4ZANFZSA43PNVSSA43UOJUW4ZY="
+      kat8 = "KRUGS4ZANFZSA43PNVSSA43UOJUW4==="
+      kat9 = "KRUGS4ZANFZSA43PNVSSA43UOJUQ===="
+      kat0 = "KRUGS4ZANFZSA43PNVSSA43UOI======"
+      
+    check(base32Encode("This is some string.") == kat1)
+    check(base32Encode("This is some string")  == kat2)
+    check(base32Encode("This is some strin")   == kat3)
+    check(base32Encode("This is some stri")    == kat4)
+    check(base32Encode("This is some str")     == kat5)    
+    check(base32Encode("This is some string.", true) == kat6)
+    check(base32Encode("This is some string", true)  == kat7)
+    check(base32Encode("This is some strin", true)   == kat8)
+    check(base32Encode("This is some stri", true)    == kat9)
+    check(base32Encode("This is some str", true)     == kat0)    
+    
 suite "misc":
   test "i got ids":
     check isValidId("ª")

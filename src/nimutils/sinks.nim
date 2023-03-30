@@ -1,10 +1,5 @@
-import streams, tables, options, os, strutils
-import std/[net, uri, httpclient]
-import topics
-import nimaws/s3client
-import misc
-import random
-
+import streams, tables, options, os, strutils, std/[net, uri, httpclient],
+       nimaws/s3client, topics, misc, random, encodings
 
 proc stdoutSink(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
   stdout.write(msg)
@@ -101,7 +96,7 @@ proc s3SinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
       dstUri       = parseURI(uri)
       bucket       = dstUri.hostname
       ts           = $(unixTimeInMS())
-      randVal      = getRandomWords(2)
+      randVal      = base32vEncode(secureRand[array[16, char]]())
       baseObj      = dstUri.path[1 .. ^1] # Strip the leading /
       (head, tail) = splitPath(baseObj)
     var
