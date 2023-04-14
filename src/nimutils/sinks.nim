@@ -149,7 +149,8 @@ proc postSinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
                else:
                  newHttpClient()
 
-  if client == nil: return false
+  if client == nil:
+    return false
 
   if "headers" in record.config:
     var

@@ -357,9 +357,10 @@ proc getHelp*(corpus: Corpus, inargs: seq[string]): string =
     args = @["main"]
 
   for arg in args:
-    if arg == "topics" or arg notin corpus:
+    if arg notin corpus:
       if arg != "topics":
-         jank.add(jankHeader2("No such topic: '" & arg & "\n"))
+         jank.add(jankHeader2("No such topic:{reset} '" & arg &
+           " (see help topics)\n"))
          continue
 
       var topics: seq[string] = @[]
