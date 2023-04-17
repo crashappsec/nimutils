@@ -15,7 +15,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022, 2023, Crash Override, Inc.
 
-import unicode, tables, os, std/terminal, options
+import unicode, tables, os, std/terminal, options, formatstr
 import filetable, texttable, ansi, topics, unicodeid
 
 from strutils import replace, split, find
@@ -27,76 +27,25 @@ const
 
 type Corpus* = OrderedFileTable
 
-when false:
-  import formatstr
-else:
-  # I built this as a quick and dirty sanity check to see if
-  # formatstr() is broken, or if it's some weird ansi code problem.
-  # Basically, if I add "brown" in, it sometimes clobbers other
-  # colors.
-  #
-  # Leaving it in for the time being.
-  proc format*(s: string, map: openarray[(string,string)]): string =
-    let
-      limit = s.len()
-    var
-      i        = 0
-      curStart = 0
-
-
-    result = ""
-
-    while i < limit:
-      case s[i]
-      of '\\':
-        result &= s[curStart ..< i]
-        i        = i + 1
-        curStart = i
-      of '{':
-        result  &= s[curStart ..< i]
-        i        = i + 1
-        curstart = i
-        while i < limit:
-          case s[i]
-          of '\\':
-            i = i + 1
-          of '}':
-            break
-          else:
-            discard
-          i = i + 1
-        if i == limit:
-          raise newException(ValueError, "Missing } in format specifier")
-        else:
-          let
-            key = s[curStart ..< i]
-          var
-            found = false
-            val: string
-
-          for (k, v) in map:
-            if k == key:
-              val = v
-              found = true
-              break
-          if not found:
-            raise newException(ValueError, "invalid specifier: '" & key & "'")
-          result &= val
-          curstart = i + 1
-      else:
-        discard
-      i = i + 1
-    result &= s[curStart .. ^1]
-
 type
   JankKind  = enum JankText, JankTable, JankHeader, JankCodeBlock
   JankBlock = ref object
     content: string
     kind:    JankKind
 
-proc jankyFormat*(s: string): string =
+proc jankyFormat*(instr: string, debug = true): string =
+  # Since this is a janky library anyway, here's a really janky solution to
+  # the format libray's escaping issues.  \{ wasn't working reliably, so
+  # I switched it to {{ which I like better, and... did the quick and dirty
+  # stupid implementation :)
+  
+  var lbrace = "deadbeeffeedbace!@@#@#$@#$magic"
+  var rbrace = "magicdeadbeeffeedbace!@@#@#$@#$"
+  var s = instr.replace("{{", lbrace)
+  s = s.replace("}}", rbrace)
+  
   try:
-    return s.format(
+    s = s.format(
       {
         "nl"           : "\n",
         "appName"      : getAppFileName().splitPath().tail,
@@ -144,6 +93,9 @@ proc jankyFormat*(s: string): string =
         "font9"        : toAnsiCode(@[acFont9]),
         "reset"        : toAnsiCode(@[acReset])
     })
+
+    s = s.replace(rbrace, "}")
+    return s.replace(lbrace, "{")
   except:
     # Generally we want to ignore these problems, but when
     # running a debug build, let's expose them, if there's a debug sink.
