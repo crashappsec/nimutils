@@ -406,3 +406,7 @@ proc getHelp*(corpus: Corpus, inargs: seq[string]): string =
     msg &= item.content
 
   return msg
+
+proc formatHelp*(s: string, corpus: Corpus): string =
+  for item in corpus.parseJank(s, terminalWidth() - 3):
+    result &= item.content
