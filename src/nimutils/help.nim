@@ -38,12 +38,12 @@ proc jankyFormat*(instr: string, debug = true): string =
   # the format libray's escaping issues.  \{ wasn't working reliably, so
   # I switched it to {{ which I like better, and... did the quick and dirty
   # stupid implementation :)
-  
+
   var lbrace = "deadbeeffeedbace!@@#@#$@#$magic"
   var rbrace = "magicdeadbeeffeedbace!@@#@#$@#$"
   var s = instr.replace("{{", lbrace)
   s = s.replace("}}", rbrace)
-  
+
   try:
     s = s.format(
       {

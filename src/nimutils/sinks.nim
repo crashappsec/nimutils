@@ -1,15 +1,16 @@
 import streams, tables, options, os, strutils, std/[net, uri, httpclient],
-       nimaws/s3client, topics, misc, random, encodings
+       nimaws/s3client, topics, misc, random, encodings, std/termios, std/posix,
+       box, unicodeid
 
 proc stdoutSink(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
-  stdout.write(msg)
+  stdout.write(msg.perLineWrap())
   return true
 
 proc addStdoutSink*() =
   registerSink("stdout", SinkRecord(outputFunction: stdoutSink))
 
 proc stdErrSink(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
-  stderr.write(msg)
+  stdout.write(msg.perLineWrap())
   return true
 
 proc addStdErrSink*() =
@@ -50,6 +51,105 @@ proc fileSinkClose(cfg: SinkConfig): bool =
     return true
   except:
     return false
+
+const ptyheader = when defined(macosx): "<util.h>" else: "<pty.h>"
+
+proc forkpty(aprimary: ptr FileHandle,
+             name:     ptr char,
+             termios:  ptr Termios,
+             winsize:  ptr IOctl_WinSize):
+               int {.cdecl, importc, header: ptyheader.}
+
+proc freopen(path: ptr cchar,  mode: ptr cchar, stream: File):
+            File {.cdecl, importc, header: "<stdio.h>".}
+
+
+var pipePid: Pid = 0
+
+proc pipeInit(record: SinkConfig): bool =
+    var childStdout: array[2, cint]
+    var fd:          FileHandle
+    var filename =   "/usr/bin/less"
+    var args     = allocCStringArray(["less", "-R", "-d", "-F"])
+    var s: array[1000, char]
+    var maintty  = ttyname(1)
+    var pcchr = addr(maintty[0])
+    var mode = cstring("rw")
+    var pcmode = addr(mode[0])
+
+
+    var fds: array[2, cint]
+
+    setStdioUnbuffered()
+
+    if record.config.contains("filename"):
+      filename = record.config["filename"]
+      if record.config.contains("args"):
+        let cmdline = filename & " " & record.config["args"]
+        args = allocCstringArray(cmdline.split(" "))
+      else:
+        args = allocCstringArray([filename])
+
+    #let pid = forkpty(addr fd, addr(s[0]), nil, nil)
+
+    discard pipe(fds)
+
+    pipePid = fork()
+    case pipePid
+    of 0: # Child.
+      echo "In child"
+      discard dup2(fds[0], 0)
+      discard close(fds[1])
+      #discard freopen(pcchr, pcmode, stdin)
+      echo pcchr
+      discard freopen(pcchr, pcmode, stdout)
+      setStdioUnbuffered()
+      discard execvp(filename, cStringArray(args))
+    of -1:
+      echo "Fail :("
+      discard
+    else:
+      echo "In parent"
+      #let tty = $(cstring(addr(s[0])))
+      var
+        f:      File
+      #echo "open = ",  open(f, fd, fmReadWrite)
+      echo "open = ",  open(f, fds[1], fmWrite)
+      discard close(fds[0])
+      record.private = cast[RootRef](f)
+
+    return true
+
+proc pipeOut(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
+  try:
+    var f = cast[File](cfg.private)
+    f.write(msg)
+    return true
+  except:
+    return false
+
+  var x: cint
+  discard waitpid(pipePid, x, 0)
+
+
+proc pipeClose(cfg: SinkConfig): bool =
+  try:
+    var f = cast[FileStream](cfg.private)
+    f.close()
+  finally:
+    return true
+
+proc addPipeSink*() =
+  var
+    record = SinkRecord()
+    keys   = { "filename": false, "args": false}.toTable()
+
+  record.initFunction   = some(InitCallback(pipeInit))
+  record.outputFunction = pipeOut
+  record.closeFunction  = some(CloseCallback(pipeClose))
+  record.keys           = keys
+
+  registerSink("pipe", record)
 
 proc addFileSink*() =
   var
@@ -195,6 +295,7 @@ proc addDefaultSinks*() =
   addFileSink()
   addS3Sink()
   addPostSink()
+  addPipeSink()
 
 when isMainModule:
   addDefaultSinks()

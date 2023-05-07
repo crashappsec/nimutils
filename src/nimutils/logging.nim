@@ -1,5 +1,4 @@
-import tables, options, streams
-import topics, sinks, ansi
+import tables, options, streams, topics, sinks, ansi
 
 type LogLevel* = enum
   ## LogLevel describes what kind of messages you want to see.

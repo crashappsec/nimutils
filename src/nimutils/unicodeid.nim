@@ -23,7 +23,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022
 
-import streams, unicode, strutils, std/terminal
+import streams, unicode, strutils, std/terminal, misc
 import unicodedb/properties
 
 const magicRune* = Rune(0x200b)
@@ -124,18 +124,29 @@ proc isValidId*(s: string): bool =
 
 proc readRune*(s: Stream): Rune =
   ## Read a single rune from a stream.
-  var str = newString(4)
-  let c = s.readChar()
-  str[0] = c
-  if (uint(c) and 0x80) != 0:
-    let c = s.readChar()
-    str[1] = c
-    if (uint(c) and 0x80) != 0:
-      let c = s.readChar()
-      str[2] = c
-      if (uint(c) and 0x80) != 0:
-        str[3] = s.readChar()
-  str.fastRuneAt(0, result, false)
+  var
+    str = newString(4)
+    c   = s.readChar()
+    n: uint
+  case clzll(not uint(c))
+  of 0:
+    return Rune(c)
+  of 2:
+     n = (uint(c) and 0x1f) shl 6
+     n = n or (uint(s.readChar()) and 0x3f)
+  of 3:
+     n = (uint(c) and 0x0f) shl 12
+     n = n or ((uint(s.readChar()) and 0x3f) shl 6)
+     n = n or (uint(s.readChar()) and 0x3f)
+  of 4:
+     n = uint(c) and (0x07 shl 18)
+     n = n or ((uint(s.readChar()) and 0x3f) shl 12)
+     n = n or ((uint(s.readChar()) and 0x3f) shl 6)
+     n = n or (uint(s.readChar()) and 0x3f)
+
+  else:
+    raise newException(ValueError, "Invalid UTF8 sequence")
+  return Rune(n)
 
 proc peekRune*(s: Stream): Rune =
   ## Return the current rune from a stream, without advancing the
