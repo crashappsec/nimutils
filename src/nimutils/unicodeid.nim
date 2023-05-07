@@ -128,7 +128,7 @@ proc readRune*(s: Stream): Rune =
     str = newString(4)
     c   = s.readChar()
     n: uint
-  case clzll(not uint(c))
+  case clzll((not uint(c)) shl 56)
   of 0:
     return Rune(c)
   of 2:
@@ -140,10 +140,9 @@ proc readRune*(s: Stream): Rune =
      n = n or (uint(s.readChar()) and 0x3f)
   of 4:
      n = uint(c) and (0x07 shl 18)
-     n = n or ((uint(s.readChar()) and 0x3f) shl 12)
+     n = n or ((uint(s.readChar()) and 0x3f) shl 12)     
      n = n or ((uint(s.readChar()) and 0x3f) shl 6)
      n = n or (uint(s.readChar()) and 0x3f)
-
   else:
     raise newException(ValueError, "Invalid UTF8 sequence")
   return Rune(n)
