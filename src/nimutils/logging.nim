@@ -28,7 +28,7 @@ var logLevelColors = { llNone  : "",
                        llInfo  : toAnsiCode(@[acBGreen]),
                        llTrace : toAnsiCode(@[acBCyan]), }.toTable()
 
-var logLevelPrefixes = { llNone: "",
+var logLevelPrefixes = { llNone:  "",
                          llError: "error: ",
                          llWarn: "warn: ",
                          llInfo: "info: ",
@@ -77,7 +77,16 @@ proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
              "a valid value for 'loglevel' in the publish() call's 'aux' " &
              " field.")
 
+var suspendLogging = false
+
+proc toggleLoggingEnabled*() =
+  suspendLogging = not suspendLogging
+
+template getSuspendLogging*(): bool = suspendLogging
+    
 proc logLevelFilter*(msg: string, info: StringTable): (string, bool) =
+  if suspendLogging: return ("", false)
+  
   if keyLogLevel in info:
     let llStr = info[keyLogLevel]
 
