@@ -117,6 +117,7 @@ proc unpack*[T](box: Box): T =
     ## instance, If you have boxed a `seq[seq[int]]`, calling
     ## `unpack[seq[seq[int]]]()` removes both layers of packing, but
     ## calling `unpack[seq[Box]]` just one.
+
     when T is string:
         return box.s
     elif T is SomeInteger:

@@ -1,56 +1,118 @@
 import streams, tables, options, os, strutils, std/[net, uri, httpclient],
-       nimaws/s3client, topics, misc, random, encodings, std/termios, std/posix,
-       box, unicodeid
+       nimaws/s3client, topics, misc, random, encodings, std/termios,
+       std/posix, std/tempfiles, parseutils, unicodeid
 
-proc stdoutSink(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
+proc stdoutSink(msg: string, cfg: SinkConfig, ignore: StringTable) =
   stdout.write(msg.perLineWrap())
-  return true
 
 proc addStdoutSink*() =
   registerSink("stdout", SinkRecord(outputFunction: stdoutSink))
 
-proc stdErrSink(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
+proc stdErrSink(msg: string, cfg: SinkConfig, ignore: StringTable) =
   stdout.write(msg.perLineWrap())
-  return true
 
 proc addStdErrSink*() =
   registerSink("stderr", SinkRecord(outputFunction: stderrSink))
 
-proc fileSinkInit(record: SinkConfig): bool =
-  var
-    filename = resolvePath(record.config["filename"])
-    mode     = fmAppend
+# Since we assume sink writes are only ever called from one thread at
+# a time, the caller can look at the 'truncated' field after a publish()
+# to decide if they want to do something about it.
 
-  if record.config.contains("mode"):
-    let modeCfg = record.config["mode"]
-    case modeCfg
-    of "w": mode = fmWrite
-    of "a": mode = fmAppend
-    else: return false
+proc fileSinkOut*(msg: string, cfg: SinkConfig, ignore: StringTable) =
+  var stream = FileStream(cfg.private)
 
-  var stream     = newFileStream(filename, mode)
-  record.private = cast[RootRef](stream)
+  if stream == nil:
+    var mode = fmAppend
 
-  if stream == nil: return false
-  return true
+    if cfg.config.contains("mode") and cfg.config["mode"] == "w":
+      mode = fmWrite
+    stream      = newFileStream(resolvePath(cfg.config["filename"]), mode)
+    cfg.private = RootRef(stream)
 
-proc fileSinkOut(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
-  try:
-    var stream = cast[FileStream](cfg.private)
-
-    stream.write(msg)
-    return true
-  except:
-    return false
+  stream.write(msg)
 
 proc fileSinkClose(cfg: SinkConfig): bool =
   try:
-    var stream = cast[FileStream](cfg.private)
+    var stream = FileStream(cfg.private)
 
-    stream.close()
+    if stream != nil:
+      stream.close()
     return true
   except:
     return false
+
+type LogSinkState* = ref object of RootRef
+  stream*:    FileStream
+  maxSize*:   uint
+  truncated*: bool
+
+
+proc rotoLogSinkInit(cfg: SinkConfig): bool =
+  try:
+    var maxSize: uint
+
+    if parseUint(cfg.config["max"], maxSize) != len(cfg.config["max"]):
+      # Not a valid integer, has trailing crap.
+      return false
+    if maxSize >= 1024:
+      cfg.private = LogSinkState(maxSize: maxSize)
+      return true
+    else:
+      return false
+  except:
+    return false
+
+proc rotoLogSinkOut*(msg: string, cfg: SinkConfig, ignore: StringTable) =
+  var logState = LogSinkState(cfg.private)
+
+  logState.truncated = false
+
+  if logState.stream == nil:
+    let fullPath = resolvePath(cfg.config["filename"])
+    try:
+      # Append expects the file to exist.
+      logState.stream = newFileStream(fullPath, fmAppend)
+    except:
+      # If this write doesn't work, then it's a permissions issue, and
+      # we should let the exception propogate.
+      logState.stream = newFileStream(fullPath, fmWrite)
+
+  if msg[^1] != '\n':
+    logState.stream.write(msg & '\n')
+  else:
+    logState.stream.write(msg)
+
+  let loc = uint(logState.stream.getPosition())
+
+  # If the message fills up the entire aloted space, we make an exception,
+  # but the next message will def push it out.  The +1 is because we might
+  # have written a newline above.
+  if loc > logState.maxSize and logState.maxSize > uint(len(msg) + 1):
+    let
+      fullPath = resolvePath(cfg.config["filename"])
+      truncLen = logState.maxSize shr 2  # Remove 25% of the file
+
+    logState.stream.close() # "append" mode can't seek backward.
+    let
+      oldf            = newFileStream(fullPath, fmRead)
+      (newfptr, path) = createTempFile("nimutils", "log")
+      newf            = newFileStream(newfptr)
+
+    while oldf.getPosition() < int64(truncLen):
+      discard oldf.readLine()
+
+    while oldf.getPosition() < int64(loc):
+      newf.writeLine(oldf.readLine())
+
+    # Since we shrunk into a temp file that we're going to move over,
+    # it's a lot easier to close the file and move it over.  If
+    # another write happens to this sink config, then the file will
+    # get re-opened next time.
+    oldf.close()
+    newf.close()
+    moveFile(path, fullPath)
+    logState.stream    = nil
+    logState.truncated = true
 
 const ptyheader = when defined(macosx): "<util.h>" else: "<pty.h>"
 
@@ -120,17 +182,9 @@ proc pipeInit(record: SinkConfig): bool =
 
     return true
 
-proc pipeOut(msg: string, cfg: SinkConfig, ignore: StringTable): bool =
-  try:
-    var f = cast[File](cfg.private)
-    f.write(msg)
-    return true
-  except:
-    return false
-
-  var x: cint
-  discard waitpid(pipePid, x, 0)
-
+proc pipeOut(msg: string, cfg: SinkConfig, ignore: StringTable) =
+  var f = cast[File](cfg.private)
+  f.write(msg)
 
 proc pipeClose(cfg: SinkConfig): bool =
   try:
@@ -162,12 +216,23 @@ proc addFileSink*() =
   # {.closure.}, but if we assign directly to a field, it
   # silently figures it out.  When we pass to some() though,
   # it does not.
-  record.initFunction   = some(InitCallback(fileSinkInit))
   record.outputFunction = fileSinkOut
   record.closeFunction  = some(CloseCallback(fileSinkClose))
   record.keys           = keys
 
   registerSink("file", record)
+
+proc addRotoLogSink*() =
+  var
+    record = SinkRecord()
+    keys   = {"filename" : true, "max" : true}.toTable()
+
+  record.initFunction   = some(InitCallback(rotologSinkInit))
+  record.outputFunction = rotologSinkOut
+  record.closeFunction  = some(CloseCallback(fileSinkClose))
+  record.keys           = keys
+
+  registerSink("rotating_log", record)
 
 var awsClientCache: Table[string, S3Client]
 
@@ -181,17 +246,18 @@ proc s3SinkInit(record: SinkConfig): bool =
 
   return true
 
-proc s3SinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
-  var extra  = if "cacheid" in record.config: record.config["cacheid"] else: ""
-  var client = if extra != "":
-                 awsClientCache[extra]
+proc s3SinkOut(msg: string, record: SinkConfig, ignored: StringTable) =
+  var extra  = if "cacheid" in record.config:
+                 record.config["cacheid"]
+               else:
+                 ""
+  var client = if extra != "": awsClientCache[extra]
                else:
                  let
                    uid    = record.config["uid"]
                    secret = record.config["secret"]
                  newS3Client((uid, secret))
-  try:
-    let
+  let
       uri          = record.config["uri"]
       dstUri       = parseURI(uri)
       bucket       = dstUri.hostname
@@ -199,26 +265,21 @@ proc s3SinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
       randVal      = base32vEncode(secureRand[array[16, char]]())
       baseObj      = dstUri.path[1 .. ^1] # Strip the leading /
       (head, tail) = splitPath(baseObj)
-    var
+  var
       objParts: seq[string] = @[ts, randVal]
 
-    if extra != "": objParts.add(extra)
+  if extra != "": objParts.add(extra)
 
-    objParts.add(tail)
+  objParts.add(tail)
 
-    let
+  let
       newTail = objParts.join("-")
       newPath = joinPath(head, newTail)
       res     = client.putObject(bucket, newPath, msg)
 
-    if res.code == Http200:
-      return true
-    else:
-      return false
-  except:
-    if extra != "":
-      discard s3SinkInit(record)
-    return false
+  if res.code != Http200:
+    raise newException(ValueError, "S3 failed with https err code: " &
+      $(res.code))
 
 proc s3SinkClose(record: SinkConfig): bool =
   if "cacheid" in record.config: record.config.del("cacheid")
@@ -239,7 +300,7 @@ proc addS3Sink*() =
 
   registerSink("s3", record)
 
-proc postSinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
+proc postSinkOut(msg: string, record: SinkConfig, ignored: StringTable) =
   let
     uriStr = record.config["uri"]
     uriObj = parseURI(uriStr)
@@ -250,7 +311,7 @@ proc postSinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
                  newHttpClient()
 
   if client == nil:
-    return false
+    raise newException(ValueError, "Invalid HTTP configuration")
 
   if "headers" in record.config:
     var
@@ -271,10 +332,9 @@ proc postSinkOut(msg: string, record: SinkConfig, ignored: StringTable): bool =
 
   let response = client.request(uriStr, httpMethod = HttpPost, body = msg)
 
-  if `$`(response.code)[0] == '2':
-    return true
-  else:
-    return false
+  if `$`(response.code)[0] != '2':
+    raise newException(ValueError, "HTTP post failed with code: " &
+      $(response.code))
 
 proc addPostSink*() =
   var
@@ -293,9 +353,10 @@ proc addDefaultSinks*() =
   addStdoutSink()
   addStderrSink()
   addFileSink()
+  addRotoLogSink()
   addS3Sink()
   addPostSink()
-  addPipeSink()
+  # addPipeSink() Don't think this got finished?  Either way, not looking now.
 
 when isMainModule:
   addDefaultSinks()

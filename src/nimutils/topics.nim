@@ -9,8 +9,9 @@ import tables, sugar, options, json, strutils, ansi, strutils, std/terminal,
 
 type
   InitCallback*   = ((SinkConfig) -> bool)
-  OutputCallback* = ((string, SinkConfig, StringTable) -> bool)
+  OutputCallback* = ((string, SinkConfig, StringTable) -> void)
   CloseCallback*  = ((SinkConfig) -> bool)
+  FailCallback*   = ((SinkConfig, Topic, string, string, string) -> void)
   StringTable*    = OrderedTableRef[string, string]
   MsgFilter*      = ((string, StringTable) -> (string, bool))
 
@@ -28,7 +29,11 @@ type
     private*: RootRef        # It's funny to make 'private' public,
                              # but externally written sinks can store
                              # state here, like file pointers.
+    onFail*:  Option[FailCallback]
+    rmOnErr*: bool
+
   Topic* = ref object
+    name*:        string
     subscribers*: seq[SinkConfig]
 
 proc getSinkName*(rec: SinkRecord): string = rec.name
@@ -51,7 +56,7 @@ proc subscribe*(t: string, record: SinkConfig): Option[Topic] {.discardable.} =
   return some(subscribe(allTopics[t], record))
 
 proc registerSink*(name: string, record: SinkRecord) =
-  record.name = name
+  record.name    = name
   allSinks[name] = record
 
 proc getSink*(name: string): Option[SinkRecord] =
@@ -62,7 +67,10 @@ proc getSink*(name: string): Option[SinkRecord] =
 
 proc configSink*(s:         SinkRecord,
                  `config?`: Option[StringTable] = none(StringTable),
-                 filters:   seq[MsgFilter] = @[]): Option[SinkConfig] =
+                 filters:   seq[MsgFilter] = @[],
+                 handler:   Option[FailCallback] = none(FailCallback),
+                 rmOnErr:   bool = true
+                ): Option[SinkConfig] =
   var config: StringTable
 
   if `config?`.isSome():
@@ -76,7 +84,8 @@ proc configSink*(s:         SinkRecord,
   for k, v in s.keys:
     if v and k notin config: return none(SinkConfig) # Required key missing.
 
-  let confObj = SinkConfig(mySink: s, config: config, filters: filters)
+  let confObj = SinkConfig(mySink: s, config: config, filters: filters,
+                           onFail: handler, rmOnErr: rmOnErr)
 
   if s.initFunction.isSome():
     let fptr = s.initFunction.get()
@@ -88,10 +97,9 @@ proc configSink*(s:         SinkRecord,
 proc registerTopic*(name: string): Topic =
   if name in allTopics: return allTopics[name]
 
-  result            = Topic()
+  result            = Topic(name: name)
   allTopics[name]   = result
   revTopics[result] = name
-
 
 proc unsubscribe*(topic: Topic, record: SinkConfig): bool =
   let ix = topic.subscribers.find(record)
@@ -113,9 +121,10 @@ proc unsubscribe*(topicName: string, record: SinkConfig): bool =
 
 proc publish*(t:       Topic,
               message: string,
-              aux:     StringTable = nil): bool {.discardable.} =
-  var success = true
+              aux:     StringTable = nil): int {.discardable.} =
   var tbl: StringTable
+
+  result = 0
 
   if aux == nil:
     tbl = newOrderedTable[string, string]({"topic" : revTopics[t]})
@@ -138,15 +147,23 @@ proc publish*(t:       Topic,
     if not skipPublish:
       let fptr = hook.mySink.outputFunction
 
-      if not fptr(currentMsg, hook, aux):
-        success = false # TODO, allow registering a handler for this.
+      try:
+        fptr(currentMsg, hook, aux)
+        result += 1
+      except:
+        if hook.rmOnErr:
+          discard unsubscribe(t, hook)
+        if hook.onFail.isSome():
+          let errHandler = hook.onFail.get()
+          errHandler(hook, t, message, getCurrentExceptionMsg(),
+                     getCurrentException().getStackTrace());
+
 
 proc publish*(t:       string,
               message: string,
-              aux:     StringTable = nil): bool {.discardable.} =
+              aux:     StringTable = nil): int {.discardable.} =
 
-  if t notin allTopics:
-    return false
+  if t notin allTopics: return 0
 
   return publish(allTopics[t], message, aux)
 
