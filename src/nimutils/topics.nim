@@ -122,7 +122,9 @@ proc unsubscribe*(topicName: string, record: SinkConfig): bool =
 proc publish*(t:       Topic,
               message: string,
               aux:     StringTable = nil): int {.discardable.} =
-  var tbl: StringTable
+  var
+    tbl:        StringTable
+    unsubQueue: seq[(Topic, Sinkconfig)]
 
   result = 0
 
@@ -151,12 +153,14 @@ proc publish*(t:       Topic,
         fptr(currentMsg, hook, aux)
         result += 1
       except:
-        if hook.rmOnErr:
-          discard unsubscribe(t, hook)
         if hook.onFail.isSome():
           let errHandler = hook.onFail.get()
           errHandler(hook, t, message, getCurrentExceptionMsg(),
                      getCurrentException().getStackTrace());
+        if hook.rmOnErr:
+          unsubQueue.add((t, hook))
+  for (topic, hook) in unsubQueue:
+    discard unsubscribe(topic, hook)
 
 
 proc publish*(t:       string,
@@ -177,6 +181,25 @@ proc prettyJson*(msg: string, extra: StringTable): (string, bool) =
       stderr.writeLine(getCurrentException().getStackTrace())
       stderr.writeLine(getCurrentExceptionMsg())
     return ("[Error: Invalid Json formatting] " & msg, false)
+
+proc prettyJsonl*(msg: string, extra: StringTable): (string, bool) =
+  var toReturn = ""
+
+  try:
+    let lines = msg.strip().split("\n")
+    for line in lines:
+      let strippedLine = line.strip()
+      if len(strippedLine) == 0:
+        continue
+      toReturn &= pretty(parseJson(line)) & "\n"
+    return (toReturn, true)
+  except:
+    when not defined(release):
+      # This will help you figure out where and why you're
+      # sending something that isn't valid JSON
+      stderr.writeLine(getCurrentException().getStackTrace())
+      stderr.writeLine(getCurrentExceptionMsg())
+    return ("[Error: Invalid Json log formatting] " & msg, false)
 
 proc fixNewline*(msg: string, extra: StringTable): (string, bool) =
   if msg[^1] != '\n':
