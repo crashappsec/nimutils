@@ -9,7 +9,7 @@ proc addStdoutSink*() =
   registerSink("stdout", SinkRecord(outputFunction: stdoutSink))
 
 proc stdErrSink(msg: string, cfg: SinkConfig, ignore: StringTable) =
-  stdout.write(msg.perLineWrap())
+  stderr.write(msg.perLineWrap())
 
 proc addStdErrSink*() =
   registerSink("stderr", SinkRecord(outputFunction: stderrSink))
