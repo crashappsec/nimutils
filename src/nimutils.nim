@@ -1,4 +1,4 @@
-import nimutils/[box, random, unicodeid, topics, sinks, misc, ansi, texttable],
+import nimutils/[box, random, unicodeid, pubsub, sinks, misc, ansi, texttable],
        nimutils/[filetable, encodings]
-export box, random, unicodeid, topics, sinks, misc, random, ansi, texttable,
+export box, random, unicodeid, pubsub, sinks, misc, random, ansi, texttable,
        filetable, encodings

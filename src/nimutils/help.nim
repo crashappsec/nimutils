@@ -16,7 +16,7 @@
 ## :Copyright: 2022, 2023, Crash Override, Inc.
 
 import unicode, tables, os, std/terminal, options, formatstr
-import filetable, texttable, ansi, topics, unicodeid
+import filetable, texttable, ansi, pubsub, unicodeid
 
 from strutils import replace, split, find
 

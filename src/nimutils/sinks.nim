@@ -1,35 +1,137 @@
 import streams, tables, options, os, strutils, std/[net, uri, httpclient],
-       nimaws/s3client, topics, misc, random, encodings, std/termios,
-       std/posix, std/tempfiles, parseutils, unicodeid
+       nimaws/s3client, pubsub, misc, random, encodings, std/tempfiles,
+       parseutils, unicodeid
 
-proc stdoutSink(msg: string, cfg: SinkConfig, ignore: StringTable) =
+const defaultLogSearchPath = @["/var/log/", "~/.log/", "."]
+
+proc openLogFile*(name: string,
+                  loc:  var string,
+                  path: seq[string],
+                  mode              = fmAppend): Option[FileStream] =
+  ## Looks to open the given log file in the first possible place it
+  ## can in the given path, even if it needs to create directories,
+  ## etc.  If nothing in the path works, we try using a temp file as a
+  ## last resort, using system APIs.
+  ##
+  ## The variable passed in as 'loc' will get the location we ended up
+  ## selecting.
+  ##
+  ## Note that, if the 'name' parameter has a slash in it, we try that
+  ## first, but if we can't open it, we try all our other options.
+  ##
+  ## Note that, if the mode is fmRead we position the steam at the
+  ## beginning of the file.  For anything else, we jump to the end,
+  ## even if you open for read/write.
+
+  var
+    fstream:  FileStream  = nil
+    fullPath: seq[string] = path
+    baseName: string      = name
+
+  if '/' in name:
+    let (head, tail) = splitPath(resolvePath(name))
+
+    basename = tail
+    fullPath = @[head] & fullPath
+
+  for item in fullPath:
+    try:
+      let directory = resolvePath(item)
+      createDir(directory)
+      loc           = joinPath(directory, basename)
+      fstream       = newFileStream(loc, mode)
+      if fstream == nil:
+        continue
+      break
+    except:
+      continue
+
+  if fstream == nil:
+    try:
+      let directory = createTempDir(basename, "tmpdir")
+      loc           = joinPath(directory, basename)
+      fstream       = newFileStream(loc, mode)
+    except:
+      return none(FileStream)
+
+  # fmAppend will already position us at SEEK_END.  Nim doesn't have a
+  # direct equivolent to seek() on file streams, we'd have to go down
+  # to the posix API to so a seek(SEEK_END), so instead of picking
+  # through the file stream internal state, we cheese it by discarding
+  # a readAll().
+  if mode notin [fmRead, fmAppend]:
+    discard fstream.readAll()
+
+  return some(fstream)
+
+template cantLog() =
+  var err = "Couldn't open a log file for sink configuration '" & cfg.name &
+    "'; requested file was: '" & cfg.params["filename"] & "'"
+
+  if '/' in cfg.params["filename"]:
+    err &= "Fallback search path: "
+  else:
+    err &= "Directories tried: "
+
+  err &= logpath.join(", ")
+  raise newException(IOError, err)
+
+proc stdoutSinkOut(msg:    string,
+                   cfg:    SinkConfig,
+                   t:      Topic,
+                   ignore: StringTable) =
   stdout.write(msg.perLineWrap())
 
 proc addStdoutSink*() =
-  registerSink("stdout", SinkRecord(outputFunction: stdoutSink))
+  registerSink("stdout", SinkImplementation(outputFunction: stdoutSinkOut))
 
-proc stdErrSink(msg: string, cfg: SinkConfig, ignore: StringTable) =
+proc stdErrSinkOut(msg:    string,
+                   cfg:    SinkConfig,
+                   t:      Topic,
+                   ignore: StringTable) =
   stderr.write(msg.perLineWrap())
 
 proc addStdErrSink*() =
-  registerSink("stderr", SinkRecord(outputFunction: stderrSink))
+  registerSink("stderr", SinkImplementation(outputFunction: stderrSinkOut))
 
 # Since we assume sink writes are only ever called from one thread at
 # a time, the caller can look at the 'truncated' field after a publish()
 # to decide if they want to do something about it.
 
-proc fileSinkOut*(msg: string, cfg: SinkConfig, ignore: StringTable) =
+proc fileSinkOut*(msg: string, cfg: SinkConfig, t: Topic, ignore: StringTable) =
   var stream = FileStream(cfg.private)
-
   if stream == nil:
-    var mode = fmAppend
+    var
+      outloc:    string
+      streamOpt: Option[FileStream]
+      mode    = fmAppend
+      logpath: seq[string]
 
-    if cfg.config.contains("mode") and cfg.config["mode"] == "w":
-      mode = fmWrite
-    stream      = newFileStream(resolvePath(cfg.config["filename"]), mode)
-    cfg.private = RootRef(stream)
+    if "use_search_path" notin cfg.params or
+      cfg.params["use_search_path"] == "true":
+      if "log_search_path" in cfg.params:
+        logpath = cfg.params["log_search_path"].split(':')
+      else:
+        logpath = defaultLogSearchPath
+
+      if "mode" in cfg.params and cfg.params["mode"] == "w":
+         mode = fmWrite
+
+      streamOpt = openLogFile(cfg.params["filename"], outloc, logpath, mode)
+      if streamOpt.isNone():
+        cantLog()
+      stream = streamOpt.get()
+    else:
+      stream = newFileStream(resolvePath(cfg.params["filename"]), mode)
+      if stream == nil:
+        cantLog()
+
+    cfg.params["actual_file"] = outloc
+    cfg.private               = RootRef(stream)
+    cfg.iolog(t, "Open") # The callback has access to format printing however.
 
   stream.write(msg)
+  cfg.iolog(t, "Write")
 
 proc fileSinkClose(cfg: SinkConfig): bool =
   try:
@@ -42,60 +144,82 @@ proc fileSinkClose(cfg: SinkConfig): bool =
     return false
 
 type LogSinkState* = ref object of RootRef
-  stream*:    FileStream
-  maxSize*:   uint
-  truncated*: bool
-
+  stream*:   FileStream
+  maxSize*:  uint
+  truncAmt*: uint
 
 proc rotoLogSinkInit(cfg: SinkConfig): bool =
   try:
-    var maxSize: uint
+    var
+      maxSize:  uint
+      truncAmt: uint
 
-    if parseUint(cfg.config["max"], maxSize) != len(cfg.config["max"]):
+    if parseUint(cfg.params["max"], maxSize) != len(cfg.params["max"]):
       # Not a valid integer, has trailing crap.
       return false
-    if maxSize >= 1024:
-      cfg.private = LogSinkState(maxSize: maxSize)
-      return true
+    if maxSize < 1024:
+      return false # Too small to be useful.
+    if "truncation_amount" in cfg.params:
+      if parseUint(cfg.params["truncation_amount"], truncAmt) !=
+         len(cfg.params["truncation_amount"]):
+        return false
+      if truncAmt >= maxSize:
+        return false
     else:
-      return false
-  except:
+        truncAmt = maxSize shr 2
+
+    cfg.private = LogSinkState(maxSize: maxSize, truncAmt: truncAmt)
+    return true
+  except: # Can happen if parseUInt fails.
     return false
 
-proc rotoLogSinkOut*(msg: string, cfg: SinkConfig, ignore: StringTable) =
+proc rotoLogSinkOut(msg: string, cfg: SinkConfig, t: Topic, tbl: StringTable) =
   var logState = LogSinkState(cfg.private)
 
-  logState.truncated = false
-
   if logState.stream == nil:
-    let fullPath = resolvePath(cfg.config["filename"])
-    try:
-      # Append expects the file to exist.
-      logState.stream = newFileStream(fullPath, fmAppend)
-    except:
-      # If this write doesn't work, then it's a permissions issue, and
-      # we should let the exception propogate.
-      logState.stream = newFileStream(fullPath, fmWrite)
+    var
+      outloc:    string
+      streamOpt: Option[FileStream]
+      logpath:   seq[string]
 
+    if "log_search_path" in cfg.params:
+      logpath = cfg.params["log_search_path"].split(':')
+    else:
+      logpath = defaultLogSearchPath
+
+    streamOpt = openLogFile(cfg.params["filename"], outloc, logpath)
+
+    if streamOpt.isNone():
+      cantLog()
+
+    logstate.stream           = streamOpt.get()
+    cfg.params["actual_file"] = outloc
+    cfg.iolog(t, "Open")
+
+  # Even if no filter was added for \n we need to ensure the newline for
+  # truncation boundaries.
   if msg[^1] != '\n':
     logState.stream.write(msg & '\n')
   else:
     logState.stream.write(msg)
 
+  cfg.iolog(t, "Write")
   let loc = uint(logState.stream.getPosition())
 
-  # If the message fills up the entire aloted space, we make an exception,
-  # but the next message will def push it out.  The +1 is because we might
-  # have written a newline above.
+  # If the message fills up the entire aloted space, we make an
+  # exception (it's not a good log file if it doesn't actually write
+  # the message in toto), but the next message will def push it out.
+  # The +1 is because we might have written a newline above.
   if loc > logState.maxSize and logState.maxSize > uint(len(msg) + 1):
     let
-      fullPath = resolvePath(cfg.config["filename"])
-      truncLen = logState.maxSize shr 2  # Remove 25% of the file
+      fullPath = cfg.params["actual_file"]
+      truncLen = logState.truncAmt
 
     logState.stream.close() # "append" mode can't seek backward.
+
     let
       oldf            = newFileStream(fullPath, fmRead)
-      (newfptr, path) = createTempFile("nimutils", "log")
+      (newfptr, path) = createTempFile("sink." & cfg.name, "log")
       newf            = newFileStream(newfptr)
 
     while oldf.getPosition() < int64(truncLen):
@@ -112,103 +236,136 @@ proc rotoLogSinkOut*(msg: string, cfg: SinkConfig, ignore: StringTable) =
     newf.close()
     moveFile(path, fullPath)
     logState.stream    = nil
-    logState.truncated = true
+    cfg.iolog(t, "Truncate")
 
-const ptyheader = when defined(macosx): "<util.h>" else: "<pty.h>"
+type S3SinkState* = ref object of RootRef
+  region*:   string
+  uri*:      Uri
+  uid*:      string
+  secret*:   string
+  bucket*:   string
+  objPath*:  string
+  nameBase*: string
+  extra*:    string
 
-proc forkpty(aprimary: ptr FileHandle,
-             name:     ptr char,
-             termios:  ptr Termios,
-             winsize:  ptr IOctl_WinSize):
-               int {.cdecl, importc, header: ptyheader.}
-
-proc freopen(path: ptr cchar,  mode: ptr cchar, stream: File):
-            File {.cdecl, importc, header: "<stdio.h>".}
-
-
-var pipePid: Pid = 0
-
-proc pipeInit(record: SinkConfig): bool =
-    var childStdout: array[2, cint]
-    var fd:          FileHandle
-    var filename =   "/usr/bin/less"
-    var args     = allocCStringArray(["less", "-R", "-d", "-F"])
-    var s: array[1000, char]
-    var maintty  = ttyname(1)
-    var pcchr = addr(maintty[0])
-    var mode = cstring("rw")
-    var pcmode = addr(mode[0])
-
-
-    var fds: array[2, cint]
-
-    setStdioUnbuffered()
-
-    if record.config.contains("filename"):
-      filename = record.config["filename"]
-      if record.config.contains("args"):
-        let cmdline = filename & " " & record.config["args"]
-        args = allocCstringArray(cmdline.split(" "))
-      else:
-        args = allocCstringArray([filename])
-
-    #let pid = forkpty(addr fd, addr(s[0]), nil, nil)
-
-    discard pipe(fds)
-
-    pipePid = fork()
-    case pipePid
-    of 0: # Child.
-      echo "In child"
-      discard dup2(fds[0], 0)
-      discard close(fds[1])
-      #discard freopen(pcchr, pcmode, stdin)
-      echo pcchr
-      discard freopen(pcchr, pcmode, stdout)
-      setStdioUnbuffered()
-      discard execvp(filename, cStringArray(args))
-    of -1:
-      echo "Fail :("
-      discard
-    else:
-      echo "In parent"
-      #let tty = $(cstring(addr(s[0])))
-      var
-        f:      File
-      #echo "open = ",  open(f, fd, fmReadWrite)
-      echo "open = ",  open(f, fds[1], fmWrite)
-      discard close(fds[0])
-      record.private = cast[RootRef](f)
-
-    return true
-
-proc pipeOut(msg: string, cfg: SinkConfig, ignore: StringTable) =
-  var f = cast[File](cfg.private)
-  f.write(msg)
-
-proc pipeClose(cfg: SinkConfig): bool =
+proc s3SinkInit(cfg: SinkConfig): bool =
   try:
-    var f = cast[FileStream](cfg.private)
-    f.close()
-  finally:
+    var region, extra: string
+    let
+      uri                 = parseURI(cfg.params["uri"])
+      bucket              = uri.hostname
+      uid                 = cfg.params["uid"]
+      secret              = cfg.params["secret"]
+      baseObj             = uri.path[1 .. ^1] # Strip the leading /
+      (objPath, nameBase) = splitPath(baseObj)
+
+    if "region" in cfg.params:
+      region = cfg.params["region"]
+    else:
+      region = "us-east-1"
+
+    if "extra" in cfg.params:
+      extra = cfg.params["extra"]
+    else:
+      extra = ""
+
+    cfg.private = S3SinkState(region: region, uri: uri, uid: uid, secret: secret,
+                              bucket: bucket, objPath: objPath,
+                              nameBase: nameBase,  extra: extra)
     return true
+  except:
+    return false
 
-proc addPipeSink*() =
+proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   var
-    record = SinkRecord()
-    keys   = { "filename": false, "args": false}.toTable()
+    state  = S3SinkState(cfg.private)
+    client = newS3Client((state.uid, state.secret), state.region)
 
-  record.initFunction   = some(InitCallback(pipeInit))
-  record.outputFunction = pipeOut
-  record.closeFunction  = some(CloseCallback(pipeClose))
-  record.keys           = keys
+  cfg.iolog(t, "Open") # Not really a connect...
 
-  registerSink("pipe", record)
+  let
+      ts           = $(unixTimeInMS())
+      randVal      = base32vEncode(secureRand[array[16, char]]())
+  var
+      objParts: seq[string] = @[ts, randVal]
+
+  if state.extra != "": objParts.add(state.extra)
+
+  objParts.add(state.nameBase)
+
+  let
+      newTail  = objParts.join("-")
+      newPath  = joinPath(state.objPath, newTail)
+      response = client.putObject(state.bucket, newPath, msg)
+
+  if response.status[0] != '2':
+    raise newException(ValueError, response.status)
+  else:
+    cfg.iolog(t, "Post " & response.status)
+
+proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
+  var
+    client:      HttpClient
+    headers:     HttpHeaders
+    timeout:     int
+    uri:         Uri                   = parseURI(cfg.params["uri"])
+    tups:        seq[(string, string)] = @[]
+    contentType: string                = cfg.params["content_type"]
+
+
+  if "headers" in cfg.params:
+    var
+      rawHeaders = cfg.params["headers"].split("\n")
+
+    for line in rawHeaders:
+      let ix  = line.find(":")
+      if ix == -1:
+        continue
+      let
+        key = line[0 ..< ix].strip()
+        val = line[ix + 1 .. ^1].strip()
+      tups.add((key, val))
+
+  # This might also get provided in the headers; not checking right now.
+  tups.add(("Content-Type", contentType))
+  headers = newHTTPHeaders(tups)
+
+  if "timeout" in cfg.params:
+    let paramstr = cfg.params["timeout"]
+    if parseInt(paramstr, timeout) != len(paramstr):
+      raise newException(ValueError, "Timeout must be miliseconds " &
+                         "represented as an integer, or 0 for no timeout.")
+    elif timeout <= 0:
+      timeout = -1
+  else:
+    timeout = 5000 # 5 seconds.
+
+  if uri.scheme == "https":
+    let context = newContext(verifyMode=CVerifyPeerUseEnvVars)
+    client      = newHttpClient(sslContext=context, timeout=timeout)
+  else:
+    if "disallow_http" in cfg.params:
+      raise newException(ValueError, "http:// URLs not allowed (only https).")
+    client      = newHttpClient()
+
+  if client == nil:
+    raise newException(ValueError, "Invalid HTTP configuration")
+
+  let response = client.request(uri, httpMethod = HttpPost, body = msg)
+
+  if response.status[0] != '2':
+    raise newException(ValueError, response.status)
+  else:
+    cfg.iolog(t, "Post " & response.status)
 
 proc addFileSink*() =
   var
-    record   = SinkRecord()
-    keys     = { "filename" : true, "mode" : false }.toTable()
+    record   = SinkImplementation()
+    keys     = { "filename"       : true,
+                 "mode"           : false,
+                 "log_search_path": false,
+                 "use_search_path": false,
+               }.toTable()
 
   # I learned the hard way here that, except when procs are
   # declared, the default calling convention is {.closure.},
@@ -224,8 +381,13 @@ proc addFileSink*() =
 
 proc addRotoLogSink*() =
   var
-    record = SinkRecord()
-    keys   = {"filename" : true, "max" : true}.toTable()
+    record = SinkImplementation()
+    keys   = {
+      "filename"          : true,
+      "max"               : true,
+      "log_search_path"   : false,
+      "truncation_amount" : false
+             }.toTable()
 
   record.initFunction   = some(InitCallback(rotologSinkInit))
   record.outputFunction = rotologSinkOut
@@ -234,120 +396,38 @@ proc addRotoLogSink*() =
 
   registerSink("rotating_log", record)
 
-var awsClientCache: Table[string, S3Client]
-
-proc s3SinkInit(record: SinkConfig): bool =
-  if "cacheid" in record.config:
-    let
-      uid    = record.config["uid"]
-      secret = record.config["secret"]
-
-    awsClientCache[record.config["cacheid"]] = newS3Client((uid, secret))
-
-  return true
-
-proc s3SinkOut(msg: string, record: SinkConfig, ignored: StringTable) =
-  var extra  = if "cacheid" in record.config:
-                 record.config["cacheid"]
-               else:
-                 ""
-  var client = if extra != "": awsClientCache[extra]
-               else:
-                 let
-                   uid    = record.config["uid"]
-                   secret = record.config["secret"]
-                 newS3Client((uid, secret))
-  let
-      uri          = record.config["uri"]
-      dstUri       = parseURI(uri)
-      bucket       = dstUri.hostname
-      ts           = $(unixTimeInMS())
-      randVal      = base32vEncode(secureRand[array[16, char]]())
-      baseObj      = dstUri.path[1 .. ^1] # Strip the leading /
-      (head, tail) = splitPath(baseObj)
-  var
-      objParts: seq[string] = @[ts, randVal]
-
-  if extra != "": objParts.add(extra)
-
-  objParts.add(tail)
-
-  let
-      newTail = objParts.join("-")
-      newPath = joinPath(head, newTail)
-      res     = client.putObject(bucket, newPath, msg)
-
-  if res.code != Http200:
-    raise newException(ValueError, "S3 failed with https err code: " &
-      $(res.code))
-
-proc s3SinkClose(record: SinkConfig): bool =
-  if "cacheid" in record.config: record.config.del("cacheid")
-
 proc addS3Sink*() =
   var
-    record = SinkRecord()
+    record = SinkImplementation()
     keys   = { "uid"     : true,
                "secret"  : true,
                "uri"     : true,
-               "cacheid" : false # We cache w/ this if present.
+               "region"  : false,
+               "extra"   : false
              }.toTable()
 
   record.initFunction   = some(InitCallback(s3SinkInit))
   record.outputFunction = s3SinkOut
-  record.closeFunction  = some(InitCallback(s3SinkClose))
   record.keys           = keys
 
   registerSink("s3", record)
 
-proc postSinkOut(msg: string, record: SinkConfig, ignored: StringTable) =
-  let
-    uriStr = record.config["uri"]
-    uriObj = parseURI(uriStr)
-
-  var client = if uriObj.scheme == "https":
-                 newHttpClient(sslContext=newContext(verifyMode=CVerifyPeer))
-               else:
-                 newHttpClient()
-
-  if client == nil:
-    raise newException(ValueError, "Invalid HTTP configuration")
-
-  if "headers" in record.config:
-    var
-      headers = record.config["headers"].split("\n")
-      tups: seq[(string, string)] = @[]
-
-    for line in headers:
-      let ix  = line.find(":")
-      if ix == -1:
-        continue
-      let
-        key = line[0 ..< ix].strip()
-        val = line[ix + 1 .. ^1].strip()
-      tups.add((key, val))
-
-    if len(headers) != 0:
-      client.headers = newHTTPHeaders(tups)
-
-  let response = client.request(uriStr, httpMethod = HttpPost, body = msg)
-
-  if `$`(response.code)[0] != '2':
-    raise newException(ValueError, "HTTP post failed with code: " &
-      $(response.code))
-
 proc addPostSink*() =
   var
-    record = SinkRecord()
+    record = SinkImplementation()
     keys = {
-      "uri"     : true,
-      "headers" : false
+      "uri"           : true,
+      "content_type"  : true,
+      "disallow_http" : false,
+      "headers"       : false,
+      "timeout"       : false
     }.toTable()
 
   record.outputFunction = postSinkOut
   record.keys           = keys
 
   registerSink("post", record)
+
 
 proc addDefaultSinks*() =
   addStdoutSink()
@@ -356,25 +436,3 @@ proc addDefaultSinks*() =
   addRotoLogSink()
   addS3Sink()
   addPostSink()
-  # addPipeSink() Don't think this got finished?  Either way, not looking now.
-
-when isMainModule:
-  addDefaultSinks()
-  let
-    s3Conf    = { "uid"     : "INSERT UID",
-                  "secret"  : "INSERT SECRET",
-                  "uri"     : "s3://insert-bucket-info-blah/test",
-                  "cacheid" : "yo" }.toTable()
-    testTopic = registerTopic("test")
-    cffile    = configSink(getSink("file").get(),
-                           some( { "filename" : "/tmp/sinktest",
-                                   "mode" : "a" }.toTable() )).get()
-    cferr     = configSink(getSink("stderr").get()).get()
-    s3sink    = getSink("s3").get()
-    cfs3      = configSink(s3sink, some(s3Conf)).get()
-
-  discard subscribe(testTopic, cffile)
-  discard subscribe(testTopic, cferr)
-  discard subscribe(testTopic, cfs3)
-
-  discard publish(testTopic, "Hello, file!\n")

@@ -1,4 +1,4 @@
-import tables, options, streams, topics, sinks, ansi
+import tables, options, streams, pubsub, sinks, ansi
 
 type LogLevel* = enum
   ## LogLevel describes what kind of messages you want to see.
@@ -83,10 +83,10 @@ proc toggleLoggingEnabled*() =
   suspendLogging = not suspendLogging
 
 template getSuspendLogging*(): bool = suspendLogging
-    
+
 proc logLevelFilter*(msg: string, info: StringTable): (string, bool) =
   if suspendLogging: return ("", false)
-  
+
   if keyLogLevel in info:
     let llStr = info[keyLogLevel]
 
@@ -103,7 +103,8 @@ proc logLevelFilter*(msg: string, info: StringTable): (string, bool) =
 
 let
   logTopic        = registerTopic("logs")
-  `cfg?`          = configSink(getSink("stderr").get(),
+  `cfg?`          = configSink(getSinkImplementation("stderr").get(),
+                               "default-log-config",
                                filters = @[MsgFilter(logLevelFilter),
                                            MsgFilter(logPrefixFilter)])
   defaultLogHook* = `cfg?`.get()
@@ -129,7 +130,8 @@ proc trace*(msg: string) = log(llTrace, msg)
 when not defined(release):
   let
     debugTopic        = registerTopic("debug")
-    `debugHook?`      = configSink(getSink("stderr").get())
+    `debugHook?`      = configSink(getSinkImplementation("stderr").get(),
+                                   "default-debug-config")
     defaultDebugHook* = `debugHook?`.get()
 
   proc debug*(msg: string) =
