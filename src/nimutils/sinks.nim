@@ -328,6 +328,7 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
 
   # This might also get provided in the headers; not checking right now.
   tups.add(("Content-Type", contentType))
+
   headers = newHTTPHeaders(tups)
 
   if "timeout" in cfg.params:
@@ -351,7 +352,8 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   if client == nil:
     raise newException(ValueError, "Invalid HTTP configuration")
 
-  let response = client.request(uri, httpMethod = HttpPost, body = msg)
+  let response = client.request(uri, httpMethod = HttpPost, body = msg,
+                                headers = headers)
 
   if response.status[0] != '2':
     raise newException(ValueError, response.status)
