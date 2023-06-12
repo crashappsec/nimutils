@@ -269,8 +269,9 @@ proc s3SinkInit(cfg: SinkConfig): bool =
     else:
       extra = ""
 
-    cfg.private = S3SinkState(region: region, uri: uri, uid: uid, secret: secret,
-                              bucket: bucket, objPath: objPath,
+    cfg.private = S3SinkState(region: region, uri: uri, uid: uid,
+                              secret: secret, bucket: bucket,
+                              objPath: objPath,
                               nameBase: nameBase,  extra: extra)
     return true
   except:
@@ -301,7 +302,7 @@ proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   if response.status[0] != '2':
     raise newException(ValueError, response.status)
   else:
-    cfg.iolog(t, "Post " & response.status)
+    cfg.iolog(t, "Post to: " & newPath & "; response = " & response.status)
 
 proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   var
