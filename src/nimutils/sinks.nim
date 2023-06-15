@@ -1,6 +1,6 @@
 import streams, tables, options, os, strutils, std/[net, uri, httpclient],
        nimaws/s3client, pubsub, misc, random, encodings, std/tempfiles,
-       parseutils, unicodeid
+       parseutils, unicodeid, openssl
 
 const defaultLogSearchPath = @["/var/log/", "~/.log/", "."]
 
@@ -304,6 +304,9 @@ proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   else:
     cfg.iolog(t, "Post to: " & newPath & "; response = " & response.status)
 
+proc SSL_CTX_load_verify_file(ctx: SslCtx, CAfile: cstring):
+                       cint {.cdecl, dynlib: DLLSSLName, importc.}
+
 proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   var
     client:      HttpClient
@@ -312,8 +315,11 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
     uri:         Uri                   = parseURI(cfg.params["uri"])
     tups:        seq[(string, string)] = @[]
     contentType: string                = cfg.params["content_type"]
+    pinnedCert:  string                = ""
+    context:     SslContext
 
-
+  if "pinned_cert_file" in cfg.params:
+    pinnedCert = cfg.params["pinned_cert_file"]
   if "headers" in cfg.params:
     var
       rawHeaders = cfg.params["headers"].split("\n")
@@ -343,23 +349,28 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
     timeout = 5000 # 5 seconds.
 
   if uri.scheme == "https":
-    let context = newContext(verifyMode=CVerifyPeerUseEnvVars)
-    client      = newHttpClient(sslContext=context, timeout=timeout)
+    context = newContext(verifyMode = CVerifyPeer)
+    if pinnedCert != "":
+      discard context.context.SSL_CTX_load_verify_file(pinnedCert)
+    client  = newHttpClient(sslContext=context, timeout=timeout)
   else:
     if "disallow_http" in cfg.params:
       raise newException(ValueError, "http:// URLs not allowed (only https).")
-    client      = newHttpClient()
+    elif pinnedCert != "":
+      raise newException(ValueError, "Pinned cert not allowed with http " &
+                                      "URL (only https).")
+    client = newHttpClient()
 
   if client == nil:
     raise newException(ValueError, "Invalid HTTP configuration")
 
-  let response = client.request(uri, httpMethod = HttpPost, body = msg,
-                                headers = headers)
-
+  let response = client.request(url        = uri,
+                                httpMethod = HttpPost,
+                                body       = msg)
   if response.status[0] != '2':
     raise newException(ValueError, response.status)
-  else:
-    cfg.iolog(t, "Post " & response.status)
+
+  cfg.iolog(t, "Post " & response.status)
 
 proc addFileSink*() =
   var
@@ -419,11 +430,12 @@ proc addPostSink*() =
   var
     record = SinkImplementation()
     keys = {
-      "uri"           : true,
-      "content_type"  : true,
-      "disallow_http" : false,
-      "headers"       : false,
-      "timeout"       : false
+      "uri"              : true,
+      "content_type"     : true,
+      "disallow_http"    : false,
+      "headers"          : false,
+      "timeout"          : false,
+      "pinned_cert_file" : false
     }.toTable()
 
   record.outputFunction = postSinkOut
