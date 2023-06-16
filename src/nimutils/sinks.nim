@@ -366,7 +366,8 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
 
   let response = client.request(url        = uri,
                                 httpMethod = HttpPost,
-                                body       = msg)
+                                body       = msg,
+                                headers    = headers)
   if response.status[0] != '2':
     raise newException(ValueError, response.status)
 
