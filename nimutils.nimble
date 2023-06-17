@@ -1,10 +1,10 @@
 # Package
 
-version       = "0.4.2"
-author        = "John Viega"
-description   = "Crash Øverride Nim utilities"
-license       = "Apache-2.0"
-srcDir        = "src"
+version = "0.4.4"
+author = "John Viega"
+description = "Crash Øverride Nim utilities"
+license = "Apache-2.0"
+srcDir = "src"
 
 
 # Dependencies
