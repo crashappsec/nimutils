@@ -80,7 +80,7 @@ proc stdoutSinkOut(msg:    string,
                    cfg:    SinkConfig,
                    t:      Topic,
                    ignore: StringTable) =
-  stdout.write(msg.perLineWrap())
+  stdout.write(msg)
 
 proc addStdoutSink*() =
   registerSink("stdout", SinkImplementation(outputFunction: stdoutSinkOut))
@@ -89,7 +89,7 @@ proc stdErrSinkOut(msg:    string,
                    cfg:    SinkConfig,
                    t:      Topic,
                    ignore: StringTable) =
-  stderr.write(msg.perLineWrap())
+  stderr.write(msg)
 
 proc addStdErrSink*() =
   registerSink("stderr", SinkImplementation(outputFunction: stderrSinkOut))
