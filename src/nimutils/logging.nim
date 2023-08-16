@@ -16,10 +16,10 @@ const toLogLevelMap* = { "none"    : llNone,
                          "verbose" : llTrace,
                          "trace"   : llTrace }.toTable()
 
-const llToStrMap = { llNone: "none",
+const llToStrMap = { llNone:  "none",
                      llError: "error",
-                     llWarn: "warn",
-                     llInfo: "info",
+                     llWarn:  "warn",
+                     llInfo:  "info",
                      llTrace: "trace" }.toTable()
 
 var logLevelColors = { llNone  : "",
@@ -30,8 +30,8 @@ var logLevelColors = { llNone  : "",
 
 var logLevelPrefixes = { llNone:  "",
                          llError: "error: ",
-                         llWarn: "warn: ",
-                         llInfo: "info: ",
+                         llWarn:  "warn:  ",
+                         llInfo:  "info:  ",
                          llTrace: "trace: " }.toTable()
 
 const keyLogLevel*  = "loglevel"
