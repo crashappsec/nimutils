@@ -1,5 +1,18 @@
-import os, streams, misc
+import os, streams, misc, posix
 {.emit: """
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <limits.h>
+#include <signal.h>
+#include <stdbool.h>
+
+extern bool read_data(int fd, void *buf, size_t nbytes);
+extern bool write_data(int fd, NCSTRING buf, NI nbytes);
+
 bool
 lock_file(char *lfpath, int max_attempts) {
     int   attempt, fd, result;
@@ -56,13 +69,27 @@ proc fLockFile*(fname: cstring, maxAttempts: cint):
 proc obtainLockFile*(fname: string, maxAttempts = 5): bool {.inline.} =
   return fLockFile(cstring(fname), cint(maxAttempts))
 
-proc writeViaLockFile*(loc: string, output: string): bool =
+proc writeViaLockFile*(loc:    string,
+                       output: string,
+                       release     = true,
+                       maxAttempts = 5,
+                      ): bool =
+  ## This uses an advisory lock to perform a read of the file, and
+  ## then releases the lock at the end, unless release == false.
+  ##
+  ## In that case, call releaseLockFile() passing the original file
+  ## name of what you're locking in order to cleanly give up the lock.
+  ##
+  ## The file is closed after write, but when `release` is false, you
+  ## will still hold the lock, until you release explicitly, or the
+  ## process ends.
+
   let
     resolvedLoc = resolvePath(loc)
     dstParts    = splitPath(resolvedLoc)
     lockFile    = joinPath(dstParts.head, "." & dstParts.tail)
 
-  if lockFile.obtainLockFile():
+  if lockFile.obtainLockFile(maxAttempts):
     try:
       let f = newFileStream(resolvedLoc, fmWrite)
       if f == nil:
@@ -71,31 +98,52 @@ proc writeViaLockFile*(loc: string, output: string): bool =
       f.close()
       return true
     finally:
-      try:
-        removeFile(lockFile)
-      except:
-        discard
+      if release:
+        try:
+          removeFile(lockFile)
+        except:
+          discard
   else:
     return true
 
-proc readViaLockFile*(loc: string): string =
+proc readViaLockFile*(loc: string, release = true, maxAttempts = 5): string =
+  ## This uses an advisory lock to perform a read of the file, and
+  ## then releases the lock at the end, unless release == false.
+  ##
+  ## In that case, call releaseLockFile() passing the original file name
+  ## of what you're locking in order to cleanly give up the lock.
+  ##
+  ## Even if you choose to hold the lock, the file will be closed
+  ## after this call. No worries, as long as other processes use this
+  ## same API, they will not take the lock as long as your process is
+  ## still running and hasn't released it.
+
   let
     resolvedLoc = resolvePath(loc)
     dstParts    = splitPath(resolvedLoc)
     lockFile    = joinPath(dstParts.head, "." & dstParts.tail)
 
-  if lockFile.obtainLockFile():
+  if lockFile.obtainLockFile(maxAttempts):
     try:
       let f = newFileStream(resolvedLoc)
       if f == nil:
-        raise newException(IOError, "Couldn't open file")
+        raise newException(ValueError, "Couldn't open file")
       result = f.readAll()
       f.close()
       return
     finally:
-      try:
-        removeFile(lockFile)
-      except:
-        discard
+      if release:
+        try:
+          removeFile(lockFile)
+        except:
+          discard
   else:
     raise newException(IOError, "Couldn't obtain lock file")
+
+proc releaseLockFile*(loc: string) =
+  let
+    resolvedLoc = resolvePath(loc)
+    dstParts    = splitPath(resolvedLoc)
+    lockFile    = joinPath(dstParts.head, "." & dstParts.tail)
+
+  removeFile(lockFile)

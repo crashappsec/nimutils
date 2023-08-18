@@ -46,7 +46,7 @@ read_data(int fd, void *buf, size_t nbytes) {
 }
 
 bool
-write_data(int fd, const void *buf, size_t nbytes) {
+write_data(int fd, NCSTRING buf, NI nbytes) {
     size_t  towrite, written = 0;
     ssize_t result;
 
@@ -57,7 +57,7 @@ write_data(int fd, const void *buf, size_t nbytes) {
         else {
             towrite = nbytes - written;
         }
-        if ((result = write(fd, (const char *)buf + written, towrite)) >= 0) {
+        if ((result = write(fd, buf + written, towrite)) >= 0) {
             written += result;
         }
         else if (errno != EINTR) {
@@ -418,10 +418,11 @@ proc readAllFromFd*(fd: cint): string =
 
   while true:
     let n = read(fd, addr buf, 4096)
-    if n >= 0:
-      let s  = bytesToString(buf)
+    if n > 0:
+      let s  = bytesToString(buf[0 ..< n])
       result = result & s
-      if n == 0:
+    elif n == 0:
+        result = result & "\000"
         return
     else:
       if errno != EINTR:
@@ -431,7 +432,7 @@ template ccall*(code: untyped, success = 0) =
   let ret = code
 
   if ret != success:
-    error($(strerror(ret)))
+    echo ($(strerror(ret)))
     quit(1)
 
 proc runCmdGetEverything*(exe:      string,
@@ -489,7 +490,6 @@ template getExit*(o: ExecOutput): int      = o.exitCode
 
 proc getPasswordViaTty*(): string {.discardable.} =
   if isatty(0) == 0:
-    error("Cannot read password securely when not run from a tty.")
     return ""
 
   var pw = getpass(cstring("Enter password for decrypting the private key: "))
