@@ -1,4 +1,4 @@
 import nimutils/[box, random, unicodeid, pubsub, sinks, misc, ansi, texttable],
-       nimutils/[filetable, encodings]
+       nimutils/[filetable, encodings, advisory_lock]
 export box, random, unicodeid, pubsub, sinks, misc, random, ansi, texttable,
-       filetable, encodings
+       filetable, encodings, advisory_lock
