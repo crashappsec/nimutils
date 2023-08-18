@@ -486,3 +486,23 @@ proc runCmdGetEverything*(exe:      string,
 template getStdout*(o: ExecOutput): string = o.stdout
 template getStderr*(o: ExecOutput): string = o.stderr
 template getExit*(o: ExecOutput): int      = o.exitCode
+
+proc getPasswordViaTty*(): string {.discardable.} =
+  if isatty(0) == 0:
+    error("Cannot read password securely when not run from a tty.")
+    return ""
+
+  var pw = getpass(cstring("Enter password for decrypting the private key: "))
+
+  result = $(pw)
+
+  for i in 0 ..< len(pw):
+    pw[i] = char(0)
+
+proc delByValue*[T](s: var seq[T], x: T): bool {.discardable.} =
+  let ix = s.find(x)
+  if ix == -1:
+    return false
+
+  s.delete(ix)
+  return true
