@@ -1,64 +1,5 @@
 import os, streams, misc
-
 {.emit: """
-#include <sys/types.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdbool.h>
-
-bool
-read_data(int fd, void *buf, size_t nbytes) {
-    size_t  toread, nread = 0;
-    ssize_t result;
-
-    do {
-         if (nbytes - nread > SSIZE_MAX) {
-             toread = SSIZE_MAX;
-         }
-         else {
-             toread = nbytes - nread;
-         }
-         if ((result = read(fd, (char *)buf + nread, toread)) >= 0) {
-           nread += result;
-         }
-         else if (errno != EINTR) {
-           return false;
-         }
-       }
-    while (nread < nbytes);
-
-    return true;
-}
-
-bool
-write_data(int fd, const void *buf, size_t nbytes) {
-    size_t  towrite, written = 0;
-    ssize_t result;
-
-    do {
-        if (nbytes - written > SSIZE_MAX) {
-            towrite = SSIZE_MAX;
-        }
-        else {
-            towrite = nbytes - written;
-        }
-        if ((result = write(fd, (const char *)buf + written, towrite)) >= 0) {
-            written += result;
-        }
-        else if (errno != EINTR) {
-            return false;
-        }
-    }
-    while (written < nbytes);
-
-    return true;
- }
-
 bool
 lock_file(char *lfpath, int max_attempts) {
     int   attempt, fd, result;
@@ -112,10 +53,6 @@ lock_file(char *lfpath, int max_attempts) {
 
 proc fLockFile*(fname: cstring, maxAttempts: cint):
               bool {.importc: "lock_file".}
-proc fReadAll*(fd: cint, bufptr: ptr cstring, nbytes: ptr cint):
-             bool {.importc: "read_all".}
-proc fReadData*(fd: cint, buf: openarray[byte]): bool {.importc: "read_data."}
-proc fWriteData*(fd: cint, buf: openarray[byte]): bool {.importc: "write_data".}
 proc obtainLockFile*(fname: string, maxAttempts = 5): bool {.inline.} =
   return fLockFile(cstring(fname), cint(maxAttempts))
 
