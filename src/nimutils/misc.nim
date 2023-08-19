@@ -73,7 +73,7 @@ write_data(int fd, NCSTRING buf, NI nbytes) {
 proc fReadData*(fd: cint, buf: openarray[char]): bool {.importc: "read_data."}
 proc fWriteData*(fd: cint, buf: openarray[char]): bool {.importc: "write_data".}
 proc fWriteData*(fd: cint, s: string): bool =
-  return fWriteData(fd, s.toOpenArray(0, s.len()))
+  return fWriteData(fd, s.toOpenArray(0, s.len() - 1))
 
 when hostOs == "macosx":
   {.emit: """
@@ -506,3 +506,33 @@ proc delByValue*[T](s: var seq[T], x: T): bool {.discardable.} =
 
   s.delete(ix)
   return true
+
+proc tryToLoadFile*(fname: string): string =
+  try:
+    return readFile(fname)
+  except:
+    return ""
+
+proc tryToWriteFile*(fname: string, contents: string): bool =
+  try:
+    writeFile(fname, contents)
+    return true
+  except:
+    return false
+
+proc tryToCopyFile*(fname: string, dst: string): bool =
+  try:
+    copyFile(fname, dst)
+    return true
+  except:
+    return false
+
+template withWorkingDir*(dir: string, code: untyped) =
+  let
+    toRestore = getCurrentDir()
+
+  try:
+    setCurrentDir(dir)
+    code
+  finally:
+    setCurrentDir(toRestore)
