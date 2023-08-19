@@ -1,3 +1,6 @@
+## :Author: John Viega (john@crashoverride.com)
+## :Copyright: 2023, Crash Override, Inc.
+
 # Pretty basic table formatting. Works with fixed width unicode, though
 # I don't factor out non-printable spaces right now, I just count runes.
 

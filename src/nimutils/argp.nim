@@ -38,6 +38,9 @@
 ## 1) You can use API calls to access (the calls starting with get)
 ## 2) You can use the callbacks you supply when setting up the spec
 ## 3) You can query the ArgResult data structure directly.
+##
+## :Author: John Viega (john@crashoverride.com)
+## :Copyright: 2022, 2023, Crash Override, Inc.
 
 import unicode, options, sugar, tables, os, misc, sequtils
 import strutils except strip

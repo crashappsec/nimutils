@@ -1,3 +1,6 @@
+## :Author: John Viega (john@crashoverride.com)
+## :Copyright: 2023, Crash Override, Inc.
+
 ## For now, not intended to be threadsafe for mutation ops.
 
 import tables, sugar, options, json, strutils, ansi, strutils, std/terminal,

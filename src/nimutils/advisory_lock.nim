@@ -1,3 +1,6 @@
+## :Author: John Viega (john@crashoverride.com)
+## :Copyright: 2023, Crash Override, Inc.
+
 import os, streams, misc, posix, file
 
 {.emit: """

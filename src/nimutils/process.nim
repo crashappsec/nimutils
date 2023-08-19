@@ -1,3 +1,8 @@
+## Process-related utilities.
+##
+## :Author: John Viega (john@crashoverride.com)
+## :Copyright: 2023, Crash Override, Inc.
+
 import misc, strutils, posix, file
 
 template runCmdGetOutput*(exe: string, args: seq[string]): string =

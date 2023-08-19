@@ -4,6 +4,11 @@
 ##
 ## The keys are taken from the file name, with the extension, if any,
 ## ripped off of it.
+##
+## :Author: John Viega (john@crashoverride.com)
+## :Copyright: 2022, 2023, Crash Override, Inc.
+
+
 import tables, strutils, os
 
 type
