@@ -1,5 +1,9 @@
-import os, streams, misc, posix
+import os, streams, misc, posix, file
+
 {.emit: """
+// Also have had this code sitting around forever and did not want to take
+// the time to port it to Nim.
+
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -64,6 +68,8 @@ lock_file(char *lfpath, int max_attempts) {
 }
 """.}
 
+## This is the raw wrapping of the C func; `obtainLockFile()` accepts
+## nim-native data types.
 proc fLockFile*(fname: cstring, maxAttempts: cint):
               bool {.importc: "lock_file".}
 proc obtainLockFile*(fname: string, maxAttempts = 5): bool {.inline.} =

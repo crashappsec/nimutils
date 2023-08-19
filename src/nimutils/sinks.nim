@@ -1,6 +1,6 @@
 import streams, tables, options, os, strutils, std/[net, uri, httpclient],
        nimaws/s3client, pubsub, misc, random, encodings, std/tempfiles,
-       parseutils, unicodeid, openssl
+       parseutils, unicodeid, openssl, file
 
 const defaultLogSearchPath = @["/var/log/", "~/.log/", "."]
 
