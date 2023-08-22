@@ -140,7 +140,7 @@ proc readRune*(s: Stream): Rune =
      n = n or (uint(s.readChar()) and 0x3f)
   of 4:
      n = uint(c) and (0x07 shl 18)
-     n = n or ((uint(s.readChar()) and 0x3f) shl 12)     
+     n = n or ((uint(s.readChar()) and 0x3f) shl 12)
      n = n or ((uint(s.readChar()) and 0x3f) shl 6)
      n = n or (uint(s.readChar()) and 0x3f)
   else:

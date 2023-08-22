@@ -275,7 +275,7 @@ int c_replace_stdin_with_pipe() {
   int filedes[2];
 
   pipe(filedes);
-  dup2(filedes, 0);
+  dup2(filedes[0], 0);
   return filedes[1];
 }
 
