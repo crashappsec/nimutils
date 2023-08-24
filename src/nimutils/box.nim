@@ -268,7 +268,7 @@ proc boxToJson*(b: Box): string =
     of MkSeq:
         result = "["
         for item in b.c.s:
-            if addComma: result = result & ", ": else: addComma = true
+            if addComma: result = result & ", " else: addComma = true
             result = result & item.boxToJSon()
         result = result & "]"
     of MkTable:
