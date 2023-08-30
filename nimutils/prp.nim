@@ -99,9 +99,9 @@ template round4(ctx: PrpCtx) =
 proc prp*(key, toEncrypt: string, nonce: var string, randomNonce = true):
         string =
 
-  if toEncrypt.len() < 32:
+  if toEncrypt.len() < 24:
     raise newException(ValueError, "Minimum supported length for " &
-      "messages encrypted with our PRP is 32 bytes")
+      "messages encrypted with our PRP is 24 bytes")
   if randomNonce:
     nonce = randString(16)
   elif nonce.len() == 16:
