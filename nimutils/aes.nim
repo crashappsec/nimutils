@@ -11,6 +11,7 @@ const badNonceError =  "GCM nonces should be exactly 12 bytes. If " &
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
 
 #ifndef EVP_CTRL_GCM_GET_TAG
 #define EVP_CIPHER_CTX void
@@ -20,7 +21,7 @@ const badNonceError =  "GCM nonces should be exactly 12 bytes. If " &
 
 typedef void *GCM128_CONTEXT;
 
-extern int EVP_EncryptUpdate(EVP_CIPHER_CTX *ctx, unsigned char *out,
+extern int EVP_EncryptUpdate(void *ctx, unsigned char *out,
                              int *outl, const unsigned char *in, int inl);
 extern int EVP_EncryptFinal(EVP_CIPHER_CTX *ctx, unsigned char *out,
                              int *outl);
@@ -108,6 +109,29 @@ N_CDECL(int, do_gcm_encrypt)(gcm_ctx_t *ctx, void *tocast) {
   return 1;
 }
 
+N_CDECL(int, get_keystream)(void *ctx, void *outbuf, int len) {
+  char *to_encrypt = calloc(len, 1);
+  int   outlen;
+
+  return EVP_EncryptUpdate((EVP_CIPHER_CTX *)ctx, (char *)outbuf, &outlen,
+                           to_encrypt, len);
+
+  free(to_encrypt);
+}
+
+N_CDECL(int, run_ctr_mode)(void *ctx, void *outbuf, void *to_encrypt, int len) {
+  int   outlen;
+
+  return EVP_EncryptUpdate((EVP_CIPHER_CTX *)ctx, (char *)outbuf, &outlen,
+                           (char *)to_encrypt, len);
+
+  free(to_encrypt);
+}
+
+extern int EVP_EncryptUpdate(EVP_CIPHER_CTX *ctx, unsigned char *out,
+                             int *outl, const unsigned char *in, int inl);
+
+
 N_CDECL(int, do_gcm_decrypt)(gcm_ctx_t *ctx, void *tocast) {
   int outlen;
   int inlen    = (ctx->mlen - 16);
@@ -152,9 +176,9 @@ N_CDECL(int, do_gcm_decrypt)(gcm_ctx_t *ctx, void *tocast) {
 {.pragma: lcrypto, cdecl, dynlib: DLLUtilName, importc.}
 
 type
-  CipherStruct {.final, pure.} = object
+  CipherStruct {.final,pure.} = object
   CipherPtr*      = ptr CipherStruct
-  EVP_CIPHER_CTX* = CipherPtr
+  EVP_CIPHER_CTX* = ptr CipherStruct
   EVP_CIPHER*     = CipherPtr
 
 
@@ -169,10 +193,10 @@ proc EVP_DecryptInit_ex2(ctx: EVP_CIPHER_CTX, cipher: EVP_CIPHER,
                          key: cstring, nonce: pointer, params: pointer):
                        cint {.lcrypto,discardable.}
 proc EVP_EncryptUpdate(ctx: EVP_CIPHER_CTX, outbuf: pointer, outlen: ptr cint,
-                       inbuf: cstring, inlen: int): cint {.lcrypto,discardable.}
-
+                       inbuf: cstring, inlen: cint): cint
+                        {.lcrypto,discardable,nodecl.}
 type
-  AesCtx = object
+  AesCtx* = object
     aesCtx: EVP_CIPHER_CTX
 
   GcmCtx* {.importc: "gcm_ctx_t".} = object
@@ -186,14 +210,18 @@ type
 
 proc do_gcm_encrypt(ctx: ptr GcmCtx, outbuf: pointer): cint {.cdecl,importc.}
 proc do_gcm_decrypt(ctx: ptr GcmCtx, outbuf: pointer): cint {.cdecl,importc.}
+proc get_keystream(ctx: pointer, outbuf: pointer, buflen: cint):
+                       cint {.cdecl,importc.}
+proc run_ctr_mode(ctx, outbuf, inbuf: pointer, buflen: cint):
+                       cint {.cdecl,importc.}
 
-proc `=destroy`*(ctx: AES_CTX) =
+proc `=destroy`*(ctx: AesCtx) =
     EVP_CIPHER_CTX_free(ctx.aesCtx)
 
-proc `=destroy`*(ctx: GCM_CTX) =
+proc `=destroy`*(ctx: GcmCtx) =
     EVP_CIPHER_CTX_free(ctx.aesCtx)
 
-template getCipher(ctx: untyped, mode: string, key: string): EVP_CIPHER =
+template getCipher(mode: string, key: string): EVP_CIPHER =
   case len(key)
   of 16:
     EVP_CIPHER_fetch(nil, "AES-128-" & mode, nil)
@@ -204,26 +232,27 @@ template getCipher(ctx: untyped, mode: string, key: string): EVP_CIPHER =
   else:
     raise newException(ValueError, "AES keys must be 16, 24 or 32 bytes.")
 
-proc initPRP*(ctx: var AES_CTX, key: string) =
+proc initAesPRP*(ctx: var AesCtx, key: string) =
   ctx.aesCtx = EVP_CIPHER_CTX_new()
 
-  let cipher = ctx.getCipher("ECB", key)
+  let cipher = getCipher("ECB", key)
 
   discard EVP_EncryptInit_ex(ctx.aesCtx, cipher, nil, cstring(key), nil)
 
-proc prp*(ctx: AES_CTX, input: string): string =
+proc aesPrp*(ctx: AesCtx, input: string): string =
   var i: cint
   if len(input) != 16:
     raise newException(ValueError, "The AES PRP operates on 16 byte strings.")
 
   result = newStringOfCap(16)
-  ctx.aesCtx.EVP_EncryptUpdate(addr result[0], addr i, cstring(input), 16)
+  ctx.aesCtx.EVP_EncryptUpdate(addr result[0], addr i, cstring(input),
+                               cint(16))
 
-proc gcmInitEncrypt*(ctx: var GCM_CTX, key: string, nonce = ""):
+proc gcmInitEncrypt*(ctx: var GcmCtx, key: string, nonce = ""):
             string {.discardable} =
 
   ctx.aesCtx = EVP_CIPHER_CTX_new()
-  let cipher = getCipher(ctx.aesCtx, "GCM", key)
+  let cipher = getCipher("GCM", key)
   result     = nonce
 
   if result == "":
@@ -236,20 +265,65 @@ proc gcmInitEncrypt*(ctx: var GCM_CTX, key: string, nonce = ""):
 
   discard EVP_EncryptInit_ex(ctx.aesCtx, cipher, nil, cstring(key),
                               addr ctx.nonce[0])
-
-proc gmacInit*(ctx: var GCM_CTX, key: string, nonce = ""):
+proc gmacInit*(ctx: var GcmCtx, key: string, nonce = ""):
              string {.discardable} =
 
   return gcmInitEncrypt(ctx, key, nonce)
 
-proc gcmInitDecrypt*(ctx: var GCM_CTX, key: string) =
+proc aesPrfOneShot*(key: string, outlen: int, start: string = ""): string =
+  var
+    ctx:    AesCtx
+    nonce:  pointer = nil
+    outbuf: ptr char = cast[ptr char](alloc(outlen))
 
   ctx.aesCtx = EVP_CIPHER_CTX_new()
-  let cipher = getCipher(ctx.aesCtx, "GCM", key)
+
+  if start != "":
+    if len(start) != 16:
+      raise newException(ValueError, "Starting value must be 16 bytes.")
+    nonce = addr start[0]
+
+  let cipher = getCipher("CTR", key)
+
+  discard EVP_Encrypt_Init_ex(ctx.aesCtx, cipher, nil, cstring(key), nonce)
+
+  if ctx.aesCtx.get_keystream(outbuf, cint(outlen)) == 0:
+    raise newException(IoError, "Could not generate keystream")
+
+  result = bytesToString(outbuf, outlen)
+  dealloc(outbuf)
+
+proc aesCtrInPlaceOneshot*(key: string, instr: pointer, l: cint,
+                           start: string = "") =
+  var
+    ctx:    AesCtx
+    nonce:  pointer = nil
+
+  ctx.aesCtx = EVP_CIPHER_CTX_new()
+
+  if start != "":
+    if len(start) != 16:
+      raise newException(ValueError, "Starting value must be 16 bytes.")
+    nonce = addr start[0]
+
+  let cipher = getCipher("CTR", key)
+
+  discard EVP_Encrypt_Init_ex(ctx.aesCtx, cipher, nil, cstring(key), nonce)
+
+  if ctx.aesCtx.run_ctr_mode(instr, instr, l) == 0:
+    raise newException(IoError, "Could not generate keystream")
+
+proc aesCtrInPlaceOneshot*(key, instr: string, start: string = "") =
+  aesCtrInPlaceOneshot(key, addr instr[0], cint(instr.len()), start)
+
+proc gcmInitDecrypt*(ctx: var GcmCtx, key: string) =
+
+  ctx.aesCtx = EVP_CIPHER_CTX_new()
+  let cipher = getCipher("GCM", key)
 
   EVP_DecryptInit_ex2(ctx.aesCtx, cipher, cstring(key), nil, nil)
 
-proc gcmEncrypt*(ctx: var GCM_CTX, msg: string, aad = ""): string =
+proc gcmEncrypt*(ctx: var GcmCtx, msg: string, aad = ""): string =
   var outbuf: ptr char = cast[ptr char](alloc(len(msg) + 16))
 
   ctx.aad  = cstring(aad)
@@ -263,17 +337,17 @@ proc gcmEncrypt*(ctx: var GCM_CTX, msg: string, aad = ""): string =
   result = bytesToString(outbuf, len(msg) + 16)
   dealloc(outbuf)
 
-proc gmac*(ctx: var GCM_CTX, msg: string): string =
+proc gmac*(ctx: var GcmCtx, msg: string): string =
   return gcmEncrypt(ctx, msg = "", aad = msg)
 
-proc gcmGetNonce*(ctx: var GCM_CTX): string =
+proc gcmGetNonce*(ctx: var GcmCtx): string =
   for i, ch in ctx.nonce:
     result.add(char(ctx.nonce[i]))
 
-proc gmacGetNonce(ctx: var GCM_CTX): string =
+proc gmacGetNonce*(ctx: var GcmCtx): string =
   return gcmGetNonce(ctx)
 
-proc gcmDecrypt*(ctx: var GCM_CTX, msg: string, nonce: string,
+proc gcmDecrypt*(ctx: var GcmCtx, msg: string, nonce: string,
                     aad = ""): Option[string] =
   if len(msg) < 16:
     raise newException(ValueError, "Invalid GCM Ciphertext (too short)")
@@ -323,3 +397,23 @@ when isMainModule:
     echo "CT: "
     echo strDump(ct)
     echo "Decrypted: ", pt
+
+  echo "Keystream test: "
+
+  let
+    stream1 = aesPrfOneShot(key, 200)
+    stream2 = aesPrfOneShot(key, 200)
+
+  echo stream1.toHex()
+  assert len(stream1) == 200
+  assert stream1 == stream2
+
+  let text = "This is a test, yo, dawg"
+
+  aesCtrInPlaceOneshot(key, text)
+
+  echo "Covered dog: ", text.hex()
+
+  aesCtrInPlaceOneshot(key, text)
+
+  echo text

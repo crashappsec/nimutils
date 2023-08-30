@@ -5,6 +5,8 @@
 #
 # :Author: John Viega (john@viega.org)
 
+import strutils
+
 {.emit: """
 #include <stdint.h>
 #include <stdlib.h>
@@ -249,6 +251,9 @@ chex(void *ptr, unsigned int len, unsigned int start_offset,
 }
 
 """}
+
+proc hex*(s: string): string =
+  return s.toHex().toLowerAscii()
 
 proc rawHexDump(x: pointer, sz: cuint, offset: cuint, width: cuint):
                cstring {.importc: "chex", cdecl.}
