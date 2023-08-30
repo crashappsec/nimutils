@@ -10,6 +10,7 @@ const badNonceError =  "GCM nonces should be exactly 12 bytes. If " &
 
 #include <limits.h>
 #include <stdint.h>
+#include <string.h>
 
 #ifndef EVP_CTRL_GCM_GET_TAG
 #define EVP_CIPHER_CTX void
@@ -38,6 +39,9 @@ extern int EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx, unsigned char *outm,
 extern int EVP_DecryptInit_ex(EVP_CIPHER_CTX *ctx, void *type,
                               void *impl, const unsigned char *key,
                               const unsigned char *iv);
+
+extern int bswap_64(int);
+
 typedef struct gcm_ctx {
   EVP_CIPHER_CTX *aes_ctx;
   int            num_ops;
@@ -64,10 +68,10 @@ chex(void *ptr, unsigned int len, unsigned int start_offset,
      unsigned int width);
 
 static void bump_nonce(nonce_ctx_t *ctx) {
-  #ifdef LITTLE_ENDIAN
+  #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
       ctx->lownonce++;
   #else
-      ctx->lownonce = bswap_64(bswap_64(ctx->lownonce) + 1)
+      ctx->lownonce = bswap_64(bswap_64(ctx->lownonce) + 1);
   #endif
 }
 
