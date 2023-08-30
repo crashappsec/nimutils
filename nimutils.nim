@@ -20,9 +20,10 @@
 
 import nimutils/[box, random, unicodeid, pubsub, sinks, misc, ansi, texttable],
        nimutils/[file, process, filetable, encodings, advisory_lock, formatstr]
-import nimutils/[sha, aes]
+import nimutils/[sha, aes, prp]
 export box, random, unicodeid, pubsub, sinks, misc, random, ansi, texttable,
-       file, process, filetable, encodings, advisory_lock, formatstr, sha, aes
+       file, process, filetable, encodings, advisory_lock, formatstr,
+       sha, aes, prp
 
 ## Things we don't want to force people to consume need to be imported
 ## manually. Currently, that's:
