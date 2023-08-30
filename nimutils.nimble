@@ -4,7 +4,6 @@ version = "0.1.0"
 author = "John Viega"
 description = "Crash Øverride Nim utilities"
 license = "Apache-2.0"
-srcDir = "src"
 
 # Dependencies
 
