@@ -33,13 +33,13 @@ proc `$`(s: AwsScope): string =
   return s.date[0..7]&"/"&s.region&"/"&s.service
 
 proc `!$`(s: string): string =
-  return SHA256_hex(s)
+  return sha256Hex(s)
 
 proc `!$`(k, s: string): string =
-  return HMAC_SHA256_hex(k, s)
+  return hmacSha256Hex(k, s)
 
 proc `?$`(k, s: string): string =
-  return HMAC_sha256(k, s)
+  return hmacSha256(k, s)
 
 # Copied from cgi library and modified to fit the AWS-approved uri_encode
 # http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html

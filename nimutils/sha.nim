@@ -12,147 +12,157 @@ proc EVP_MD_CTX_free(ctx: EVP_MD_CTX) {.lcrypto.}
 proc EVP_DigestInit_ex2(ctx: EVP_MD_CTX, typ: EVP_MD, engine: SslPtr = nil):
                        cint {.lcrypto.}
 proc EVP_sha3_512(): EVP_MD {.lcrypto.}
-proc SHA256_raw(s: cstring, count: csize_t, md_buf: cstring) {.cdecl, dynLib:DLLUtilName,importc: "SHA256".}
-proc SHA512_raw(s: cstring, count: csize_t, md_buf: cstring) {.cdecl, dynLib:DLLUtilName,importc: "SHA512".}
+proc sha256_raw(s: cstring, count: csize_t, md_buf: cstring) {.cdecl, dynLib:DLLUtilName,importc: "SHA256".}
+proc sha512_raw(s: cstring, count: csize_t, md_buf: cstring) {.cdecl, dynLib:DLLUtilName,importc: "SHA512".}
 
 type
-  SHA256ctx = object
+  Sha256ctx = object
     evpCtx: EVP_MD_CTX
-  SHA512ctx = object
+  Sha512ctx = object
     evpCtx: EVP_MD_CTX
-  SHA3ctx = object
+  Sha3ctx = object
     evpCtx: EVP_MD_CTX
-  SHA256Digest = array[32, uint8]
-  SHA512Digest = array[64, uint8]
-  SHA3Digest   = array[64, uint8]
+  Sha256Digest = array[32, uint8]
+  Sha512Digest = array[64, uint8]
+  Sha3Digest   = array[64, uint8]
 
-proc `=destroy`*(ctx: SHA256ctx) =
+proc `=destroy`*(ctx: Sha256ctx) =
   EVP_MD_CTX_free(ctx.evpCtx)
 
-proc `=destroy`*(ctx: SHA512ctx) =
+proc `=destroy`*(ctx: Sha512ctx) =
   EVP_MD_CTX_free(ctx.evpCtx)
 
-proc `=destroy`*(ctx: SHA3ctx) =
+proc `=destroy`*(ctx: Sha3ctx) =
   EVP_MD_CTX_free(ctx.evpCtx)
 
-proc initSHA*[T:SHA256ctx|SHA512ctx|SHA3ctx](ctx: var T) =
+proc initSha256*(ctx: var Sha256CTX) =
   ctx.evpCtx = EVP_MD_CTX_new()
-  let md =
-    when T is SHA256ctx:
-      EVP_sha256()
-    elif T is SHA512ctx:
-      EVP_sha512()
-    elif T is SHA3ctx:
-      EVP_sha3_512()
-  discard EVP_DigestInit_ex2(ctx.evpCtx, md, nil)
+  discard EVP_Digest_Init_ex2(ctx.evpCtx, EVP_sha256(), nil)
 
-proc update*(ctx: var (SHA256ctx|SHA512ctx|SHA3ctx), data: openarray[char]) =
+proc initSha512*(ctx: var Sha512CTX) =
+  ctx.evpCtx = EVP_MD_CTX_new()
+  discard EVP_Digest_Init_ex2(ctx.evpCtx, EVP_sha512(), nil)
+
+proc initSha3*(ctx: var Sha3CTX) =
+  ctx.evpCtx = EVP_MD_CTX_new()
+  discard EVP_Digest_Init_ex2(ctx.evpCtx, EVP_sha3_512(), nil)
+
+proc initSha256*(): Sha256Ctx =
+  initSha256(result)
+
+proc initSha512*(): Sha512Ctx =
+  initSha512(result)
+
+proc initSha3*(): Sha3Ctx =
+  initSha3(result)
+
+proc update*(ctx: var (Sha256ctx|Sha512ctx|Sha3ctx), data: openarray[char]) =
   if len(data) != 0:
     discard EVP_DigestUpdate(ctx.evpCtx, addr data[0], cuint(len(data)))
 
-proc finalRaw*(ctx: var SHA256ctx): SHA256Digest =
+proc finalRaw(ctx: var Sha256ctx): Sha256Digest =
   var i: cuint
 
   discard EVP_DigestFinal_ex(ctx.evpCtx, addr result[0], addr i)
 
-proc finalRaw*(ctx: var SHA512ctx): SHA512Digest =
+proc finalRaw(ctx: var Sha512ctx): Sha512Digest =
   var i: cuint
 
   discard EVP_DigestFinal_ex(ctx.evpCtx, addr result[0], addr i)
 
-proc finalRaw*(ctx: var SHA3ctx): SHA3Digest =
+proc finalRaw(ctx: var Sha3ctx): Sha3Digest =
   var i: cuint
 
   discard EVP_DigestFinal_ex(ctx.evpCtx, addr result[0], addr i)
 
-proc final*(ctx: var SHA256ctx): string =
+proc final*(ctx: var Sha256ctx): string =
   tagToString(finalRaw(ctx))
 
-proc final*(ctx: var SHA512ctx): string =
+proc final*(ctx: var Sha512ctx): string =
   tagToString(finalRaw(ctx))
 
-proc final*(ctx: var SHA3ctx): string =
+proc final*(ctx: var Sha3ctx): string =
   tagToString(finalRaw(ctx))
 
-template final_hex*[T](ctx: var T): string =
+template finalHex*[T](ctx: var T): string =
   final(ctx).toHex().toLowerAscii()
 
-proc `$`*(tag: SHA256Digest|SHA512Digest|SHA3Digest): string =
+proc `$`*(tag: Sha256Digest|Sha512Digest|Sha3Digest): string =
   tagToString(tag)
 
-proc SHA256*(s: string): string =
-  var raw: SHA256Digest
+proc sha256*(s: string): string =
+  var raw: Sha256Digest
 
-  SHA256_raw(cstring(s), csize_t(s.len()), cast[cstring](addr raw))
-
-  return tagToString(raw)
-
-proc SHA512*(s: string): string =
-  var raw: SHA512Digest
-
-  SHA512_raw(cstring(s), csize_t(s.len()), cast[cstring](addr raw))
+  sha256_raw(cstring(s), csize_t(s.len()), cast[cstring](addr raw))
 
   return tagToString(raw)
 
-proc SHA3*(s: string): string =
-  var ctx: SHA3ctx
+proc sha512*(s: string): string =
+  var raw: Sha512Digest
 
-  initSHA[SHA3ctx](ctx)
+  sha512_raw(cstring(s), csize_t(s.len()), cast[cstring](addr raw))
+
+  return tagToString(raw)
+
+proc sha3*(s: string): string =
+  var ctx: Sha3ctx
+
+  initSha3(ctx)
   ctx.update(s)
   return ctx.final()
 
-template SHA256_hex*(s: string): string =
-  SHA256(s).toHex().toLowerAscii()
+template sha256Hex*(s: string): string =
+  sha256(s).toHex().toLowerAscii()
 
-template SHA512_hex*(s: string): string =
-  SHA512(s).toHex().toLowerAscii()
+template sha512Hex*(s: string): string =
+  sha512(s).toHex().toLowerAscii()
 
-template SHA3_hex*(s: string): string =
-  SHA3(s).toHex().toLowerAscii()
+template sha3Hex*(s: string): string =
+  sha3(s).toHex().toLowerAscii()
 
-proc HMAC_sha256*(key: string, s: string): string =
+proc hmacSha256*(key: string, s: string): string =
   var
-    tag: SHA256Digest
+    tag: Sha256Digest
     i:   cuint
   discard HMAC(EVP_sha256(), addr key[0], cint(key.len()),
-                     cstring(s), csize_t(s.len()), cast[cstring](addr tag),
-                     addr i)
+               cstring(s), csize_t(s.len()), cast[cstring](addr tag),
+               addr i)
   result = tagToString(tag)
 
-proc HMAC_sha512*(key: string, s: string): string =
+proc hmacSha512*(key: string, s: string): string =
   var
-    tag: SHA512Digest
+    tag: Sha512Digest
     i:   cuint
   discard HMAC(EVP_sha512(), addr key[0], cint(key.len()), cstring(s),
                 csize_t(s.len()), cast[cstring](addr tag), addr i)
   result = tagToString(tag)
 
-proc HMAC_sha3*(key: string, s: string): string =
+proc hmacSha3*(key: string, s: string): string =
   var
-    tag: SHA3Digest
+    tag: Sha3Digest
     i:   cuint
   discard HMAC(EVP_sha3_512(), addr key[0], cint(key.len()), cstring(s),
                 csize_t(s.len()), cast[cstring](addr tag), addr i)
 
   result = tagToString(tag)
 
-template HMAC_sha256_hex*(key: string, s: string): string =
-  HMAC_sha256(key, s).toHex().toLowerAscii()
+template hmacSha256Hex*(key: string, s: string): string =
+  hmacSha256(key, s).toHex().toLowerAscii()
 
-template HMAC_sha512_hex*(key: string, s: string): string =
-  HMAC_sha512(key, s).toHex().toLowerAscii()
+template hmacSha512Hex*(key: string, s: string): string =
+  hmacSha512(key, s).toHex().toLowerAscii()
 
-template HMAC_sha3_hex*(key: string, s: string): string =
-  HMAC_sha3(key, s).toHex().toLowerAscii()
+template hmacSha3Hex*(key: string, s: string): string =
+  hmacSha3(key, s).toHex().toLowerAscii()
 
 when isMainModule:
   import streams
   let text = newFileStream("logging.nim").readAll()
-  var ctx: SHA256ctx
+  var ctx: Sha256ctx
 
-  initSHA[SHA256ctx](ctx)
+  initSha256(ctx)
   ctx.update(text)
   echo ctx.final().toHex().toLowerAscii()
-  echo SHA256(text).toHex().toLowerAscii()
-  echo HMAC_sha256("foo", "bar").toHex().toLowerAscii()
-  echo HMAC_sha256_hex("foo", "bar")
+  echo Sha256(text).toHex().toLowerAscii()
+  echo hmacSha256("foo", "bar").toHex().toLowerAscii()
+  echo hmacSha256Hex("foo", "bar")
