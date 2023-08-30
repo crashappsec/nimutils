@@ -140,8 +140,6 @@ import os, strutils
 from sequtils import toSeq
 from sugar import `=>`, `->`
 
-import regex
-
 import regexer
 
 const
