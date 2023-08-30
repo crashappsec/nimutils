@@ -9,21 +9,21 @@
 ## NimAWS code is abandoned, so currently taking over it. Originally
 ## written by "Gooseus" and made available under an MIT license.  My
 ## few fixes have all been for compatability and are made under the
-## same license.
+## same license. I also migrated the crypto to openssl.
 ##
 ## formatstr is currently a copy of formatstr by G. Bareigts. It's not
 ## abandoned. Also MIT licensed, and not modified.
 ##
-## I've also moved nimSHA2 into here. I intend to get rid of the weird
-## crypto in nimAWS and replace nimSHA2 entirely via OpenSSL at some
-## point when I'm bored enough to do it; until then, this lives it
-## pinned. This also is MIT licensed, and was written by Andri Lim.
+## I am currently pulling in Glob, since the code seems 2.0 compat,
+## but the nimble file denies it.  I think I should remove this from
+## chalk, there are easy options if I wrap something in C.
 
 import nimutils/[box, random, unicodeid, pubsub, sinks, misc, ansi, texttable],
        nimutils/[file, process, filetable, encodings, advisory_lock, formatstr]
-import nimutils/[sha, aes]
+import nimutils/[sha, aes, glob]
 export box, random, unicodeid, pubsub, sinks, misc, random, ansi, texttable,
-       file, process, filetable, encodings, advisory_lock, formatstr, sha, aes
+       file, process, filetable, encodings, advisory_lock, formatstr, sha, aes,
+       glob
 
 ## Things we don't want to force people to consume need to be imported
 ## manually. Currently, that's:
