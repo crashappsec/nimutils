@@ -215,7 +215,7 @@ proc prp*(ctx: AES_CTX, input: string): string =
   result = newStringOfCap(16)
   ctx.aesCtx.EVP_EncryptUpdate(addr result[0], addr i, cstring(input), 16)
 
-proc initGcmEncrypt*(ctx: var GCM_CTX, key: string, nonce = ""):
+proc gcmInitEncrypt*(ctx: var GCM_CTX, key: string, nonce = ""):
             string {.discardable} =
 
   ctx.aesCtx = EVP_CIPHER_CTX_new()
@@ -233,14 +233,19 @@ proc initGcmEncrypt*(ctx: var GCM_CTX, key: string, nonce = ""):
   discard EVP_EncryptInit_ex(ctx.aesCtx, cipher, nil, cstring(key),
                               addr ctx.nonce[0])
 
-proc initGcmDecrypt*(ctx: var GCM_CTX, key: string) =
+proc gmacInit*(ctx: var GCM_CTX, key: string, nonce = ""):
+             string {.discardable} =
+
+  return gcmInitEncrypt(ctx, key, nonce)
+
+proc gcmInitDecrypt*(ctx: var GCM_CTX, key: string) =
 
   ctx.aesCtx = EVP_CIPHER_CTX_new()
   let cipher = getCipher(ctx.aesCtx, "GCM", key)
 
   EVP_DecryptInit_ex2(ctx.aesCtx, cipher, cstring(key), nil, nil)
 
-proc aesGcmEncrypt*(ctx: var GCM_CTX, msg: string, aad = ""): string =
+proc gcmEncrypt*(ctx: var GCM_CTX, msg: string, aad = ""): string =
   var outbuf: ptr char = cast[ptr char](alloc(len(msg) + 16))
 
   ctx.aad  = cstring(aad)
@@ -254,11 +259,17 @@ proc aesGcmEncrypt*(ctx: var GCM_CTX, msg: string, aad = ""): string =
   result = bytesToString(outbuf, len(msg) + 16)
   dealloc(outbuf)
 
-proc aesGcmGetNonce*(ctx: var GCM_CTX): string =
+proc gmac*(ctx: var GCM_CTX, msg: string): string =
+  return gcmEncrypt(ctx, msg = "", aad = msg)
+
+proc gcmGetNonce*(ctx: var GCM_CTX): string =
   for i, ch in ctx.nonce:
     result.add(char(ctx.nonce[i]))
 
-proc aesGcmDecrypt*(ctx: var GCM_CTX, msg: string, nonce: string,
+proc gmacGetNonce(ctx: var GCM_CTX): string =
+  return gcmGetNonce(ctx)
+
+proc gcmDecrypt*(ctx: var GCM_CTX, msg: string, nonce: string,
                     aad = ""): Option[string] =
   if len(msg) < 16:
     raise newException(ValueError, "Invalid GCM Ciphertext (too short)")
@@ -294,15 +305,15 @@ when isMainModule:
     ct:     string
     pt    = "This is a test between disco and death"
     key   = "0123456789abcdef"
-  initGcmEncrypt(encCtx, key)
-  initGcmDecrypt(decCtx, key)
+  gcmInitEncrypt(encCtx, key)
+  gcmInitDecrypt(decCtx, key)
 
   echo "Initial pt: ", pt
 
   for i in 1 .. 3:
-    ct    = encCtx.aesGcmEncrypt(pt)
-    nonce = encCtx.aesGcmGetNonce()
-    pt    = decCtx.aesGcmDecrypt(ct, nonce).get("<error>")
+    ct    = encCtx.gcmEncrypt(pt)
+    nonce = encCtx.gcmGetNonce()
+    pt    = decCtx.gcmDecrypt(ct, nonce).get("<error>")
 
     echo "Nonce: ", nonce.toHex().toLowerAscii()
     echo "CT: "
