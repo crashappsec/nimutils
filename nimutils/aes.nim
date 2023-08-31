@@ -195,6 +195,9 @@ proc EVP_DecryptInit_ex2(ctx: EVP_CIPHER_CTX, cipher: EVP_CIPHER,
 proc EVP_EncryptUpdate(ctx: EVP_CIPHER_CTX, outbuf: pointer, outlen: ptr cint,
                        inbuf: cstring, inlen: cint): cint
                         {.lcrypto,discardable,nodecl.}
+proc EVP_DecryptUpdate(ctx: EVP_CIPHER_CTX, outbuf: pointer, outlen: ptr cint,
+                       inbuf: cstring, inlen: cint): cint
+                        {.lcrypto,discardable,nodecl.}
 type
   AesCtx* = object
     aesCtx: EVP_CIPHER_CTX
