@@ -248,6 +248,15 @@ proc aesPrp*(ctx: AesCtx, input: string): string =
   ctx.aesCtx.EVP_EncryptUpdate(addr result[0], addr i, cstring(input),
                                cint(16))
 
+proc aesBrb*(ctx: AesCtx, input: string): string =
+  var i: cint
+  if len(input) != 16:
+    raise newException(ValueError, "The AES BRB operates on 16 byte strings.")
+
+  result = newStringOfCap(16)
+  ctx.aesCtx.EVP_DecryptUpdate(addr result[0], addr i, cstring(input),
+                               cint(16))
+
 proc gcmInitEncrypt*(ctx: var GcmCtx, key: string, nonce = ""):
             string {.discardable} =
 
@@ -371,7 +380,6 @@ proc gcmDecrypt*(ctx: var GcmCtx, msg: string, nonce: string,
 
   result = some(bytesToString(outbuf, len(msg) - 16))
   dealloc(outbuf)
-
 
 when isMainModule:
   import strutils, hexdump
