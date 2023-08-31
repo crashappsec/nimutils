@@ -119,9 +119,9 @@ proc prp*(key, toEncrypt: string, nonce: var string, randomNonce = true):
   return $(ctx.contents)
 
 proc brb*(key, toDecrypt: string, nonce: string): string =
-  if toDecrypt.len() < 32:
+  if toDecrypt.len() < 24:
     raise newException(ValueError, "Minimum supported length for " &
-      "messages encrypted with our PRP is 32 bytes")
+      "messages encrypted with our PRP is 24 bytes")
 
   var ctx = key.initPrpContext(nonce, toDecrypt)
   ctx.round4()
