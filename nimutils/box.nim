@@ -82,7 +82,9 @@ proc arrItemType*[T](a: openarray[T]): auto =
     return default(T)
 proc arrItemType*(a: BoxAtom): BoxAtom = a
 
-proc `==`*(box1, box2: Box): bool =
+
+proc `==`*(box1, box2: Box) : bool {.noSideEffect.} =
+  # The noSideEffect works around a bug in nim2.0
   if box1.kind != box2.kind:
     return false
 
@@ -95,12 +97,12 @@ proc `==`*(box1, box2: Box): bool =
       return box1.b == box2.b
     of MkStr:
       return box1.s == box2.s
-    of MkSeq:
-      return box1.c.s == box2.c.s
     of MkObj:
       return box1.o == box2.o
     of MkTable:
       return box1.t.t == box2.t.t
+    of MkSeq:
+      return box1.c.s == box2.c.s
 
 proc unpack*[T](box: Box): T =
     ## This recursively unpacks anything sitting in a Box, including
@@ -268,7 +270,7 @@ proc boxToJson*(b: Box): string =
     of MkSeq:
         result = "["
         for item in b.c.s:
-            if addComma: result = result & ", ": else: addComma = true
+            if addComma: result = result & ", " else: addComma = true
             result = result & item.boxToJSon()
         result = result & "]"
     of MkTable:

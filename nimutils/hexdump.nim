@@ -5,10 +5,14 @@
 #
 # :Author: John Viega (john@viega.org)
 
+import strutils
+
 {.emit: """
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
+#include <stdio.h>
+#include <string.h>
 
 const uint8_t hex_map[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
                               '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
@@ -35,6 +39,7 @@ calculate_size_prefix(uint64_t len, uint64_t start) {
 char *
 add_offset(char *inptr, uint64_t start_offset, uint64_t offset_len,
 	   uint64_t line, uint64_t cpl) {
+
     /*
     ** To not have to worry much about padding, we're going to add
     ** offset_len zeros and the two spaces. Then, we'll set hex
@@ -61,19 +66,13 @@ add_offset(char *inptr, uint64_t start_offset, uint64_t offset_len,
 }
 
 
-// This macro will be used below to output a single byte in hex.
-#define HEXCHAR() *outptr++ = hex_map[*inptr >> 4];   \
-                  *outptr++ = hex_map[*inptr & 0x0f]; \
-   	          *outptr++ = ' ';                    \
- 	          *inptr++;
-
 #define ASCIICHAR() if (*lineptr < 32 || *lineptr > 126) { \
                         *outptr++ = '.';                   \
            	    }                                      \
                     else {                                 \
  		        *outptr++ = *lineptr;              \
  	            }                                      \
- 	            *lineptr++;
+ 	            *lineptr++
 
 char *
 chex(void *ptr, unsigned int len, unsigned int start_offset,
@@ -88,6 +87,7 @@ chex(void *ptr, unsigned int len, unsigned int start_offset,
     char          *lineptr = inptr;
     char          *outptr;
     char 	  *ret;
+    uint8_t        c;
 
     if (width == 0) {
       ioctl(0, TIOCGWINSZ, &ws);
@@ -147,7 +147,7 @@ chex(void *ptr, unsigned int len, unsigned int start_offset,
     ** for the null terminator.
     */
 
-    alloc_len = (chars_per_line + 1) * num_lines + 1;
+    alloc_len = 4 * (chars_per_line + 1) * num_lines + 1;
     ret       = (char *)calloc(alloc_len, 1);
     outptr    = ret;
 
@@ -161,17 +161,28 @@ chex(void *ptr, unsigned int len, unsigned int start_offset,
     }
 
     for (int i = 0; i < num_lines; i++) {
-	// Hold onto the beginning of the line so we can go
-	// back through at the end for the ASCII bits.
 	outptr = add_offset(outptr, start_offset, offset_len, i,
-			    chars_per_line);
+                            chars_per_line);
 
 	// The inner loop is for quads.
-	for (int j = 0; j < chars_per_line / 4; j++) {
-	    HEXCHAR();
-	    HEXCHAR();
-	    HEXCHAR();
-	    HEXCHAR();
+        int n = chars_per_line / 4;
+	for (int j = 0; j < n; j++) {
+            c         = *inptr++;
+            *outptr++ = hex_map[(c >> 4)];
+            *outptr++ = hex_map[c & 0x0f];
+            *outptr++ = ' ';
+            c         = *inptr++;
+            *outptr++ = hex_map[(c >> 4)];
+            *outptr++ = hex_map[c & 0x0f];
+            *outptr++ = ' ';
+            c         = *inptr++;
+            *outptr++ = hex_map[(c >> 4)];
+            *outptr++ = hex_map[c & 0x0f];
+            *outptr++ = ' ';
+            c         = *inptr++;
+            *outptr++ = hex_map[(c >> 4)];
+            *outptr++ = hex_map[c & 0x0f];
+            *outptr++ = ' ';
 	    *outptr++ = ' ';
 	}
 	// Now for any ASCII-printable stuff, we emit it, or a '.' if not.
@@ -186,7 +197,7 @@ chex(void *ptr, unsigned int len, unsigned int start_offset,
     if (remainder != 0) {
 	// First, print the offset.
 	outptr = add_offset(outptr, start_offset, offset_len, num_lines,
-			    chars_per_line);
+        	            chars_per_line);
 
 	// Next, we need to know the position where the ASCII
 	// representation starts. We've skipped the offset plus pad,
@@ -196,15 +207,30 @@ chex(void *ptr, unsigned int len, unsigned int start_offset,
 
 	// Now, print any full groups of 4.
 	for (int i = 0; i < remainder / 4; i++) {
-	    HEXCHAR();
-	    HEXCHAR();
-	    HEXCHAR();
-	    HEXCHAR();
+            c         = *inptr++;
+            *outptr++ = hex_map[(c >> 4)];
+            *outptr++ = hex_map[c & 0x0f];
+            *outptr++ = ' ';
+            c         = *inptr++;
+            *outptr++ = hex_map[(c >> 4)];
+            *outptr++ = hex_map[c & 0x0f];
+            *outptr++ = ' ';
+            c         = *inptr++;
+            *outptr++ = hex_map[(c >> 4)];
+            *outptr++ = hex_map[c & 0x0f];
+            *outptr++ = ' ';
+            c         = *inptr++;
+            *outptr++ = hex_map[(c >> 4)];
+            *outptr++ = hex_map[c & 0x0f];
+            *outptr++ = ' ';
 	    *outptr++ = ' ';
 	}
 	// Now, print any leftover chars.
 	for (int i = 0; i < remainder % 4; i++) {
-	    HEXCHAR();
+            c         = *inptr++;
+            *outptr++ = hex_map[(c >> 4)];
+            *outptr++ = hex_map[c & 0x0f];
+            *outptr++ = ' ';
 	}
 
 	// Pad with spaces until we get to where the ASCII bits start.
@@ -221,18 +247,25 @@ chex(void *ptr, unsigned int len, unsigned int start_offset,
 	*outptr = '\n';
     }
 
-    return ret;
+  return ret;
 }
 
 """}
 
+proc hex*(s: string): string =
+  return s.toHex().toLowerAscii()
+
 proc rawHexDump(x: pointer, sz: cuint, offset: cuint, width: cuint):
-               cstring {.importc: "chex".}
+               cstring {.importc: "chex", cdecl.}
 
 proc hexDump*(x: pointer, sz: uint, offset: uint = 0, width = 0): string =
   # Hex dump memory from the
-  return $(rawHexDump(x, cuint(sz), cuint(offset), cuint(width)))
+  var tofree = rawHexDump(x, cuint(sz), cuint(offset), cuint(width))
+  result = $(tofree)
+  dealloc(tofree)
 
+proc strDump*(s: string): string =
+  result = hexDump(addr s[0], uint(len(s)))
 
 when isMainModule:
   var

@@ -1,3 +1,5 @@
 switch("d", "ssl")
 switch("d", "nimPreviewHashRef")
+switch("gc", "refc")
+switch("path", ".")
 #switch("d", "release")
