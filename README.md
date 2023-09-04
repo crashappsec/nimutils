@@ -24,7 +24,7 @@ APIs simple and obvious.
   suffix = ""): string`, `getNewTmpFile(prefix = "tmp", suffix = "")`
   , `registerTempFile(path: string)`, and `registerTmpDir(path:
   string)`
-  
+
 - An API for cross-process locking through lock-files:
   `writeViaLockFile(path, contents: string, release = true, maxAttempts = 5):
   bool` and `readViaLockFile*(path: string, release = true, maxAttempts
@@ -68,11 +68,11 @@ APIs simple and obvious.
 
 ```nim
   const t = newFileTable(".")  # t gets set at compile time.
-  
+
   for k, v in t:
     echo "Filename: ", k
     echo "Contents: ", v
-```    
+```
 
 Our super flexible getopt style API has moved to Con4m, where you can
 now spec rich command lines without writing any code at all.
@@ -86,7 +86,7 @@ been impossible to find something good in the Nim world till now:
   message integrity via AES-GCM (which is the default TLS
   algorithm). The API is designed to handle many messages (example
   below).
-  
+
 - The AES-GCM message authentication code has an API.
 
 - There's an EASY interface to SHA2-256, SHA2-512 and SHA3. Get the
