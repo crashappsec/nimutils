@@ -1,11 +1,11 @@
 # Edited from
-#            
+#
 #           Nim's Runtime Library
 #        (c) Copyright 2017 Nim contributors
 #
 #    See the file "copying.txt", included in this
 #    distribution, for details about the copyright.
-#  
+#
 #  (c) Copyright 2022 G. Bareigts
 #
 
