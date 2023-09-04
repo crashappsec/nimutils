@@ -4,12 +4,12 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include "cmark-gfm_export.h"
-#include "cmark-gfm_version.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define CMARK_GFM_EXPORT extern
 
 /** # NAME
  *
