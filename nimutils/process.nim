@@ -3,7 +3,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import misc, strutils, posix, file
+import misc, strutils, posix, file, os
 
 template runCmdGetOutput*(exe: string, args: seq[string]): string =
   execProcess(exe, args = args, options = {})
@@ -13,6 +13,24 @@ type ExecOutput* = object
     stderr*:   string
     exitCode*: int
 
+# Returns the exit code on normal exit; throws an exception otherwise.
+proc waitPidWithTimeout*(pid: Pid, timeoutms: int = 1000): int =
+  var
+    stat_ptr: cint
+    incr = int(timeoutms / 10)
+    i = 0
+
+  if incr == 0:
+    incr = 1
+
+  while true:
+    let pid = waitpid(pid, stat_ptr, WNOHANG)
+    if pid != -1:
+      return int(WEXITSTATUS(stat_ptr))
+    if i >= timeoutms:
+      raise newException(IoError, "Timeout")
+    i += incr
+    os.sleep(incr)
 
 when hostOs == "macosx":
   {.emit: """
@@ -88,7 +106,8 @@ template ccall*(code: untyped, success = 0) =
 
 proc runCmdGetEverything*(exe:      string,
                           args:     seq[string],
-                          newStdIn: string       = ""): ExecOutput =
+                          newStdIn: string       = "",
+                          timeoutMs              = 1000): ExecOutput =
   var
     stdOutPipe: array[0 .. 1, cint]
     stdErrPipe: array[0 .. 1, cint]
@@ -111,9 +130,13 @@ proc runCmdGetEverything*(exe:      string,
           "\n")
       ccall close(stdInPipe[1])
 
-    var stat_ptr: cint
-    discard waitpid(pid, stat_ptr, 0)
-    result.exitCode = int(WEXITSTATUS(stat_ptr))
+    try:
+      result.exitCode = waitpidWithTimeout(pid, timeoutMs)
+    except:
+      raise newException(IoError,
+       "Subprocess failed to exit exit after " & $(timeoutMs) & "ms .\n" &
+         "proces = " & exe & " " & args.join(" "))
+
     result.stdout   = readAllFromFd(stdOutPipe[0])
     result.stderr   = readAllFromFd(stdErrPipe[0])
     ccall close(stdOutPipe[0])
@@ -124,6 +147,10 @@ proc runCmdGetEverything*(exe:      string,
       ccall close(stdInPipe[1])
       discard dup2(stdInPipe[0], 0)
       ccall close(stdInPipe[0])
+    else:
+      let nullfd = open("/dev/null", O_RDONLY)
+      discard dup2(nullfd, 0)
+
     ccall close(stdOutPipe[0])
     ccall close(stdErrPipe[0])
     discard dup2(stdOutPipe[1], 1)
