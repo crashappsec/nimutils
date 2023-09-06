@@ -69,21 +69,28 @@ write_data(int fd, NCSTRING buf, NI nbytes) {
  }
 """.}
 
-proc readAllFromFd*(fd: cint): string =
+proc oneReadFromFd*(fd: cint): string =
   var
     buf: array[0 .. 4096, byte]
 
   while true:
     let n = read(fd, addr buf, 4096)
     if n > 0:
-      let s  = bytesToString(buf[0 ..< n])
-      result = result & s
+      return bytesToString(buf[0 ..< n])
     elif n == 0:
-        result = result & "\000"
-        return
-    else:
-      if errno != EINTR:
-        raise newException(IoError, $(strerror(errno)))
+      return ""
+    elif errno != EINTR:
+      raise newException(IoError, $(strerror(errno)))
+
+proc readAllFromFd*(fd: cint): string =
+
+  while true:
+    let val = fd.oneReadFromFd()
+
+    if val == "":
+      return result
+
+    result &= val
 
 proc fReadData*(fd: cint, buf: openarray[char]): bool {.importc: "read_data."}
 proc fWriteData*(fd: cint, buf: openarray[char]): bool {.importc: "write_data".}

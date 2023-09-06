@@ -104,10 +104,59 @@ template ccall*(code: untyped, success = 0) =
     echo ($(strerror(ret)))
     quit(1)
 
+proc readAllOutput*(pid: Pid, stdout, stderr: cint, timeoutUsec: int):
+                  ExecOutput =
+  var
+    toRead:   TFdSet
+    timeout:  Timeval
+    stat_ptr: cint
+    buf:      array[0 .. 4096, byte]
+
+
+
+  FD_ZERO(toRead)
+
+  timeout.tv_sec  = Time(timeoutUsec / 1000000)
+  timeout.tv_usec = Suseconds(timeoutUsec mod 1000000)
+
+  while true:
+    FD_SET(stdout, toRead)
+    FD_SET(stderr, toRead)
+
+    case select(2, addr toRead, nil, nil, addr timeout)
+    of 0:
+      let res = waitpid(pid, stat_ptr, WNOHANG)
+      if res != -1:
+        break
+      else:
+        raise newException(IOError, "Timeout exceeded while waiting for output")
+    of 2:
+      result.stdout &= stdout.oneReadFromFd()
+      result.stderr &= stderr.oneReadFromFd()
+    of 1:
+      if FD_ISSET(stdout, toRead) != 0:
+        result.stdout &= stdout.oneReadFromFd()
+      else:
+        result.stdout &= stdout.oneReadFromFd()
+    else:
+      if errno == EINVAL or errno == EBADF:
+        raise newException(ValueError, "Invalid parameter for select()")
+      else:
+        continue # EAGAIN or EINTR
+
+    let res = waitpid(pid, stat_ptr, WNOHANG)
+    if res != -1: # Process ended; break to drain.
+      break
+
+  result.stdout &= stdout.readAllFromFd()
+  result.stderr &= stderr.readAllFromFd()
+  result.exitCode = int(WEXITSTATUS(stat_ptr))
+
+
 proc runCmdGetEverything*(exe:      string,
                           args:     seq[string],
                           newStdIn: string       = "",
-                          timeoutMs              = 1000): ExecOutput =
+                          timeoutUsec            = 1000000): ExecOutput =
   var
     stdOutPipe: array[0 .. 1, cint]
     stdErrPipe: array[0 .. 1, cint]
@@ -130,15 +179,7 @@ proc runCmdGetEverything*(exe:      string,
           "\n")
       ccall close(stdInPipe[1])
 
-    try:
-      result.exitCode = waitpidWithTimeout(pid, timeoutMs)
-    except:
-      raise newException(IoError,
-       "Subprocess failed to exit exit after " & $(timeoutMs) & "ms .\n" &
-         "proces = " & exe & " " & args.join(" "))
-
-    result.stdout   = readAllFromFd(stdOutPipe[0])
-    result.stderr   = readAllFromFd(stdErrPipe[0])
+    result = readAllOutput(pid, stdoutPipe[0], stdErrPipe[0], timeoutUsec)
     ccall close(stdOutPipe[0])
     ccall close(stdErrPipe[0])
   else:
