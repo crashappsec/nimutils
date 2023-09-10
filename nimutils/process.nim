@@ -104,10 +104,114 @@ template ccall*(code: untyped, success = 0) =
     echo ($(strerror(ret)))
     quit(1)
 
+proc readAllOutput*(pid: Pid, stdout, stderr: cint, timeoutUsec: int):
+                  ExecOutput =
+  var
+    toRead:   TFdSet
+    timeout:  Timeval
+    stat_ptr: cint
+    buf:      array[0 .. 4096, byte]
+
+
+
+  FD_ZERO(toRead)
+
+  timeout.tv_sec  = Time(timeoutUsec / 1000000)
+  timeout.tv_usec = Suseconds(timeoutUsec mod 1000000)
+
+  while true:
+    FD_SET(stdout, toRead)
+    FD_SET(stderr, toRead)
+
+    case select(2, addr toRead, nil, nil, addr timeout)
+    of 0:
+      let res = waitpid(pid, stat_ptr, WNOHANG)
+      if res != -1:
+        break
+      else:
+        raise newException(IOError, "Timeout exceeded while waiting for output")
+    of 2:
+      result.stdout &= stdout.oneReadFromFd()
+      result.stderr &= stderr.oneReadFromFd()
+    of 1:
+      if FD_ISSET(stdout, toRead) != 0:
+        result.stdout &= stdout.oneReadFromFd()
+      else:
+        result.stdout &= stdout.oneReadFromFd()
+    else:
+      if errno == EINVAL or errno == EBADF:
+        raise newException(ValueError, "Invalid parameter for select()")
+      else:
+        continue # EAGAIN or EINTR
+
+    let res = waitpid(pid, stat_ptr, WNOHANG)
+    if res != -1: # Process ended; break to drain.
+      break
+
+  result.stdout &= stdout.readAllFromFd()
+  result.stderr &= stderr.readAllFromFd()
+  result.exitCode = int(WEXITSTATUS(stat_ptr))
+
+
+proc interactiveProxy*(pid: Pid, substdin, substdout, substderr: cint,
+                       showOut, captureOut, showErr, captureErr: bool):
+                         ExecOutput =
+  # TODO: non-blocking stdin
+
+  var
+    selectSet: TFdSet
+    stat_ptr:  cint
+    buf:       array[0 .. 4096, byte]
+
+  FD_ZERO(selectSet)
+
+  while true:
+    FD_SET(0,         selectSet)
+    FD_SET(substdout, selectSet)
+    FD_SET(substderr, selectSet)
+
+    case select(3, addr selectSet, nil, nil, nil)
+    of 0:
+      let res = waitpid(pid, stat_ptr, WNOHANG)
+      if res != -1:
+        break
+      else:
+        raise newException(IOError, "Error waiting for output")
+    else:
+      if FD_ISSET(0, selectSet) != 0:
+        let readFromStdin = oneReadFromFd(0)
+        discard fWriteData(substdin, readFromStdIn)
+      if FD_ISSET(substdout, selectSet) != 0:
+        let readFromSubOut = oneReadFromFd(substdout)
+        if showOut:
+          discard fWriteData(1, readFromSubOut)
+        if captureOut:
+          result.stdout &= readFromSubOut
+      if FD_ISSET(substderr, selectSet) != 0:
+        let readFromSubErr = oneReadFromFd(substderr)
+        if showErr:
+          discard fWriteData(2, readFromSubErr)
+        if captureErr:
+          result.stderr &= readFromSubErr
+
+  let
+    readFromSubOut = oneReadFromFd(substdout)
+    readFromSubErr = oneReadFromFd(substderr)
+
+  if showOut:
+    discard fWriteData(1, readFromSubOut)
+  if captureOut:
+    result.stdout &= readFromSubOut
+  if showErr:
+    discard fWriteData(2, readFromSubErr)
+    result.stderr &= readFromSubErr
+
+  result.exitCode = int(WEXITSTATUS(stat_ptr))
+
 proc runCmdGetEverything*(exe:      string,
                           args:     seq[string],
                           newStdIn: string       = "",
-                          timeoutMs              = 1000): ExecOutput =
+                          timeoutUsec            = 1000000): ExecOutput =
   var
     stdOutPipe: array[0 .. 1, cint]
     stdErrPipe: array[0 .. 1, cint]
@@ -130,15 +234,7 @@ proc runCmdGetEverything*(exe:      string,
           "\n")
       ccall close(stdInPipe[1])
 
-    try:
-      result.exitCode = waitpidWithTimeout(pid, timeoutMs)
-    except:
-      raise newException(IoError,
-       "Subprocess failed to exit exit after " & $(timeoutMs) & "ms .\n" &
-         "proces = " & exe & " " & args.join(" "))
-
-    result.stdout   = readAllFromFd(stdOutPipe[0])
-    result.stderr   = readAllFromFd(stdErrPipe[0])
+    result = readAllOutput(pid, stdoutPipe[0], stdErrPipe[0], timeoutUsec)
     ccall close(stdOutPipe[0])
     ccall close(stdErrPipe[0])
   else:
@@ -157,6 +253,41 @@ proc runCmdGetEverything*(exe:      string,
     discard dup2(stdErrPipe[1], 2)
     ccall close(stdOutPipe[1])
     ccall close(stdErrPipe[1])
+    ccall(execv(cstring(exe), cargs), -1)
+
+    stdout.write("error: " & exe & ": command not found\n")
+    quit(-1)
+
+proc runInteractiveCmd*(exe: string, args: seq[string], captureOut = true,
+                        showOut = true, captureErr = true, showErr = true):
+                          ExecOutput =
+  var
+    stdInPipe:  array[0 .. 1, cint]
+    stdOutPipe: array[0 .. 1, cint]
+    stdErrPipe: array[0 .. 1, cint]
+
+  ccall pipe(stdInPipe)
+  ccall pipe(stdOutPipe)
+  ccall pipe(stdErrPipe)
+
+  let pid = fork()
+  if pid != 0:
+    ccall close(stdInPipe[0])
+    ccall close(stdOutPipe[1])
+    ccall close(stdErrPipe[1])
+    result = interactiveProxy(pid, stdInPipe[1], stdOutPipe[0], stdErrPipe[0],
+                              showOut, captureOut, showErr, captureErr)
+    ccall close(stdInPipe[1])
+    ccall close(stdOutPipe[0])
+    ccall close(stdErrPipe[0])
+  else:
+    let cargs = allocCStringArray(@[exe] & args)
+    discard dup2(stdInPipe[0], 0)
+    discard dup2(stdOutPipe[1], 1)
+    discard dup2(stdErrPipe[1], 2)
+    ccall close(stdInPipe[1])
+    ccall close(stdOutPipe[0])
+    ccall close(stdErrPipe[0])
     ccall(execv(cstring(exe), cargs), -1)
 
     stdout.write("error: " & exe & ": command not found\n")
