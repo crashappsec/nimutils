@@ -55,26 +55,6 @@ proc parseDocument*(html: string): HtmlNode =
   make_gumbo(cstring(html), cast[pointer](addr walker))
   return walker.root
 
-proc showTree*(n: HtmlNode, indent = "") =
-  case n.kind
-  of HtmlText:
-    echo indent, "text = ", n.contents
-  of HtmlElement:
-    var
-      text = n.contents
-      attrs: seq[string]
-
-    for k, v in n.attrs:
-      attrs.add(k & " = " & v)
-
-    if len(attrs) != 0:
-      text &= " attrs: " & attrs.join("; ")
-    echo indent, text
-  else:
-    echo "Skipped: ", n.kind
-
-  for kid in n.children:
-    kid.showTree(indent & "  ")
 
 
 include "headers/gumbo.nim"
