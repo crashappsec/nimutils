@@ -24,7 +24,7 @@
 ## :Copyright: 2022
 
 import streams, unicode, strutils, std/terminal, misc
-import unicodedb/properties
+import unicodedb/properties, unicodedb/widths
 
 const magicRune* = Rune(0x200b)
 
@@ -90,7 +90,6 @@ proc isIdStart*(r: Rune, underscoreOk: bool = true): bool =
       return true
 
   return false
-
 
 # [\p{ID_Start}\p{Mn}\p{Mc}\p{Nd}\p{Pc}\p{Other_ID_Continue}-\p{Pattern_Syntax}
 #  -\p{Pattern_White_Space}]
@@ -158,6 +157,48 @@ type SpaceSaver* = ref object
   pre*:       string
   postRunes*: seq[Rune]
   stash*:     seq[seq[Rune]]
+
+proc isPrintable*(r: Rune): bool =
+  return r.unicodeCategory() in ctgL + ctgM + ctgN + ctgP + ctgS + ctgZs
+
+template isLineBreak*(r: Rune): bool =
+  r in [Rune(0x000d), Rune(0x000a), Rune(0x0085),
+        Rune(0x000b), Rune(0x2028)]
+
+template isParagraphBreak*(r: Rune): bool =
+  r == Rune(0x2029)
+
+template isPageBreak*(r: Rune): bool =
+  r == Rune(0x000c)
+
+template isSeparator*(r: Rune): bool =
+  r in [Rune(0x000d), Rune(0x000a), Rune(0x0085), Rune(0x000b),
+        Rune(0x2028), Rune(0x2029), Rune(0x000c)]
+
+proc runeWidth*(r: Rune): int =
+  let category = r.unicodeCategory()
+
+  if category in ctgMn + ctgMe + ctgCf:
+    return 0
+
+  if r == Rune(0x200b):
+    return 0
+
+  if int(r) >= int(Rune(0x1160)) and int(r) <= int(Rune(0x11ff)):
+    return 0
+
+  if r == Rune(0x00ad):
+    return 1
+
+  case r.unicodeWidth()
+  of uwdtFull, uwdtWide:
+    return 2
+  else:
+    return 1
+
+proc runeLength*(s: string): int =
+  for r in s.toRunes():
+    result += r.runeWidth()
 
 proc toSaver*(orig: string): (SpaceSaver, string) =
   ## This method stashes data drom a string that will impact width
