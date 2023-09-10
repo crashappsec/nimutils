@@ -13,11 +13,21 @@
 ##
 ## Paragraphs should be able to contain any other kind of segment.
 ##
+## TODO: padding on generic breaking containers, etc.
+## TODO: Apply color to bullets.
+## TODO: Tables.
+## TODO: Alignment for block styles.
+## TODO: Spacing around specific elements like li or ol
+## TODO: Add back cycle check
+## TODO: Test indentation
+##
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import os, unicode, unicodedb, unicodedb/widths, sugar, htmlparse,
-       tables, std/terminal, parseutils, options, managedtmp, posix
+import os, unicode, unicodedb, unicodedb/widths, unicodeid, sugar,
+       htmlparse, tables, std/terminal, parseutils, options, colortable
+# Remove these when done enough.
+import managedtmp, posix
 from strutils import join, startswith, replace
 
 let sigNameMap = { 1: "SIGHUP", 2: "SIGINT", 3: "SIGQUIT", 4: "SIGILL",
@@ -42,7 +52,6 @@ proc regularTerminationSignal(signal: cint) {.noconv.} =
     discard sigaddset(sigset, signal)
   discard sigprocmask(SIG_SETMASK, sigset, sigset)
 
-
   tmpfile_on_exit()
   exitnow(signal + 128)
 
@@ -58,358 +67,7 @@ proc setupSignalHandlers*() =
 
 setupSignalHandlers()
 
-
-# Taken from:HTML color list as found at:
-# https://en.wikipedia.org/wiki/Web_colors
-let colorTable* = {
-  "mediumvioletred"      : 0xc71585,
-  "deeppink"             : 0xff1493,
-  "palevioletred"        : 0xdb7093,
-  "hotpink"              : 0xff69b4,
-  "lightpink"            : 0xffb6c1,
-  "pink"                 : 0xffc0cb,
-  "darkred"              : 0x8b0000,
-  "red"                  : 0xff0000,
-  "firebrick"            : 0xb22222,
-  "crimson"              : 0xdc143c,
-  "indianred"            : 0xcd5c5c,
-  "lightcoral"           : 0xf08080,
-  "salmon"               : 0xfa8072,
-  "darksalmon"           : 0xe9967a,
-  "lightsalmon"          : 0xffa07a,
-  "orangered"            : 0xff4500,
-  "tomato"               : 0xff6347,
-  "darkorange"           : 0xff8c00,
-  "coral"                : 0xff7f50,
-  "orange"               : 0xffa500,
-  "darkkhaki"            : 0xbdb76b,
-  "gold"                 : 0xffd700,
-  "khaki"                : 0xf0e68c,
-  "peachpuff"            : 0xffdab9,
-  "yellow"               : 0xffff00,
-  "palegoldenrod"        : 0xeee8aa,
-  "moccasin"             : 0xffe4b5,
-  "papayawhip"           : 0xffefd5,
-  "lightgoldenrodyellow" : 0xfafad2,
-  "lemonchiffon"         : 0xfffacd,
-  "lightyellow"          : 0xffffe0,
-  "maroon"               : 0x800000,
-  "brown"                : 0xa52a2a,
-  "saddlebrown"          : 0x8b4513,
-  "sienna"               : 0xa0522d,
-  "chocolate"            : 0xd2691e,
-  "darkgoldenrod"        : 0xb8860b,
-  "peru"                 : 0xcd853f,
-  "rosybrown"            : 0xbc8f8f,
-  "goldenrod"            : 0xdaa520,
-  "sandybrown"           : 0xfaa460,
-  "tan"                  : 0xd2b48c,
-  "burlywood"            : 0xdeb887,
-  "wheat"                : 0xf5deb3,
-  "navajowhite"          : 0xffdead,
-  "bisque"               : 0xffe4c4,
-  # If I 'fix' the last letter, kitty turns it black??
-  "blanchedalmond"       : 0xffebcc,
-  "cornsilk"             : 0xfff8cd,
-  "indigo"               : 0x4b0082,
-  "purple"               : 0x800080,
-  "darkmagenta"          : 0x8b008b,
-  "darkviolet"           : 0x9400d3,
-  "darkslateblue"        : 0x483d8b,
-  "blueviolet"           : 0x8a2be2,
-  "darkorchid"           : 0x9932cc,
-  "fuchsia"              : 0xff00ff,
-  "magenta"              : 0xff00ff,
-  "slateblue"            : 0x6a5acd,
-  "mediumslateblue"      : 0x7b68ee,
-  "mediumorchid"         : 0xba55d3,
-  "mediumpurple"         : 0x9370db,
-  "orchid"               : 0xda70d6,
-  "violet"               : 0xee82ee,
-  "plum"                 : 0xdda0dd,
-  "thistle"              : 0xd8bfd8,
-  "lavender"             : 0xe6e6fa,
-  "midnightblue"         : 0x191970,
-  "navy"                 : 0x000080,
-  "darkblue"             : 0x00008b,
-  "mediumblue"           : 0x0000cd,
-  "blue"                 : 0x0000ff,
-  "royalblue"            : 0x4169e1,
-  "steelblue"            : 0x4682b4,
-  "dodgerblue"           : 0x1e90ff,
-  "deepskyblue"          : 0x00bfff,
-  "cornflowerblue"       : 0x6495ed,
-  "skyblue"              : 0x87ceeb,
-  "lightskyblue"         : 0x87cefa,
-  "lightsteelblue"       : 0xb0c4de,
-  "lightblue"            : 0xadd8e6,
-  "powderblue"           : 0xb0e0e6,
-  "teal"                 : 0x008080,
-  "darkcyan"             : 0x008b8b,
-  "lightseagreen"        : 0x20b2aa,
-  "cadetblue"            : 0x5f9ea0,
-  "darkturquoise"        : 0x00ced1,
-  "mediumturquoise"      : 0x48d1cc,
-  "turquoise"            : 0x40e0d0,
-  "aqua"                 : 0x00ffff,
-  "cyan"                 : 0x00ffff,
-  "aquamarine"           : 0x7fffd4,
-  "paleturquoise"        : 0xafeeee,
-  "lightcyan"            : 0xe0ffff,
-  "darkgreen"            : 0x006400,
-  "green"                : 0x008000,
-  "darkolivegreen"       : 0x556b2f,
-  "forestgreen"          : 0x228b22,
-  "seagreen"             : 0x2e8b57,
-  "olive"                : 0x808000,
-  "olivedrab"            : 0x6b8e23,
-  "mediumseagreen"       : 0x3cb371,
-  "limegreen"            : 0x32cd32,
-  "lime"                 : 0x00ff00,
-  "springgreen"          : 0x00ff7f,
-  "mediumspringgreen"    : 0x00fa9a,
-  "darkseagreen"         : 0x8fbc8f,
-  "mediumaquamarine"     : 0x66cdaa,
-  "yellowgreen"          : 0x9acd32,
-  "lawngreen"            : 0x7cfc00,
-  "chartreuse"           : 0x7fff00,
-  "lightgreen"           : 0x90ee90,
-  "greenyellow"          : 0xadff2f,
-  "palegreen"            : 0x98fb98,
-  "mistyrose"            : 0xffe4e1,
-  "antiquewhite"         : 0xfaebd7,
-  "linen"                : 0xfaf0e6,
-  "beige"                : 0xf5f5dc,
-  "whitesmoke"           : 0xf5f5f5,
-  "lavenderblush"        : 0xfff0f5,
-  "oldlace"              : 0xfdf5e6,
-  "aliceblue"            : 0xf0f8ff,
-  "seashell"             : 0xfff5ee,
-  "ghostwhite"           : 0xf8f8ff,
-  "honeydew"             : 0xf0fff0,
-  "floaralwhite"         : 0xfffaf0,
-  "azure"                : 0xf0ffff,
-  "mintcream"            : 0xf5fffa,
-  "snow"                 : 0xfffafa,
-  "ivory"                : 0xfffff0,
-  "white"                : 0xffffff,
-  "black"                : 0x000000,
-  "darkslategray"        : 0x2f4f4f,
-  "dimgray"              : 0x696969,
-  "slategray"            : 0x708090,
-  "gray"                 : 0x808080,
-  "lightslategray"       : 0x778899,
-  "darkgray"             : 0xa9a9a9,
-  "silver"               : 0xc0c0c0,
-  "lightgray"            : 0xd3d3d3,
-  "gainsboro"            : 0xdcdcdc
-}.toOrderedTable()
-
-# These, on the other hand, I tried to eyeball match by printing next
-# to the 24-bit value above and adjusting manually.
-#
-# Google doesn't help here, but my terminals seem pretty consistent,
-# even though I don't think there's an explicit standard, and
-# different terminals have definitely done different things in the
-# past.
-#
-# Someone should script up some A/B testing to hone in on some of
-# these better, but this all looks good enough for now.
-
-let color8Bit =  {
-  "mediumvioletred"      : 126,
-  "deeppink"             : 206, # Pretty off still. 201, 199
-  "palevioletred"        : 167, # Still kinda off. 210, 211
-  "hotpink"              : 205,
-  "lightpink"            : 217,
-  "pink"                 : 218,
-  "darkred"              : 88,
-  "red"                  : 9,
-  "firebrick"            : 124,
-  "crimson"              : 160, # Meh. 88, 124,
-  "indianred"            : 167,
-  "lightcoral"           : 210,
-  "salmon"               : 210, # 217, 216,
-  "darksalmon"           : 173,
-  "lightsalmon"          : 209,
-  "orangered"            : 202,
-  "tomato"               : 202, # 166,, 196
-  "darkorange"           : 208,
-  "coral"                : 210, # 203,
-  "orange"               : 214,
-  "darkkhaki"            : 143,
-  "gold"                 : 220,
-  "khaki"                : 228,
-  "peachpuff"            : 223,
-  "yellow"               : 11, # 3
-  "palegoldenrod"        : 230, # 228, #178, 143
-  "moccasin"             : 230, # 229, # 143, # 217, #
-  "papayawhip"           : 230, # 143, # 224,
-  "lightgoldenrodyellow" : 230, # 227,
-  "lemonchiffon"         : 230, # 178,
-  "lightyellow"          : 230, # 231+194 (some green), # 187,
-  "maroon"               : 88, # 1,
-  "brown"                : 94, # 130, # 166,
-  "saddlebrown"          : 95, # 94,
-  "sienna"               : 95, # 96, # 137,
-  "chocolate"            : 172, # 166, # 131,
-  "darkgoldenrod"        : 136,
-  "peru"                 : 137, #96, #172, # 137, #
-  "rosybrown"            : 138,
-  "goldenrod"            : 172, #138, # 227,
-  "sandybrown"           : 215,
-  "tan"                  : 180, #180
-  "burlywood"            : 180, #
-  "wheat"                : 223, # 229,
-  "navajowhite"          : 223, # 229, # 144,
-  "bisque"               : 223, #224-- too salmony
-  "blanchedalmond"       : 223, # 223,
-  "cornsilk"             : 230,
-  "indigo"               : 57, # 56, # 54,
-  "purple"               : 91, # 53, # 52, # 55, # 53,
-  "darkmagenta"          : 91,
-  "darkviolet"           : 91, # 99, # 128,
-  "darkslateblue"        : 61, # 17,
-  "blueviolet"           : 99, # 91, # 62, # 57,
-  "darkorchid"           : 91, # 55, # 92,
-  "fuchsia"              : 5,
-  "magenta"              : 5,
-  "slateblue"            : 62,
-  "mediumslateblue"      : 62, # 99,
-  "mediumorchid"         : 134,
-  "mediumpurple"         : 104,
-  "orchid"               : 170,
-  "violet"               : 177,
-  "plum"                 : 219,
-  "thistle"              : 225,
-  "lavender"             : 189,
-  "midnightblue"         : 17,
-  "navy"                 : 18,
-  "darkblue"             : 19,
-  "mediumblue"           : 20,
-  "blue"                 : 21,
-  "royalblue"            : 12,
-  "steelblue"            : 67,
-  "dodgerblue"           : 33,
-  "deepskyblue"          : 39,
-  "cornflowerblue"       : 69,
-  "skyblue"              : 117,
-  "lightskyblue"         : 153,
-  "lightsteelblue"       : 153, #37, #180, #253, # 147,
-  "lightblue"            : 152, # 117,
-  "powderblue"           : 152, # 117, #116,
-  "teal"                 : 37,
-  "darkcyan"             : 37,
-  "lightseagreen"        : 37,
-  "cadetblue"            : 73,
-  "darkturquoise"        : 44,
-  "mediumturquoise"      : 80,
-  "turquoise"            : 44, #43
-  "aqua"                 : 6,
-  "cyan"                 : 6,
-  "aquamarine"           : 122,
-  "paleturquoise"        : 159,
-  "lightcyan"            : 195,
-  "darkgreen"            : 22,
-  "green"                : 28,
-  "darkolivegreen"       : 108, #58,
-  "forestgreen"          : 28,
-  "seagreen"             : 29, #23, # 35,
-  "olive"                : 100,
-  "olivedrab"            : 100, #58,
-  "mediumseagreen"       : 35, # 37,
-  "limegreen"            : 40,
-  "lime"                 : 10,
-  "springgreen"          : 48,
-  "mediumspringgreen"    : 49,
-  "darkseagreen"         : 108,
-  "mediumaquamarine"     : 79,
-  "yellowgreen"          : 148,
-  "lawngreen"            : 119,
-  "chartreuse"           : 118,
-  "lightgreen"           : 120,
-  "greenyellow"          : 154,
-  "palegreen"            : 120, # 156,
-  "mistyrose"            : 224, # 212,
-  "antiquewhite"         : 230,
-  "linen"                : 230, #224,
-  "beige"                : 230, #229,
-  "whitesmoke"           : 230, # 116,
-  "lavenderblush"        : 231, #225,
-  "oldlace"              : 231,
-  "aliceblue"            : 231, #81,
-  "seashell"             : 231, # 223,
-  "ghostwhite"           : 231, # 189,
-  "honeydew"             : 231, # 194,
-  "floaralwhite"         : 231,
-  "azure"                : 231,
-  "mintcream"            : 231,
-  "snow"                 : 231,
-  "ivory"                : 7,
-  "white"                : 15,
-  "black"                : 0,
-  "darkslategray"        : 236, # 8,
-  "dimgray"              : 242,
-  "slategray"            : 245,
-  "gray"                 : 8,
-  "lightslategray"       : 245,
-  "darkgray"             : 247,
-  "silver"               : 250,
-  "lightgray"            : 250,
-  "gainsboro"            : 252
-}.toOrderedTable()
-
-var  showColor = if existsEnv("NO_COLOR"): false else: true
-
-proc setShowColor*(val: bool) =
-  showColor = val
-
-proc getShowColor*(): bool =
-  return showColor
-
 const defaultTextWidth* {.intdefine.} = 80
-
-proc isPrintable*(r: Rune): bool =
-  return r.unicodeCategory() in ctgL + ctgM + ctgN + ctgP + ctgS + ctgZs
-
-template isLineBreak*(r: Rune): bool =
-  r in [Rune(0x000d), Rune(0x000a), Rune(0x0085),
-        Rune(0x000b), Rune(0x2028)]
-
-template isParagraphBreak*(r: Rune): bool =
-  r == Rune(0x2029)
-
-template isPageBreak*(r: Rune): bool =
-  r == Rune(0x000c)
-
-template isSeparator*(r: Rune): bool =
-  r in [Rune(0x000d), Rune(0x000a), Rune(0x0085), Rune(0x000b),
-        Rune(0x2028), Rune(0x2029), Rune(0x000c)]
-
-proc runeWidth*(r: Rune): int =
-  let category = r.unicodeCategory()
-
-  if category in ctgMn + ctgMe + ctgCf:
-    return 0
-
-  if r == Rune(0x200b):
-    return 0
-
-  if int(r) >= int(Rune(0x1160)) and int(r) <= int(Rune(0x11ff)):
-    return 0
-
-  if r == Rune(0x00ad):
-    return 1
-
-  case r.unicodeWidth
-  of uwdtFull, uwdtWide:
-    return 2
-  else:
-    return 1
-
-proc runeLength*(s: string): int =
-  for r in s.toRunes():
-    result += r.runeWidth()
 
 type
   FmtKind* = enum
@@ -419,10 +77,22 @@ type
     OIgnore, OTruncate, ODots, Overflow, OWrap, OIndent, OHardWrap
 
   TextCasing* = enum
-    CasingAsIs, CasingLower, CasingUpper, CasingTitle
+    CasingIgnore, CasingAsIs, CasingLower, CasingUpper, CasingTitle
+
+  BoldPref* = enum
+    BoldIgnore, BoldOn, BoldOff
+
+  InversePref* = enum
+    InverseIgnore, InverseOn, InverseOff
+
+  StrikeThruPref* = enum
+    StrikeThruIgnore, StrikeThruOn, StrikeThruOff
+
+  ItalicPref* = enum
+    ItalicIgnore, ItalicOn, ItalicOff
 
   UnderlineStyle* = enum
-    UlNone, UlSingle, UlDouble
+    UnderlineIgnore, UnderlineNone, UnderlineSingle, UnderlineDouble
 
   FormattedOutput* = object
     contents:        seq[string]
@@ -432,29 +102,30 @@ type
     finalBreak:      bool
 
   FmtStyle* = ref object  # For terminal formatting.
-    textColor*:        string   # "" inherits.
-    bgColor*:          string
-    overflow*:         OverflowPreference = OIndent
-    wrapIndent*:       int        = 2
-    lpad*:             int        = 0
-    rpad*:             int        = 0
-    lpadChar*:         Rune       = Rune(' ') # Assumed to be width 1.
-    rpadChar*:         Rune       = Rune(' ') # Assumed to be width 1.
-    casing*:           TextCasing
-    paragraphSpacing*: int        = 1
-    lineSep*:          string     = "\n"
-    bold*:             bool
-    inverse*:          bool
-    strikethrough*:    bool
-    italic*:           bool
-    underlineStyle*:   UnderlineStyle
-    unicodeOverAnsi*:  bool = true
-    color24Bit*:       bool = false
+    textColor:        Option[string]
+    bgColor:          Option[string]
+    overflow:         Option[OverflowPreference]
+    wrapIndent:       Option[int]
+    lpad:             Option[int]
+    rpad:             Option[int]
+    lpadChar:         Option[Rune]
+    rpadChar:         Option[Rune]
+    casing:           Option[TextCasing]
+    paragraphSpacing: Option[int]
+    bold:             Option[bool]
+    inverse:          Option[bool]
+    strikethrough:    Option[bool]
+    italic:           Option[bool]
+    underlineStyle:   Option[UnderlineStyle]
+    bulletChar:       Option[Rune]
+    bulletTextColor:  Option[string]
+    bulletTextBg:     Option[string]
 
   FmtState* = object
     availableWidth: int
-    totalWidth: int
-    curStyle:   FmtStyle
+    totalWidth:     int
+    curStyle:       FmtStyle
+    styleStack:     seq[FmtStyle]
 
   RopeKind* = enum
     RopeAtom, RopeBreak, RopeList, RopeTable, RopeTableRow, RopeTableRows,
@@ -472,8 +143,8 @@ type
     next:        Rope
     prev:        Rope
     cycle:       bool
-    breakPoint:  bool
     style*:      FmtStyle  # Style options for this node
+    tag*:        string
     inherited:   FmtStyle
 
     case kind*: RopeKind
@@ -487,9 +158,9 @@ type
       url*: string
       toHighlight*: Rope
     of RopeList:
-      ordered*: bool
-      prefBullet*: string
       items*: seq[Rope]
+    of RopeTaggedContainer, RopeAlignedContainer:
+      contained*: Rope
     of RopeTable:
       thead*:   Rope # RopeTableRows
       tbody*:   Rope # RopeTableRows
@@ -497,43 +168,293 @@ type
       caption*: Rope # RopeTaggedContainer
     of RopeTableRow, RopeTableRows:
       cells*: seq[Rope]
-    of RopeTaggedContainer, RopeAlignedContainer:
-      tag*: string
-      contained*: Rope
+    of RopeFgColor, RopeBgColor:
+      color*: string
+      toColor*: Rope
     of RopeCustom:
       contents*: RootRef
       toString*: (Rope) -> string
       ropeCopy*: (var Rope, Rope) -> void
-    of RopeFgColor, RopeBgColor:
-      color*: string
-      toColor*: Rope
 
 template setAtomLength(r: Rope) =
   if r.length == 0:
     for ch in r.text:
       r.length += ch.runeWidth()
 
+proc copyStyle*(inStyle: FmtStyle): FmtStyle =
+  result = FmtStyle(textColor:       inStyle.textColor,
+                    bgColor:         inStyle.bgColor,
+                    overflow:        inStyle.overFlow,
+                    wrapIndent:      inStyle.wrapIndent,
+                    lpad:            inStyle.lpad,
+                    rpad:            inStyle.rpad,
+                    lpadChar:        inStyle.lpadChar,
+                    rpadChar:        inStyle.rpadChar,
+                    casing:          inStyle.casing,
+                    bold:            inStyle.bold,
+                    inverse:         inStyle.inverse,
+                    strikethrough:   inStyle.strikethrough,
+                    italic:          inStyle.italic,
+                    underlineStyle:  inStyle.underlineStyle,
+                    bulletChar:      inStyle.bulletChar,
+                    bulletTextColor: inStyle.bulletTextColor,
+                    bulletTextBg:    inStyle.bulletTextBg)
+
+proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
+  result = base.copyStyle()
+  if changes == nil:
+    return
+  if changes.textColor.isSome():
+    result.textColor = changes.textColor
+  if changes.bgColor.isSome():
+    result.bgColor = changes.bgColor
+  if changes.overflow.isSome():
+    result.overflow = changes.overflow
+  if changes.wrapIndent.isSome():
+    result.wrapIndent = changes.wrapIndent
+  if changes.lpad.isSome():
+    result.lpad = changes.lpad
+  if changes.rpad.isSome():
+    result.rpad = changes.rpad
+  if changes.lpadChar.isSome():
+    result.lpadChar = changes.lpadChar
+  if changes.rpadChar.isSome():
+    result.rpadChar = changes.rpadChar
+  if changes.casing.isSome():
+    result.casing = changes.casing
+  if changes.bold.isSome():
+    result.bold = changes.bold
+  if changes.inverse.isSome():
+    result.inverse = changes.inverse
+  if changes.strikethrough.isSome():
+    result.strikethrough = changes.strikethrough
+  if changes.italic.isSome():
+    result.italic = changes.italic
+  if changes.underlineStyle.isSome():
+    result.underlineStyle = changes.underlineStyle
+  if changes.bulletChar.isSome():
+    result.bulletChar = changes.bulletChar
+  if changes.bulletTextColor.isSome():
+    result.bulletTextColor = changes.bulletTextColor
+  if changes.bulletTextBg.isSome():
+    result.bulletTextBg = changes.bulletTextBg
+
+proc getFgColor(s: FmtState): Option[string] =
+  return s.curStyle.textColor
+
+proc getBgColor(s: FmtState): Option[string] =
+  return s.curStyle.bgColor
+
+proc getOverflow(s: FmtState): OverflowPreference =
+  return s.curStyle.overflow.get(OWrap)
+
+proc getWrapIndent(s: FmtState): int =
+  return s.curStyle.wrapIndent.get(0)
+
+proc getLpad(s: FmtState): int =
+  return s.curStyle.lpad.get(0)
+
+proc getRpad(s: FmtState): int =
+  return s.curStyle.lpad.get(0)
+
+proc getLpadChar(s: FmtState): Rune =
+  return s.curStyle.lpadChar.get(Rune(' '))
+
+proc getRpadChar(s: FmtState): Rune =
+  return s.curStyle.lpadChar.get(Rune(' '))
+
+proc getCasing(s: FmtState): TextCasing =
+  return s.curStyle.casing.get(CasingAsIs)
+
+proc getParagraphSpacing(s: FmtState): int =
+  return s.curStyle.paragraphSpacing.get(1)
+
+proc getBold(s: FmtState): bool =
+  return s.curStyle.bold.get(false)
+
+proc getInverse(s: FmtState): bool =
+  return s.curStyle.inverse.get(false)
+
+proc getStrikethrough(s: FmtState): bool =
+  return s.curStyle.strikethrough.get(false)
+
+proc getItalic(s: FmtState): bool =
+  return s.curStyle.italic.get(false)
+
+proc getUnderlineStyle(s: FmtState): UnderlineStyle =
+  return s.curStyle.underlineStyle.get(UnderlineNone)
+
+proc getBulletChar(s: FmtState): Option[Rune] =
+  return s.curStyle.bulletChar
+
+proc getBulletTextColor(s: FmtState): Option[string] =
+  return s.curStyle.bulletTextColor
+
+proc getBulletTextBg(s: FmtState): Option[string] =
+  return s.curStyle.bulletTextBg
+
+proc combineFormattedOutput(a: var FormattedOutput, b: FormattedOutput) =
+  if b.startsWithBreak:
+    a.finalBreak = true
+  if a.finalBreak:
+    a.contents   &= b.contents
+    a.lineWidths &= b.lineWidths
+    if b.maxWidth > a.maxWidth:
+      a.maxWidth = b.maxWidth
+    a.finalBreak = b.finalBreak
+
+  elif len(a.contents) != 0 and len(b.contents) != 0:
+    a.contents[^1] &= b.contents[0]
+    a.lineWidths[^1] = a.lineWidths[^1] + b.lineWidths[0]
+    if a.maxWidth < a.lineWidths[^1]:
+      a.maxWidth = a.lineWidths[^1]
+    if len(b.contents) > 1:
+      a.contents   &= b.contents[1 .. ^1]
+      a.lineWidths &= b.lineWidths[1 .. ^1]
+      if b.maxWidth > a.maxWidth:
+        a.maxWidth = b.maxWidth
+    a.finalBreak = b.finalBreak
+  elif len(a.contents) == 0:
+    a = b
+
+proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
+               wrapIndent = -1, lpad = -1, rpad = -1, lPadChar = Rune(0x0000),
+               rpadChar = Rune(0x0000), casing = CasingIgnore,
+               paragraphSpacing = -1, bold = BoldIgnore,
+               inverse = InverseIgnore, strikethru = StrikeThruIgnore,
+               italic = ItalicIgnore, underline = UnderlineIgnore): FmtStyle =
+    result = FmtStyle()
+
+    if fgColor != "":
+      result.textColor = some(fgColor)
+    if bgColor != "":
+      result.bgColor   = some(bgColor)
+    if overflow != OIgnore:
+      result.overFlow = some(overflow)
+    if wrapIndent >= 0:
+      result.wrapIndent = some(wrapIndent)
+    if lpad >= 0:
+      result.lpad = some(lpad)
+    if rpad >= 0:
+      result.rpad = some(rpad)
+    if lpadChar != Rune(0x0000):
+      result.lpadChar = some(lpadChar)
+    if rpadChar != Rune(0x0000):
+      result.rpadChar = some(rpadChar)
+    if casing != CasingIgnore:
+      result.casing = some(casing)
+    if paragraphSpacing > 0:
+      result.paragraphSpacing = some(paragraphSpacing)
+    case bold
+    of BoldOn:
+      result.bold = some(true)
+    of BoldOff:
+      result.bold = some(false)
+    else:
+      discard
+    case inverse
+    of InverseOn:
+      result.inverse = some(true)
+    of InverseOff:
+      result.inverse = some(false)
+    else:
+      discard
+    case strikethru
+    of StrikeThruOn:
+      result.strikethrough = some(true)
+    of StrikeThruOff:
+      result.strikethrough = some(false)
+    else:
+      discard
+    case italic
+    of ItalicOn:
+      result.italic = some(true)
+    of ItalicOff:
+      result.italic = some(false)
+    else:
+      discard
+    if underline != UnderlineIgnore:
+      result.underlineStyle = some(underline)
+
 var
-  defaultStyle* = FmtStyle()
+  defaultStyle* = newStyle(overflow = OWrap, rpad = 1, lpadChar = Rune(' '),
+                           lpad = 0, rpadChar = Rune(' '), paragraphSpacing = 1)
+
   styleMap*: Table[string, FmtStyle] = {
-    "title" : FmtStyle(bgColor: "white", textColor: "blue", italic: true,
-                       casing: CasingTitle),
-    "h1" : FmtStyle(textColor: "blue", bgColor: "white", bold: true,
-                    italic: true, casing: CasingTitle),
-    "h2" : FmtStyle(textColor: "dodgerblue", italic: true,
-                    underlineStyle: UlDouble, casing: CasingTitle),
-    "h3" : FmtStyle(textColor: "skyblue", italic: true,
-                    underlineStyle: UlSingle, casing: CasingTitle),
-    "h4" : FmtStyle(textColor: "powderblue", bgColor: "black", italic: true,
-                    casing: CasingTitle),
-    "h5" : FmtStyle(textColor: "powderblue", bgColor: "black",
-                    underlineStyle: UlSingle, casing: CasingTitle),
-    "h6" : FmtStyle(textColor: "powderblue", bgColor: "black",
-                    casing: CasingTitle)
+    "h1" : FmtStyle(bgColor: some("white"), textColor: some("blue"),
+                       bold: some(true), italic: some(true),
+                       casing: some(CasingUpper)),
+    "h2" : FmtStyle(textColor: some("blue"), bgColor: some("white"),
+                    bold: some(true), italic: some(true),
+                    casing: some(CasingTitle)),
+    "h3" : FmtStyle(textColor: some("dodgerblue"), italic: some(true),
+                    underlineStyle: some(UnderlineDouble), casing:
+                      some(CasingTitle)),
+    "h4" : FmtStyle(textColor: some("skyblue"), italic: some(true),
+                    underlineStyle: some(UnderlineSingle),
+                    casing: some(CasingTitle)),
+    "h5" : FmtStyle(textColor: some("powderblue"), bgColor: some("black"),
+                    italic: some(true), casing: some(CasingTitle)),
+    "h6" : FmtStyle(textColor: some("powderblue"), bgColor: some("black"),
+                    underlineStyle: some(UnderlineSingle),
+                    casing: some(CasingTitle)),
+    "ol" : FmtStyle(bulletChar: some(Rune('.')), lpad: some(2)),
+    "ul" : FmtStyle(bulletchar: some(Rune(0x2022)), lpad: some(2)) #•
     }.toTable()
+
+  breakingStyles*: Table[string, bool] = {
+    "p"          : true,
+    "div"        : true,
+    "ol"         : true,
+    "ul"         : true,
+    "li"         : true,
+    "blockquote" : true,
+    "code"       : true,
+    "pre"        : true,
+    "q"          : true,
+    "small"      : true,
+    "td"         : true,
+    "th"         : true,
+    "title"      : true,
+    "h1"         : true,
+    "h2"         : true,
+    "h3"         : true,
+    "h4"         : true,
+    "h5"         : true,
+    "h6"         : true
+    }.toTable()
+
+template withStyle(state: var FmtState, style: FmtStyle, code: untyped) =
+  # This is used when converting a rope back to a string to output.
+  state.styleStack.add(state.curStyle)
+  state.curStyle = state.curStyle.mergeStyles(style)
+  code
+  state.curStyle = state.styleStack.pop()
+
+template withStyleAndTag(state: var FmtState, style: FmtStyle, tag: string,
+                         code: untyped) =
+  state.styleStack.add(state.curStyle)
+  if tag in styleMap:
+    var newStyle   = state.curStyle.mergeStyles(styleMap[tag])
+    state.curStyle = newStyle.mergeStyles(style)
+  else:
+    state.curStyle = state.curStyle.mergeStyles(style)
+  code
+  state.curStyle = state.styleStack.pop()
+
+template withTag(state: var FmtState, tag: string, code: untyped) =
+  if tag in styleMap:
+    state.styleStack.add(state.curStyle)
+    state.curStyle = state.curStyle.mergeStyles(styleMap[tag])
+    code
+    state.curStyle = state.styleStack.pop()
+  else:
+    code
 
 proc refCopy*(dst: var Rope, src: Rope) =
   dst.kind = src.kind
+  dst.tag  = src.tag
+
   case src.kind
   of RopeAtom:
     dst.length = src.length
@@ -541,10 +462,16 @@ proc refCopy*(dst: var Rope, src: Rope) =
 
   of RopeBreak:
     dst.breakType = src.breakType
+    dst.guts      = Rope()
+    refCopy(dst.guts, src.guts)
+
+  of RopeLink:
+    dst.url = src.url
+    var sub: Rope = Rope()
+    refCopy(sub, src.toHighlight)
+    dst.toHighlight = sub
 
   of RopeList:
-    dst.ordered = src.ordered
-    dst.prefBullet = src.prefBullet
     var
       sub: Rope
       l:   seq[Rope]
@@ -554,17 +481,10 @@ proc refCopy*(dst: var Rope, src: Rope) =
       l.add(sub)
     dst.items = l
 
-  of RopeLink:
-    dst.url = src.url
-    var sub: Rope = Rope()
-    refCopy(sub, src.toHighlight)
-    dst.toHighlight = sub
-
   of RopeTaggedContainer, RopeAlignedContainer:
     var sub: Rope = Rope()
     refCopy(sub, src.contained)
-    dst.contained    = sub
-    dst.tag          = src.tag
+    dst.contained = sub
 
   of RopeTable:
     if src.thead != nil:
@@ -576,6 +496,9 @@ proc refCopy*(dst: var Rope, src: Rope) =
     if src.tfoot != nil:
       dst.tfoot = Rope()
       refCopy(dst.tfoot, src.tfoot)
+    if src.caption != nil:
+      dst.caption = Rope()
+      refCopy(dst.caption, src.caption)
 
   of RopeTableRow, RopeTableRows:
     for cell in src.cells:
@@ -585,9 +508,8 @@ proc refCopy*(dst: var Rope, src: Rope) =
 
   of RopeFgColor, RopeBgColor:
     dst.color   = src.color
-    var r = Rope()
-    refCopy(r, src.toColor)
-    dst.toColor = r
+    dst.toColor = Rope()
+    refCopy(dst.toColor, src.toColor)
 
   of RopeCustom:
     src.ropeCopy(dst, src)
@@ -596,8 +518,6 @@ proc refCopy*(dst: var Rope, src: Rope) =
     var f = Rope()
     refCopy(f, src.next)
     dst.next = f
-
-  dst.breakPoint = src.breakPoint
 
 proc `&`*(r1: Rope, r2: Rope): Rope =
   var
@@ -645,11 +565,13 @@ proc `+`*(r1: Rope, r2: Rope): Rope =
 
   while probe != nil:
     if probe.cycle:
-      probe = r1
-      while probe != nil:
-        probe.cycle = false
-        probe = probe.next
-      raise newException(ValueError, "Addition would cause a cycle")
+       raise newException(ValueError, "Addition would cause a cycle")
+    else:
+      probe = probe.next
+
+  probe = r1
+  while probe != nil:
+    probe.cycle = false
     probe = probe.next
 
   last.next = r2
@@ -729,86 +651,21 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
     of "html", "body", "head":
       result = n.descend()
     of "br":
-      result = Rope(kind: RopeBreak, breakType: BrHardLine, breakPoint: true)
+      result = Rope(kind: RopeBreak, breakType: BrHardLine, tag: "br")
     of "p":
       result = Rope(kind: RopeBreak, breakType: BrParagraph,
-                    guts: n.descend(), breakPoint: true)
+                    guts: n.descend(), tag: "p")
     of "div":
       result = Rope(kind: RopeBreak, breakType: BrPage,
-                    guts: n.descend(), breakPoint: true)
-    of "h1", "h2", "h3", "h4", "h5", "h6":
-      result = Rope(kind: RopeTaggedContainer, tag: n.contents,
-                    contained: n.descend(), breakPoint: true)
+                    guts: n.descend(), tag: "div")
     of "a":
       let url = if "href" in n.attrs: n.attrs["href"] else: "https://unknown"
-      result = Rope(kind: RopeLink, url: url, toHighlight: n.descend())
-    of "li":
-      result = n.descend()
+      result = Rope(kind: RopeLink, url: url, toHighlight: n.descend(),
+                    tag: "a")
     of "ol", "ul":
-      let ordered = if n.contents == "ol": true else: false
-      result = Rope(kind: RopeList, ordered: ordered, breakPoint: true)
+      result = Rope(kind: RopeList, tag: n.contents)
       for item in n.children:
         result.items.add(item.htmlTreeToRope())
-    of "blockquote":
-      result = Rope(kind: RopeTaggedContainer, tag: "blockquote",
-                    contained: n.descend(), breakPoint: true)
-    of "code":
-      result = Rope(kind:  RopeTaggedContainer, tag: "code",
-                    contained: n.descend(), breakPoint: true)
-    of "ins":
-      result = Rope(kind:  RopeTaggedContainer, tag: "inserted",
-                    contained: n.descend())
-    of "del":
-      result = Rope(kind:  RopeTaggedContainer, tag: "deleted",
-                    contained: n.descend())
-    of "kbd":
-      result = Rope(kind:  RopeTaggedContainer, tag: "keyboard",
-                    contained: n.descend())
-    of "mark":
-      result = Rope(kind:  RopeTaggedContainer, tag: "highlighted",
-                    contained: n.descend())
-    of "pre":
-      result = Rope(kind:  RopeTaggedContainer, tag: "preformatted",
-                    contained: n.descend(), breakPoint: true)
-    of "q":
-      result = Rope(kind:  RopeTaggedContainer, tag: "quotation",
-                    contained: n.descend(), breakPoint: true)
-    of "s":
-      result = Rope(kind:  RopeTaggedContainer, tag: "strikethrough",
-                    contained: n.descend())
-    of "small":
-      result = Rope(kind:  RopeTaggedContainer, tag: "aside",
-                    contained: n.descend(), breakPoint: true)
-    of "sub":
-      result = Rope(kind:  RopeTaggedContainer, tag: "subscript",
-                    contained: n.descend())
-    of "sup":
-      result = Rope(kind:  RopeTaggedContainer, tag: "superscript",
-                    contained: n.descend())
-    of "title":
-      result = Rope(kind:  RopeTaggedContainer, tag: "superscript",
-                    contained: n.descend(), breakPoint: true)
-    of "em":
-      result = Rope(kind:  RopeTaggedContainer, tag: "em",
-                    contained: n.descend())
-    of "i":
-      result = Rope(kind:  RopeTaggedContainer, tag: "italic",
-                    contained: n.descend())
-    of "b":
-      result = Rope(kind:  RopeTaggedContainer, tag: "bold",
-                    contained: n.descend())
-    of "strong":
-      result = Rope(kind:  RopeTaggedContainer, tag: "strong",
-                    contained: n.descend())
-    of "u":
-      result = Rope(kind:  RopeTaggedContainer, tag: "underline",
-                    contained: n.descend())
-    of "caption":
-      result = Rope(kind:  RopeTaggedContainer, tag: "caption",
-                    contained: n.descend())
-    of "var":
-      result = Rope(kind:  RopeTaggedContainer, tag: "variable",
-                    contained: n.descend())
     of "right":
       result = Rope(kind: RopeAlignedContainer, tag: "ralign",
                     contained: n.descend())
@@ -819,15 +676,15 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
       result = Rope(kind: RopeAlignedContainer, tag: "lalign",
                     contained: n.descend())
     of "thead", "tbody", "tfoot":
-      result = Rope(kind:  RopeTableRows)
+      result = Rope(kind:  RopeTableRows, tag: n.contents)
       for item in n.children:
         result.cells.add(item.htmlTreeToRope())
     of "tr":
-      result = Rope(kind: RopeTableRow)
+      result = Rope(kind: RopeTableRow, tag: n.contents)
       for item in n.children:
         result.cells.add(item.htmlTreeToRope())
     of "table":
-      result = Rope(kind: RopeTable, breakPoint: true)
+      result = Rope(kind: RopeTable, tag: "table")
       for item in n.children:
         let asRope = item.htmlTreeToRope()
         case asRope.kind
@@ -845,11 +702,22 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
             result.tbody = asRope
         of RopeTableRow:
           if result.tbody == nil:
-            result.tbody = Rope(kind: RopeTableRows)
+            result.tbody = Rope(kind: RopeTableRows, tag: "tbody")
           result.cells.add(asRope)
         else: # colgroup; currently not handling.
           discard
+    of "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote",
+       "code", "ins", "del", "kbd", "mark", "pre", "q", "s", "small",
+       "sub", "sup", "title", "em", "i", "b", "strong", "u", "caption",
+       "td", "th", "var", "italic", "strikethrough", "strikethru",
+       "underline", "bold":
+      # Since we know about this list, short-circuit the color checking code,
+      # even though if no color matches, the same thing happens as happens
+      # in this branch...
+      result = Rope(kind: RopeTaggedContainer, tag: n.contents,
+                    contained: n.descend())
     else:
+      let colorTable = getColorTable()
       if n.contents in colorTable:
         result = Rope(kind: RopeFgColor, color: n.contents)
         result.toColor = n.descend()
@@ -861,8 +729,9 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
       elif n.contents.startsWith("bg#") and len(n.contents) == 10:
         result = Rope(kind: RopeBgColor, color: n.contents[3 .. ^1])
       else:
-        result = Rope(kind: RopeTaggedContainer, tag: n.contents)
+        result = Rope(kind: RopeTaggedContainer)
         result.contained = n.descend()
+      result.tag = n.contents
   of HtmlText, HtmlCData:
     result = Rope(kind: RopeAtom, text: n.contents.toRunes())
   else:
@@ -897,7 +766,9 @@ proc hexColorTo8Bit*(hex: string): int =
            int(blue * 3 / 255)
 
 proc colorNameToHex*(name: string): (int, int, int) =
+  let colorTable = getColorTable()
   var color: int
+
   if name in colorTable:
     color = colorTable[name]
   elif parseHex(name, color) != 6:
@@ -905,11 +776,12 @@ proc colorNameToHex*(name: string): (int, int, int) =
   result = (color shr 16, (color shr 8) and 0xff, color and 0xff)
 
 proc colorNameToVga*(name: string): int =
+  let color8Bit = get8BitTable()
+
   if name in color8Bit:
     return color8Bit[name]
   else:
     return hexColorTo8Bit(name)
-
 
 proc getBreakOpps(s: seq[Rune]): seq[int] =
   # Should eventually upgrade this to full Annex 14 at some point.
@@ -927,7 +799,7 @@ proc getBreakOpps(s: seq[Rune]): seq[int] =
 proc wrapToWidth(s: seq[Rune], runeLen: int, state: var FmtState): string =
   # This should never have any hard breaks in it.
 
-  case state.curStyle.overflow
+  case state.getOverflow()
   of Overflow:
     return $(s)
   of OIgnore, OTruncate:
@@ -962,7 +834,7 @@ proc wrapToWidth(s: seq[Rune], runeLen: int, state: var FmtState): string =
   let opps = s.getBreakOpps()
   while true:
     if remainingLen <= state.availableWidth:
-      state.totalWidth -= remainingLen
+      state.availableWidth -= remainingLen
       result &= $(s[currentStart .. ^1])
       break
 
@@ -987,11 +859,11 @@ proc wrapToWidth(s: seq[Rune], runeLen: int, state: var FmtState): string =
     state.availableWidth = state.totalWidth
     currentStart         = breakPoint
     lastOp               = -1
-    if state.curStyle.overflow == OIndent and
-       state.totalWidth > state.curStyle.wrapIndent:
+    if state.getOverflow() == OIndent and
+       state.totalWidth > state.getWrapIndent():
       let
-        padChar = state.curStyle.lpadChar
-        padAmt  = state.curStyle.wrapIndent
+        padChar = state.getLpadChar()
+        padAmt  = state.getWrapIndent()
 
       result &= padChar.repeat(padAmt)
       state.availableWidth -= padChar.runeWidth()
@@ -1010,8 +882,8 @@ proc formatAtom(r: Rope, state: var FmtState): FormattedOutput =
   var codes: seq[string]
 
   for i, line in result.contents:
-    case state.curStyle.casing
-    of CasingAsIs:
+    case state.getCasing()
+    of CasingAsIs, CasingIgnore:
       discard
     of CasingLower:
       result.contents[i] = line.toLower()
@@ -1036,11 +908,11 @@ proc formatAtom(r: Rope, state: var FmtState): FormattedOutput =
 
     # We can't reuse 'line' down here because we may
     # have already replaced contents[i].
-    case state.curStyle.underlineStyle
-    of UlNone:
+    case state.getUnderlineStyle()
+    of UnderlineNone, UnderlineIgnore:
       discard
-    of UlSingle:
-      if state.curStyle.unicodeOverAnsi:
+    of UnderlineSingle:
+      if getUnicodeOverAnsi():
         var newres: string
         for ch in result.contents[i]:
           newres.add(ch)
@@ -1048,20 +920,20 @@ proc formatAtom(r: Rope, state: var FmtState): FormattedOutput =
         result.contents[i] = newres
       else:
         codes.add("4")
-    of UlDouble:
+    of UnderlineDouble:
       codes.add("21")
 
-    if state.curStyle.bold:
+    if state.getBold():
       codes.add("1")
 
-    if state.curStyle.italic:
+    if state.getItalic():
       codes.add("3")
 
-    if state.curStyle.inverse:
+    if state.getInverse():
       codes.add("7")
 
-    if state.curStyle.strikethrough:
-      if state.curStyle.unicodeOverAnsi:
+    if state.getStrikethrough():
+      if getUnicodeOverAnsi():
         var newRes: string
         for ch in result.contents[i]:
           newRes.add(ch)
@@ -1070,76 +942,122 @@ proc formatAtom(r: Rope, state: var FmtState): FormattedOutput =
       else:
         codes.add("9")
 
-    if state.curStyle.color24Bit:
-      let
-        fgCode = state.curStyle.textColor.colorNameToHex()
-        bgCode = state.curStyle.bgColor.colorNameToHex()
+    let
+      fgOpt = state.getFgColor()
+      bgOpt = state.getBgColor()
 
-      if fgCode[0] != -1:
-        codes.add("38;2;" & $(fgCode[0]) & ";" & $(fgCode[1]) & ";" &
-                   $(fgCode[2]))
-      if bgCode[0] != -1:
-        codes.add("48;2;" & $(bgCode[0]) & ";" & $(bgCode[1]) & ";" &
-                            $(bgCode[2]))
+    if getColor24Bit():
+      if fgOpt.isSome():
+        let fgCode = fgOpt.get().colorNameToHex()
+        if fgCode[0] != -1:
+          codes.add("38;2;" & $(fgCode[0]) & ";" & $(fgCode[1]) & ";" &
+                    $(fgCode[2]))
+
+      if bgOpt.isSome():
+        let bgCode = bgOpt.get().colorNameToHex()
+        if bgCode[0] != -1:
+          codes.add("48;2;" & $(bgCode[0]) & ";" & $(bgCode[1]) & ";" &
+                    $(bgCode[2]))
     else:
-      let
-        fgCode  = state.curStyle.textColor.colorNameToVga()
-        bgCode  = state.curStyle.bgColor.colorNameToVga()
-      if fgCode != -1:
-        codes.add("38;5;" & $(fgCode))
-      if bgCode != -1:
-        codes.add("48;5;" & $(bgCode))
+      if fgOpt.isSome():
+        let fgCode = fgOpt.get().colorNameToVga()
+        if fgCode != -1:
+          codes.add("38;5;" & $(fgCode))
+
+      if bgOpt.isSome():
+        let bgCode = bgOpt.get().colorNameToVga()
+        if bgCode != -1:
+          codes.add("48;5;" & $(bgCode))
 
     result.contents[i] = "\e[" & codes.join(";") & "m" &
-      result.contents[i] & "\e[1m"
+      result.contents[i] & "\e[0m"
 
-proc copyStyle(inStyle: FmtStyle): FmtStyle =
-  result = FmtStyle(textColor:       inStyle.textColor,
-                    bgColor:         inStyle.bgColor,
-                    overflow:        inStyle.overFlow,
-                    wrapIndent:      inStyle.wrapIndent,
-                    lpad:            inStyle.lpad,
-                    rpad:            inStyle.rpad,
-                    lpadChar:        inStyle.lpadChar,
-                    rpadChar:        inStyle.rpadChar,
-                    casing:          inStyle.casing,
-                    bold:            inStyle.bold,
-                    inverse:         inStyle.inverse,
-                    strikethrough:   inStyle.strikethrough,
-                    italic:          inStyle.italic,
-                    underlineStyle:  inStyle.underlineStyle,
-                    unicodeOverAnsi: inStyle.unicodeOverAnsi,
-                    color24Bit:      inStyle.color24Bit)
+proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput
 
-proc combineFormattedOutput(a: var FormattedOutput, b: FormattedOutput) =
-  if b.startsWithBreak:
-    a.finalBreak = true
-  if a.finalBreak:
-    a.contents   &= b.contents
-    a.lineWidths &= b.lineWidths
-    if b.maxWidth > a.maxWidth:
-      a.maxWidth = b.maxWidth
-    a.finalBreak = b.finalBreak
+proc formatUnorderedList(r: Rope, state: var FmtState): FormattedOutput =
+  state.withTag("ul"):
+    let
+      lpadChar  = state.getLpadChar()
+      rpadChar  = state.getRpadChar()
+      bullet    = state.getBulletChar().get(Rune(0x2022))
+      lpad      = state.getLpad()
+      rpad      = state.getRpad()
+      preStr    = lpadChar.repeat(lpad) & $(bullet) & rpadChar.repeat(rpad)
+      preLen    = preStr.runeLength()
+      wrapStr   = lpadChar.repeat(preLen)
+      savedTW   = state.totalWidth
 
-  elif len(a.contents) != 0 and len(b.contents) != 0:
-    a.contents[^1] &= b.contents[0]
-    a.lineWidths[^1] = a.lineWidths[^1] + b.lineWidths[0]
-    if a.maxWidth < a.lineWidths[^1]:
-      a.maxWidth = a.lineWidths[^1]
-    if len(b.contents) > 1:
-      a.contents   &= b.contents[1 .. ^1]
-      a.lineWidths &= b.lineWidths[1 .. ^1]
-      if b.maxWidth > a.maxWidth:
-        a.maxWidth = b.maxWidth
-    a.finalBreak = b.finalBreak
-  elif len(a.contents) == 0:
-    a = b
+    if lpadChar.runeWidth() != 1:
+      raise newException(ValueError,
+                        "Left padding character for lists must be 1 char wide")
+
+    state.totalWidth     -= preLen
+    state.availableWidth  = state.totalWidth
+
+    for item in r.items:
+      var oneRes = item.internalRopeToString(state)
+      for i, line in oneRes.contents:
+        if i == 0:
+          oneRes.contents[i] = preStr & line
+        else:
+          oneRes.contents[i] = wrapStr & line
+        oneRes.lineWidths[i] = oneRes.lineWidths[i] + preLen
+      oneRes.maxWidth += preLen
+
+      combineFormattedOutput(result, oneRes)
+
+    state.totalWidth = savedTw
+
+proc formatOrderedList(r: Rope, state: var FmtState): FormattedOutput =
+  var
+    maxDigits = 0
+    n         = len(r.items)
+
+  while true:
+    maxDigits += 1
+    n          = n div 10
+    if n == 0:
+      break
+
+  state.withTag("ol"):
+    let
+      lpadChar  = state.getLpadChar()
+      rpadChar  = state.getRpadChar()
+      bullet    = state.getBulletChar().get(Rune(0x200D))
+      lpad      = state.getLpad()
+      rpad      = state.getRpad()
+      preStr    = lpadChar.repeat(lpad)
+      postStr   = $(bullet) & rpadChar.repeat(rpad)
+      widthLoss = preStr.runeLength() + postStr.runeLength() + maxDigits
+      wrapStr   = lpadChar.repeat(widthLoss)
+      savedTW   = state.totalWidth
+
+    if lpadChar.runeWidth() != 1:
+      raise newException(ValueError,
+                         "Left padding character for lists must be 1 char wide")
+
+    state.totalWidth     -= widthLoss
+    state.availableWidth  = state.totalWidth
+
+    for n, item in r.items:
+      var oneRes = item.internalRopeToString(state)
+      for i, line in oneRes.contents:
+        if i == 0:
+          let
+            nAsStr  = $(n + 1)
+            fullPre = preStr & lpadChar.repeat(maxDigits - len(nAsStr)) & nAsStr
+
+          oneRes.contents[i] = fullPre & postStr & line
+        else:
+          oneRes.contents[i] = wrapStr & line
+        oneRes.lineWidths[i] = oneRes.lineWidths[i] + widthLoss
+      oneRes.maxWidth += widthLoss
+
+      combineFormattedOutput(result, oneRes)
+
+    state.totalWidth = savedTw
 
 proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
-  var
-    oldStyle: FmtStyle
-    newStyle: FmtStyle = state.curStyle
-
   case r.kind
   of RopeAtom:
     r.setAtomLength()
@@ -1158,25 +1076,23 @@ proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
       let sub = r.guts.internalRopeToString(state)
       combineFormattedOutput(result, sub)
   of RopeFgColor:
-    if showColor:
-      newStyle = state.curStyle.copyStyle()
-      newStyle.textColor = r.color
-      oldStyle       = state.curStyle
-      state.curStyle = newStyle
-      result = r.toColor.internalRopeToString(state)
-      state.curStyle = oldStyle
+    if getShowColor():
+      state.withStyle(FmtStyle(textColor: some(r.color))):
+        result = r.toColor.internalRopeToString(state)
     else:
       result = r.toColor.internalRopeToString(state)
   of RopeBgColor:
-    if showColor:
-      newStyle = state.curStyle.copyStyle()
-      newStyle.bgColor = r.color
-      oldStyle       = state.curStyle
-      state.curStyle = newStyle
-      result = r.toColor.internalRopeToString(state)
-      state.curStyle = oldStyle
+    if getShowColor():
+      state.withStyle(FmtStyle(bgColor: some(r.color))):
+        result = r.toColor.internalRopeToString(state)
     else:
       result = r.toColor.internalRopeToString(state)
+  of RopeList:
+    if r.tag == "ol":
+      result = r.formatOrderedList(state)
+    else:
+      result = r.formatUnorderedList(state)
+
   of RopeAlignedContainer:
     case r.tag[0]
     of 'r':
@@ -1207,54 +1123,33 @@ proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
     else:
       discard
   of RopeTaggedContainer:
+    var newStyle: FmtStyle
     case r.tag
-    of "strikethrough":
-      newStyle = state.curStyle.copyStyle()
-      newStyle.strikethrough = true
-    of "italic":
-      newStyle = state.curStyle.copyStyle()
-      newStyle.italic = true
-    of "underline":
-      newStyle = state.curStyle.copyStyle()
-      newStyle.underlineStyle = UlSingle
-    of "bold":
-      newStyle = state.curStyle.copyStyle()
-      newStyle.bold = true
+    of "s", "strikethrough", "strikethru":
+      newStyle = FmtStyle(strikethrough: some(true))
+    of "i", "italic":
+      newStyle = FmtStyle(italic: some(true))
+    of "u", "underline":
+      newStyle = FmtStyle(underlineStyle: some(UnderlineSingle))
+    of "b", "bold":
+      newStyle = FmtStyle(bold: some(true))
     of "other":
       raise newException(ValueError, "Not implemented yet.")
     else:
-      if r.tag in styleMap:
-        newStyle = styleMap[r.tag]
+      discard
 
-    oldStyle       = state.curStyle
-    state.curStyle = newStyle
-    result = r.contained.internalRopeToString(state)
-    state.curStyle = oldStyle
+    state.withStyleAndTag(newStyle, r.tag):
+      result = r.contained.internalRopeToString(state)
 
-    if r.breakPoint:
+    if r.tag in breakingStyles:
       result.finalBreak      = true
       result.startsWithBreak = true
-    # TODO: be able to bad these containers!!!
   else:
     discard
 
   if r.next != nil:
     let next = r.next.internalRopeToString(state)
     combineFormattedOutput(result, next)
-
-proc evalParagraph(r: Rope, state: var FmtState): FormattedOutput =
-  var
-    oldStyle      = state.curStyle
-    newStyle      = oldStyle
-    oldTotalWidth = state.totalWidth
-
-  result = r.internalRopeToString(state)
-  if not result.finalBreak:
-      result.finalBreak = true
-
-  for i in 0 ..< newStyle.paragraphSpacing:
-    result.contents.add("")
-    result.lineWidths.add(0)
 
 proc ropeToString*(r: Rope, width = -1): string =
   var
@@ -1267,15 +1162,16 @@ proc ropeToString*(r: Rope, width = -1): string =
     else:
       curState.totalWidth = defaultTextWidth
 
-
   if curState.totalWidth < 0:
     curState.totalWidth = defaultTextWidth
+
+  echo "Starting with width: ", curState.totalWidth
 
   curState.availableWidth = curState.totalWidth
   curState.curStyle       = defaultStyle
 
-  let preResult = r.evalParagraph(curstate)
-  result = preResult.contents.join(curState.curStyle.lineSep)
+  let preResult = r.internalRopeToString(curstate)
+  result = preResult.contents.join("\n")
   if '\f' in result:
     result = result.replace("\f\n", "\f")
 
