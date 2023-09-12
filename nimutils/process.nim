@@ -5,6 +5,149 @@
 
 import misc, strutils, posix, file, os, options
 
+{.emit: """
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <errno.h>
+#include <termios.h>
+#include <unistd.h>
+#include <util.h>
+#include <limits.h>
+#include <sys/ioctl.h>
+#include <sys/select.h>
+
+// Already in nimutils
+extern bool write_data(int fd, char *buf, size_t nbytes);
+
+size_t
+read_one(int fd, char *buf, size_t nbytes) {
+    size_t  toread, nr = 0;
+    ssize_t result;
+    size_t  n;
+
+    while(true) {
+	n = read(fd, buf, nbytes - 1);
+
+	switch(n) {
+	case 0:
+	    *buf = 0;
+	    return n;
+	case -1:
+	    if(errno == EINTR) {
+		continue;
+	    }
+	    return -1;
+	default:
+	    buf[n] = 0;
+	    return n;
+	}
+    }
+
+    return true;
+}
+
+/* This is not yet going to handle window size changes. */
+
+void
+handle_comms(int fd, int pid)
+{
+    fd_set 	   set;
+    char   	   buf[4096];
+    int    	   stat;
+    int            res;
+    int            n;
+    struct timeval timeout;
+
+    // 1/20th of a second.
+    timeout.tv_sec  = 0;
+    timeout.tv_usec = 500000;
+
+    FD_ZERO(&set);
+
+    while (true) {
+	FD_SET(0,  &set);
+	FD_SET(fd, &set);
+	switch (select(fd + 1, &set, NULL, NULL, &timeout)) {
+	case 0:
+	    res = waitpid(pid, &stat, WNOHANG);
+	    if (res != -1) {
+		break;
+	    }
+	    exit(1);
+	default:
+	    if (FD_ISSET(fd, &set) != 0) {
+		n = read_one(fd, buf, 4096);
+		if (n > 0) {
+		    printf("%s", buf);
+		} else {
+		    return;
+		}
+	    }
+
+	    if (FD_ISSET(0, &set) != 0) {
+		int n = read_one(0, buf, 4096);
+		if (n > 0) {
+		    write_data(fd, buf, n);
+		}
+	    }
+	}
+    }
+
+    while ((n = read_one(fd, buf, 4096)) > 0) {
+	printf("%s", buf);
+    }
+}
+
+pid_t
+spawn_pty(char *path, char *argv[], char *envp[], char *topipe, int len)
+{
+    struct termios termcap;
+    struct winsize wininfo;
+    struct termios *term_ptr = &termcap;
+    struct winsize *win_ptr  = &wininfo;
+    int             stdin[2];
+    pid_t           pid;
+    int             fd;
+
+    pipe(stdin);
+
+    if (!isatty(0)) {
+	term_ptr = NULL;
+	win_ptr  = NULL;
+    }
+    else {
+	ioctl(0, TIOCGWINSZ, win_ptr);
+	tcgetattr(0, term_ptr);
+    }
+    pid = forkpty(&fd, NULL, term_ptr, win_ptr);
+
+    if (pid != 0) {
+	close(stdin[0]);
+	termcap.c_lflag &= ~ICANON;
+	termcap.c_cc[VMIN] = 1;
+	termcap.c_cc[VTIME] = 0;
+	tcsetattr(0, TCSANOW, term_ptr);
+
+	write_data(stdin[1], topipe, len);
+	close(stdin[1]);
+	handle_comms(fd, pid);
+	return pid;
+    }
+    close(stdin[1]);
+    dup2(stdin[0], 0);
+
+    termcap.c_lflag &= ~(ICANON | ISIG | IEXTEN | ECHO);
+    termcap.c_oflag &= ~OPOST;
+    termcap.c_cc[VMIN] = 1;
+    termcap.c_cc[VTIME] = 0;
+
+    tcsetattr(fd, TCSANOW, term_ptr);
+    execve(path, argv, envp);
+    abort();
+}
+""".}
+
 template runCmdGetOutput*(exe: string, args: seq[string]): string =
   execProcess(exe, args = args, options = {})
 
@@ -112,8 +255,6 @@ proc readAllOutput*(pid: Pid, stdout, stderr: cint, timeoutUsec: int):
     stat_ptr: cint
     buf:      array[0 .. 4096, byte]
 
-
-
   FD_ZERO(toRead)
 
   timeout.tv_sec  = Time(timeoutUsec / 1000000)
@@ -152,80 +293,41 @@ proc readAllOutput*(pid: Pid, stdout, stderr: cint, timeoutUsec: int):
   result.stderr &= stderr.readAllFromFd()
   result.exitCode = int(WEXITSTATUS(stat_ptr))
 
+proc spawn_pty*(path: cstring, argv, env: cStringArray, p: cstring, l: cint): int
+    {.cdecl,discardable,nodecl,importc.}
 
-{.emit: """
-#include <stdlib.h>
-#include <termios.h>
-#include <unistd.h>
-#include <util.h>
-#include <sys/ioctl.h>
+proc runInteractiveCmd*(path: string, args: seq[string], passToChild = ""):
+                      int {.discardable.} =
+  setStdIoUnbuffered()
 
-
-/* This is not yet going to handle window size changes. */
-
-pid_t
-spawn_pty_c(char *path, char *argv[], char *envp[], int *fd)
-{
-    struct termios termcap;
-    struct winsize wininfo;
-    struct termios *term_ptr = &termcap;
-    struct winsize *win_ptr  = &wininfo;
-
-    pid_t pid;
-
-    if (!isatty(0)) {
-	printf("No terminal.\n");
-	term_ptr = NULL;
-	win_ptr  = NULL;
-    }
-    else {
-	ioctl(0, TIOCGWINSZ, win_ptr);
-	tcgetattr(0, term_ptr);
-    }
-    pid = forkpty(fd, NULL, term_ptr, win_ptr);
-
-    if (pid != 0) {
-	return pid;
-    }
-
-    execve(path, argv, envp);
-    abort();
-}
-""".}
-
-proc spawn_pty_c(path: cstring, argv: cstringArray, env: cstringArray,
-                 fdptr: ptr cint): Pid {.importc, cdecl, nodecl.}
-
-proc spawnPty*(path: string, argv: seq[string],
-                env: Option[seq[string]] = none(seq[string])): (Pid, cint, string) =
   var
-    buf:  array[4096, byte]
-    fd:   cint
-    pid:  Pid
-    envp: cStringArray
-    cargs = allocCstringArray(@[path] & argv)
-    plen: int
+    cargs = allocCstringArray(@[path] & args)
+    envitems: seq[string]
+    envp:     cStringArray
 
-  if env.isNone():
-    var envitems: seq[string]
-    for k, v in envPairs():
-      envitems.add(k & "=" & v)
-    envp = allocCStringArray(envitems)
+  for k, v in envPairs():
+    envitems.add(k & "=" & v)
+
+  envp = allocCStringArray(envitems)
+  spawn_pty(cstring(path), cargs, envp, cstring(passtoChild),
+            cint(len(passToChild)))
+
+
+proc runPager*(s: string) =
+  var exe: string
+
+  let less = findAllExePaths("less")
+  if len(less) > 0:
+    exe = less[0]
   else:
-    envp = allocCStringArray(env.get())
+    let more = findAllExePaths("more")
+    if len(more) > 0:
+      exe = more[0]
+    else:
+      raise newException(ValueError, "Could not find 'more' or 'less' in your path.")
 
-  pid = spawn_pty_c(cstring(path), cargs, envp, addr fd)
+  runInteractiveCmd(exe, @["-R"], s)
 
-  discard ttyname_r(fd, cast[cstring](addr buf[0]), 4096)
-
-  for item in buf:
-    if item == 0:
-      break
-    plen += 1
-
-  let ttyname = bytesToString(buf[0 ..< plen])
-
-  return (pid, fd, ttyname)
 
 
 proc runCmdGetEverything*(exe:      string,
@@ -278,67 +380,6 @@ proc runCmdGetEverything*(exe:      string,
     stdout.write("error: " & exe & ": command not found\n")
     quit(-1)
 
-proc interactiveProxy*(pid: Pid, args: string): ExecOutput =
-  # TODO: non-blocking stdin
-
-  var
-    selectSet: TFdSet
-    stat_ptr:  cint
-    buf:       array[0 .. 4096, byte]
-
-  FD_ZERO(selectSet)
-
-  when false: # while true
-    FD_SET(0,         selectSet)
-    FD_SET(substdout, selectSet)
-    FD_SET(substderr, selectSet)
-
-    if passToChildStdin != "":
-      discard fWriteData(substdin, passToChildStdIn)
-
-    case select(3, addr selectSet, nil, nil, nil)
-    of 0:
-      let res = waitpid(pid, stat_ptr, WNOHANG)
-      if res != -1:
-        break
-      else:
-        raise newException(IOError, "Error waiting for output")
-    else:
-      if FD_ISSET(0, selectSet) != 0:
-        let readFromStdin = oneReadFromFd(0)
-        discard fWriteData(substdin, readFromStdIn)
-      if FD_ISSET(substdout, selectSet) != 0:
-        let readFromSubOut = oneReadFromFd(substdout)
-        if showOut:
-          discard fWriteData(1, readFromSubOut)
-        if captureOut:
-          result.stdout &= readFromSubOut
-      if FD_ISSET(substderr, selectSet) != 0:
-        let readFromSubErr = oneReadFromFd(substderr)
-        if showErr:
-          discard fWriteData(2, readFromSubErr)
-        if captureErr:
-          result.stderr &= readFromSubErr
-
-  when false:
-    # Dedent 2
-    let
-      readFromSubOut = oneReadFromFd(substdout)
-      readFromSubErr = oneReadFromFd(substderr)
-
-    if showOut:
-      discard fWriteData(1, readFromSubOut)
-    if captureOut:
-      result.stdout &= readFromSubOut
-    if showErr:
-      discard fWriteData(2, readFromSubErr)
-      result.stderr &= readFromSubErr
-
-    result.exitCode = int(WEXITSTATUS(stat_ptr))
-
-proc runInteractiveCmd*(exe: string, args: seq[string], passToChildStdin = "") =
-  let (pid, fd, ttyname) = spawnPty(exe, args)
-  #interactiveProxy(pid, fd, passToChildStdin)
 
 template getStdout*(o: ExecOutput): string = o.stdout
 template getStderr*(o: ExecOutput): string = o.stderr
