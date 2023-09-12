@@ -12,6 +12,10 @@ APIs simple and obvious.
 
 # Current highlights
 
+- A `print` function that can take markdown and/or HTML and print
+  formatted text to the terminal, including colors, lists, tables,
+  etc.
+
 - Fast cryptography painfully missing from Nim. See below.
 
 - Fancy hex dumps that can respect your terminal width via

@@ -82,7 +82,6 @@ proc paddedCellFormat(t: TextTable,
 
   return format & text & resetText
 
-
 proc separatorFormat(t: TextTable, sep: string): string =
   if len(t.sepFmt) > 0:
     return t.sepFmt & sep & resetText

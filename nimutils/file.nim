@@ -108,7 +108,7 @@ template dirWalk*(recursive: bool, body: untyped) =
   var item {.inject.}: string
 
   when recursive:
-    for i in walkDirRec(path):
+    for i in walkDirRec(path, yieldFilter = {pcFile, pcLinkToFile}):
       item = i
       body
   else:
