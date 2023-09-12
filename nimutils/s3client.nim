@@ -103,4 +103,3 @@ proc list_buckets*(self: var S3Client): seq[Bucket] {.gcsafe.} =
     var xml = parseXml(res.body)
     for b in xml.findAll("Bucket"):
       result.add(Bucket(name: b[0].innerText, created: b[1].innerText))
-
