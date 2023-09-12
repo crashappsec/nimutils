@@ -1,4 +1,9 @@
-import tables, strutils, os
+## Wraps libgumbo for fast, standards compliant HTML parsing.
+##
+## :Author: John Viega (john@crashoverride.com)
+## :Copyright: 2022 - 2023, Crash Override, Inc.
+
+import tables, strutils, os, unicode
 
 type
   HtmlNodeType* = enum
@@ -49,12 +54,18 @@ proc add_attribute(ctx: var Walker, n, v: cstring) {.exportc, cdecl.} =
 
   ctx.cur.attrs[name] = val
 
+proc basicPrintTree*(n: HtmlNode, indent = 0) =
+  let c = n.contents.replace("\n", "\\n")
+  echo Rune(' ').repeat(indent), " - ", c, " (", $(n.kind), ")"
+
+  for kid in n.children:
+    kid.basicPrintTree(indent + 2)
+
 proc parseDocument*(html: string): HtmlNode =
   var walker = Walker(root: nil, cur: nil)
 
   make_gumbo(cstring(html), cast[pointer](addr walker))
-  return walker.root
-
+  result = walker.root
 
 
 include "headers/gumbo.nim"

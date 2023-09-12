@@ -3,7 +3,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import misc, strutils, posix, file, os
+import misc, strutils, posix, file, os, options
 
 template runCmdGetOutput*(exe: string, args: seq[string]): string =
   execProcess(exe, args = args, options = {})
@@ -153,60 +153,80 @@ proc readAllOutput*(pid: Pid, stdout, stderr: cint, timeoutUsec: int):
   result.exitCode = int(WEXITSTATUS(stat_ptr))
 
 
-proc interactiveProxy*(pid: Pid, substdin, substdout, substderr: cint,
-                       showOut, captureOut, showErr, captureErr: bool):
-                         ExecOutput =
-  # TODO: non-blocking stdin
+{.emit: """
+#include <stdlib.h>
+#include <termios.h>
+#include <unistd.h>
+#include <util.h>
+#include <sys/ioctl.h>
 
+
+/* This is not yet going to handle window size changes. */
+
+pid_t
+spawn_pty_c(char *path, char *argv[], char *envp[], int *fd)
+{
+    struct termios termcap;
+    struct winsize wininfo;
+    struct termios *term_ptr = &termcap;
+    struct winsize *win_ptr  = &wininfo;
+
+    pid_t pid;
+
+    if (!isatty(0)) {
+	printf("No terminal.\n");
+	term_ptr = NULL;
+	win_ptr  = NULL;
+    }
+    else {
+	ioctl(0, TIOCGWINSZ, win_ptr);
+	tcgetattr(0, term_ptr);
+    }
+    pid = forkpty(fd, NULL, term_ptr, win_ptr);
+
+    if (pid != 0) {
+	return pid;
+    }
+
+    execve(path, argv, envp);
+    abort();
+}
+""".}
+
+proc spawn_pty_c(path: cstring, argv: cstringArray, env: cstringArray,
+                 fdptr: ptr cint): Pid {.importc, cdecl, nodecl.}
+
+proc spawnPty*(path: string, argv: seq[string],
+                env: Option[seq[string]] = none(seq[string])): (Pid, cint, string) =
   var
-    selectSet: TFdSet
-    stat_ptr:  cint
-    buf:       array[0 .. 4096, byte]
+    buf:  array[4096, byte]
+    fd:   cint
+    pid:  Pid
+    envp: cStringArray
+    cargs = allocCstringArray(@[path] & argv)
+    plen: int
 
-  FD_ZERO(selectSet)
+  if env.isNone():
+    var envitems: seq[string]
+    for k, v in envPairs():
+      envitems.add(k & "=" & v)
+    envp = allocCStringArray(envitems)
+  else:
+    envp = allocCStringArray(env.get())
 
-  while true:
-    FD_SET(0,         selectSet)
-    FD_SET(substdout, selectSet)
-    FD_SET(substderr, selectSet)
+  pid = spawn_pty_c(cstring(path), cargs, envp, addr fd)
 
-    case select(3, addr selectSet, nil, nil, nil)
-    of 0:
-      let res = waitpid(pid, stat_ptr, WNOHANG)
-      if res != -1:
-        break
-      else:
-        raise newException(IOError, "Error waiting for output")
-    else:
-      if FD_ISSET(0, selectSet) != 0:
-        let readFromStdin = oneReadFromFd(0)
-        discard fWriteData(substdin, readFromStdIn)
-      if FD_ISSET(substdout, selectSet) != 0:
-        let readFromSubOut = oneReadFromFd(substdout)
-        if showOut:
-          discard fWriteData(1, readFromSubOut)
-        if captureOut:
-          result.stdout &= readFromSubOut
-      if FD_ISSET(substderr, selectSet) != 0:
-        let readFromSubErr = oneReadFromFd(substderr)
-        if showErr:
-          discard fWriteData(2, readFromSubErr)
-        if captureErr:
-          result.stderr &= readFromSubErr
+  discard ttyname_r(fd, cast[cstring](addr buf[0]), 4096)
 
-  let
-    readFromSubOut = oneReadFromFd(substdout)
-    readFromSubErr = oneReadFromFd(substderr)
+  for item in buf:
+    if item == 0:
+      break
+    plen += 1
 
-  if showOut:
-    discard fWriteData(1, readFromSubOut)
-  if captureOut:
-    result.stdout &= readFromSubOut
-  if showErr:
-    discard fWriteData(2, readFromSubErr)
-    result.stderr &= readFromSubErr
+  let ttyname = bytesToString(buf[0 ..< plen])
 
-  result.exitCode = int(WEXITSTATUS(stat_ptr))
+  return (pid, fd, ttyname)
+
 
 proc runCmdGetEverything*(exe:      string,
                           args:     seq[string],
@@ -258,40 +278,67 @@ proc runCmdGetEverything*(exe:      string,
     stdout.write("error: " & exe & ": command not found\n")
     quit(-1)
 
-proc runInteractiveCmd*(exe: string, args: seq[string], captureOut = true,
-                        showOut = true, captureErr = true, showErr = true):
-                          ExecOutput =
+proc interactiveProxy*(pid: Pid, args: string): ExecOutput =
+  # TODO: non-blocking stdin
+
   var
-    stdInPipe:  array[0 .. 1, cint]
-    stdOutPipe: array[0 .. 1, cint]
-    stdErrPipe: array[0 .. 1, cint]
+    selectSet: TFdSet
+    stat_ptr:  cint
+    buf:       array[0 .. 4096, byte]
 
-  ccall pipe(stdInPipe)
-  ccall pipe(stdOutPipe)
-  ccall pipe(stdErrPipe)
+  FD_ZERO(selectSet)
 
-  let pid = fork()
-  if pid != 0:
-    ccall close(stdInPipe[0])
-    ccall close(stdOutPipe[1])
-    ccall close(stdErrPipe[1])
-    result = interactiveProxy(pid, stdInPipe[1], stdOutPipe[0], stdErrPipe[0],
-                              showOut, captureOut, showErr, captureErr)
-    ccall close(stdInPipe[1])
-    ccall close(stdOutPipe[0])
-    ccall close(stdErrPipe[0])
-  else:
-    let cargs = allocCStringArray(@[exe] & args)
-    discard dup2(stdInPipe[0], 0)
-    discard dup2(stdOutPipe[1], 1)
-    discard dup2(stdErrPipe[1], 2)
-    ccall close(stdInPipe[1])
-    ccall close(stdOutPipe[0])
-    ccall close(stdErrPipe[0])
-    ccall(execv(cstring(exe), cargs), -1)
+  when false: # while true
+    FD_SET(0,         selectSet)
+    FD_SET(substdout, selectSet)
+    FD_SET(substderr, selectSet)
 
-    stdout.write("error: " & exe & ": command not found\n")
-    quit(-1)
+    if passToChildStdin != "":
+      discard fWriteData(substdin, passToChildStdIn)
+
+    case select(3, addr selectSet, nil, nil, nil)
+    of 0:
+      let res = waitpid(pid, stat_ptr, WNOHANG)
+      if res != -1:
+        break
+      else:
+        raise newException(IOError, "Error waiting for output")
+    else:
+      if FD_ISSET(0, selectSet) != 0:
+        let readFromStdin = oneReadFromFd(0)
+        discard fWriteData(substdin, readFromStdIn)
+      if FD_ISSET(substdout, selectSet) != 0:
+        let readFromSubOut = oneReadFromFd(substdout)
+        if showOut:
+          discard fWriteData(1, readFromSubOut)
+        if captureOut:
+          result.stdout &= readFromSubOut
+      if FD_ISSET(substderr, selectSet) != 0:
+        let readFromSubErr = oneReadFromFd(substderr)
+        if showErr:
+          discard fWriteData(2, readFromSubErr)
+        if captureErr:
+          result.stderr &= readFromSubErr
+
+  when false:
+    # Dedent 2
+    let
+      readFromSubOut = oneReadFromFd(substdout)
+      readFromSubErr = oneReadFromFd(substderr)
+
+    if showOut:
+      discard fWriteData(1, readFromSubOut)
+    if captureOut:
+      result.stdout &= readFromSubOut
+    if showErr:
+      discard fWriteData(2, readFromSubErr)
+      result.stderr &= readFromSubErr
+
+    result.exitCode = int(WEXITSTATUS(stat_ptr))
+
+proc runInteractiveCmd*(exe: string, args: seq[string], passToChildStdin = "") =
+  let (pid, fd, ttyname) = spawnPty(exe, args)
+  #interactiveProxy(pid, fd, passToChildStdin)
 
 template getStdout*(o: ExecOutput): string = o.stdout
 template getStderr*(o: ExecOutput): string = o.stderr

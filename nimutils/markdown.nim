@@ -1,5 +1,7 @@
-# Decided not to wrap much of the library; instead I'm going to wrap
-# an HTML parsing library that I gen from, instead of this.
+## Markdown to HTML conversion, via the MD4C library.
+##
+## :Author: John Viega (john@crashoverride.com)
+## :Copyright: 2022 - 2023, Crash Override, Inc.
 
 include "headers/md4c.nim"
 import random
