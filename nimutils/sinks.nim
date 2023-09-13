@@ -3,7 +3,7 @@
 
 import streams, tables, options, os, strutils, std/[net, uri, httpclient],
        s3client, pubsub, misc, random, encodings, std/tempfiles,
-       parseutils, unicodeid, openssl, file
+       parseutils, unicodeid, openssl, file, std/asyncfutures
 
 const defaultLogSearchPath = @["/var/log/", "~/.log/", "."]
 
@@ -310,6 +310,57 @@ proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
 proc SSL_CTX_load_verify_file(ctx: SslCtx, CAfile: cstring):
                        cint {.cdecl, dynlib: DLLSSLName, importc.}
 
+proc timeoutGuard(client: HttpClient | AsyncHttpClient, url: Uri | string) =
+  # https://github.com/nim-lang/Nim/issues/6792
+  # https://github.com/nim-lang/Nim/issues/14807
+  # std/httpclient request() does not honor timeout param for
+  # connect timeouts and if the TCP connection cannot be established
+  # in some cases it will wait until /proc/sys/net/ipv4/tcp_syn_retries
+  # is exhausted which is ~130sec
+  # by trying regular connect() with timeout first we can ensure
+  # TCP connection can be established before attempting to make
+  # HTTP request
+  if client.timeout > 0:
+    var uri: Uri
+    when url is string:
+      uri = parseUri(url)
+    else:
+      uri = url
+    let hostname = uri.hostname
+    # port is optional in the Uri so we use default ports
+    var port: Port
+    if uri.port == "":
+      port = if uri.scheme == "https": Port(443)
+             else:                     Port(80)
+    else:
+      port = Port(uri.port.parseInt)
+    let socket = newSocket()
+    # this throws the same TimeoutError http request throws
+    socket.connect(hostname, port, timeout = client.timeout)
+    socket.close()
+
+proc safeRequest*(client: AsyncHttpClient,
+                  url: Uri | string,
+                  httpMethod: HttpMethod | string = HttpGet,
+                  body = "",
+                  headers: HttpHeaders = nil,
+                  multipart: MultipartData = nil
+                  ): Future[AsyncResponse] =
+  timeoutGuard(client, url)
+  return client.request(url = url, httpMethod = httpMethod, body = body,
+                        headers = headers, multipart = multipart)
+
+proc safeRequest*(client: HttpClient,
+                  url: Uri | string,
+                  httpMethod: HttpMethod | string = HttpGet,
+                  body = "",
+                  headers: HttpHeaders = nil,
+                  multipart: MultipartData = nil
+                  ): Response =
+  timeoutGuard(client, url)
+  return client.request(url = url, httpMethod = httpMethod, body = body,
+                        headers = headers, multipart = multipart)
+
 proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   var
     client:      HttpClient
@@ -367,10 +418,10 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   if client == nil:
     raise newException(ValueError, "Invalid HTTP configuration")
 
-  let response = client.request(url        = uri,
-                                httpMethod = HttpPost,
-                                body       = msg,
-                                headers    = headers)
+  let response = client.safeRequest(url        = uri,
+                                    httpMethod = HttpPost,
+                                    body       = msg,
+                                    headers    = headers)
   if response.status[0] != '2':
     raise newException(ValueError, response.status)
 
