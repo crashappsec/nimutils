@@ -40,7 +40,7 @@
 import os, unicode, unicodedb, unicodedb/widths, unicodeid, sugar, markdown,
        htmlparse, tables, std/terminal, parseutils, options, colortable,
        rope_base, rope_styles, rope_construct
-from strutils import join, startswith, replace
+from strutils import join, startswith, endswith, replace
 
 template setAtomLength(r: Rope) =
   if r.length == 0:
@@ -336,10 +336,39 @@ proc getBreakOpps(s: seq[Rune]): seq[int] =
     else:
       lastWasSpace = false
 
+
+proc wrapOne(s: seq[Rune], cIx, mIx: int, bps: seq[int], available: int):
+         (int, int) =
+
+  # With no regard for the current container, this gives us the breakpoint
+  # To which we should wrap, or returns -1 if there's no valid breakpoint.
+  var
+    breakpoint = -1
+    widthAtBp  = -1
+    widthUsed  = s[cIx].runeWidth()
+
+  # We assume we trimmed leading spaces, so never break on the first char.
+  for i in (cIx + 1) ..< mIx:
+    if i in bps:
+      breakpoint = i
+      widthAtBp  = widthUsed
+    let w = s[i].runeWidth()
+    if w + widthUsed > available:
+      if breakpoint == -1:
+        return (i, widthUsed)
+      else:
+        return (breakpoint, widthAtBp)
+    widthUsed += w
+
+  if widthUsed <= available:
+    return (mIx, widthUsed)
+  else:
+    return (breakpoint, widthAtBp)
+
 proc wrapToWidth(s: seq[Rune], runeLen: int, state: var FmtState): string =
   # This should never have any hard breaks in it.
 
-  if runeLen < state.availableWidth:
+  if runeLen <= state.availableWidth:
     state.availableWidth -= runeLen
     return $(s)
 
@@ -371,58 +400,34 @@ proc wrapToWidth(s: seq[Rune], runeLen: int, state: var FmtState): string =
 
   let
     maxIx = s.len()
+    opps  = s.getBreakOpps()
+
   var
-    currentStart = 0
-    remainingLen = runeLen
-    probe        = 0
-    probeLen     = 0
-    lastOp       = 0
-    breakPoint: int
+    lastBp:  int = 0
+    newBp:   int
+    width:   int
+    oneWidh: int
+    available = state.availableWidth
 
-  let opps = s.getBreakOpps()
-  while true:
-    if remainingLen <= state.availableWidth:
-      state.availableWidth -= remainingLen
-      result &= $(s[currentStart .. ^1])
-      break
-
-    probeLen = probe - currentStart
-    lastOp   = -1
-
-    while probe < state.availableWidth and probe < maxIx:
-      if probe != currentStart and probe in opps:
-        lastOp = probe
-      probeLen += s[probe].runeWidth()
-      probe = probe + 1
-      if probeLen >= remainingLen:
-        break
-
-    if lastOp == -1:
-      # No break point?  Just hard break here and shrug.
-      breakPoint = currentStart + state.availableWidth
-    else:
-      breakPoint = lastOp
-    result       &= $(s[currentStart ..< breakPoint])
-    remainingLen -= (breakPoint - currentStart)
-
-    if remainingLen != 0:
+  while lastBp < maxIx:
+    (newBp, width) = s.wrapOne(lastBp, maxIx, opps, available)
+    result &= $(s[lastBp ..< newBp])
+    if newBp < (maxIx - 1):
       result &= "\u2028"
-
-    state.availableWidth = state.totalWidth
-    lastOp               = -1
-    if state.getOverflow() == OIndent and
-       state.totalWidth > state.getWrapIndent():
+    available = state.totalWidth
+    lastBp    = newBp
+    if state.getOverflow() == OIndent and available > state.getWrapIndent():
       let
         padChar = state.getLpadChar()
         padAmt  = state.getWrapIndent()
 
       result &= padChar.repeat(padAmt)
-      state.availableWidth -= padChar.runeWidth()
+      available -= padChar.runeWidth()
+    while lastBp < maxIx and s[lastBp].isWhiteSpace():
+      lastBp += 1
 
-    # Trim leading white space. Maybe should make this an option?
-    currentStart = breakPoint
-    while currentStart < probe and s[currentStart].isWhiteSpace():
-      currentStart += 1
+  if not result.endswith("\u2028"):
+    state.availableWidth = state.totalWidth - width
 
 proc formatAtom(r: Rope, state: var FmtState): FormattedOutput =
   let pretext = r.text.wrapToWidth(r.length, state)
@@ -753,6 +758,10 @@ proc formatRowsForOneTag(r: Rope, tagName: string, widths: seq[int],
                 else:
                   if styleMap.contains(cell.tag & ".odd"):
                     colTagToUse = cell.tag & ".odd"
+
+                # TODO: We need to add a style here NOT to wrap, but to collect
+                # breakpoints along w/ the style at those breakpoints (which
+                # would be cached in the atom).
 
                 state.withTag(colTagToUse):
                   let curWidth         = widths[j] - 2 # Hardcode padding
