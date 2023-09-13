@@ -244,11 +244,8 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
       result = Rope(kind: RopeTaggedContainer, tag: n.contents,
                     contained: n.descend())
     of "td", "th":
-      # Here, we currently force-pad these by wrapping in a left-align block.
-      let element = Rope(kind: RopeTaggedContainer, tag: n.contents,
+      result = Rope(kind: RopeTaggedContainer, tag: n.contents,
                          contained: n.descend())
-      result = Rope(kind: RopeAlignedContainer, tag: "lalign",
-                    contained: element)
     else:
       let colorTable = getColorTable()
       if n.contents in colorTable:

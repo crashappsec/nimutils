@@ -110,12 +110,6 @@ proc getUnderlineStyle(s: FmtState): UnderlineStyle =
 proc getBulletChar(s: FmtState): Option[Rune] =
   return s.curStyle.bulletChar
 
-proc getBulletTextColor(s: FmtState): Option[string] =
-  return s.curStyle.bulletTextColor
-
-proc getBulletTextBg(s: FmtState): Option[string] =
-  return s.curStyle.bulletTextBg
-
 proc getUseTopBorder(s: FmtState): bool =
   return s.curStyle.useTopBorder.get(false)
 
@@ -536,23 +530,39 @@ proc formatAtom(r: Rope, state: var FmtState): FormattedOutput =
 
 proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput
 
-proc formatUnorderedList(r: Rope, state: var FmtState): FormattedOutput =
-  state.withTag("ul"):
-    let
+proc quickAtomFormat(s: string, l: int, state: var FmtState): string =
+  let rope = Rope(kind: RopeAtom, text: s.toRunes(), length: l)
+
+  return rope.internalRopeToString(state).contents[0]
+
+# s here should be a number for ordered lists.
+proc formatPaddedBullet(state: var FmtState, s = ""): (string, string, int) =
+  let
       lpadChar  = state.getLpadChar()
       rpadChar  = state.getRpadChar()
       bullet    = state.getBulletChar().get(Rune(0x2022))
       lpad      = state.getLpad()
       rpad      = state.getRpad()
-      preStr    = lpadChar.repeat(lpad) & $(bullet) & rpadChar.repeat(rpad)
-      preLen    = preStr.runeLength()
-      wrapStr   = lpadChar.repeat(preLen)
-      savedTW   = state.totalWidth
+      totallen  = lpad + s.runeLength() + bullet.runeWidth() + rpad
+      line1     = lpadChar.repeat(lpad) & s & $(bullet) & rpadChar.repeat(rpad)
+      wrapLine  = lpadChar.repeat(totalLen)
+      rope1     = Rope(kind: RopeAtom, text: line1.toRunes(), length: totallen)
+      rope2     = Rope(kind: RopeAtom, text: wrapLine.toRunes(),
+                       length: totallen)
 
-    if lpadChar.runeWidth() != 1:
-      raise newException(ValueError,
-                        "Left padding character for lists must be 1 char wide")
+  return (line1.quickAtomFormat(totallen, state),
+          wrapLine.quickAtomFormat(totallen, state),
+          totallen)
 
+proc formatUnorderedList(r: Rope, state: var FmtState): FormattedOutput =
+  state.withTag("ul"):
+    var
+      savedTW = state.totalWidth
+      preStr:  string  # Really, first line str.
+      wrapStr: string  # Remaining lines in container.
+      preLen:  int
+
+    (preStr, wrapStr, preLen) = state.formatPaddedBullet()
     state.totalWidth -= preLen
     for item in r.items:
       state.availableWidth = state.totalWidth
@@ -617,7 +627,7 @@ proc calculateColumnWidths(r: Rope, state: FmtState): seq[int] =
     fullColumns    = 0
     numCols        = len(widestLines)
 
-  if state.getUseHorizontalSeparator():
+  if state.getUseVerticalSeparator():
     availableSpace -= style.vertical.runeWidth() * (numCols - 1)
 
   if state.getUseLeftBorder():
@@ -628,6 +638,7 @@ proc calculateColumnWidths(r: Rope, state: FmtState): seq[int] =
 
   for column in widestLines:
     result.add(bareMinimumColWidth + 2) # + 2 for forced padding.
+    availableSpace -= (bareMinimumColWidth + 2)
     if bareMinimumColWidth >= (column + 2):
       fullColumns += 1
 
@@ -647,33 +658,26 @@ proc calculateColumnWidths(r: Rope, state: FmtState): seq[int] =
 
 proc formatOrderedList(r: Rope, state: var FmtState): FormattedOutput =
   var
-    maxDigits = 0
-    n         = len(r.items)
+    placeholder = ""
+    maxDigits   = 0
+    n           = len(r.items)
 
   while true:
-    maxDigits += 1
-    n          = n div 10
+    maxDigits  += 1
+    n           = n div 10
+    placeholder = placeholder & "0"
     if n == 0:
       break
 
   state.withTag("ol"):
-    let
-      lpadChar  = state.getLpadChar()
-      rpadChar  = state.getRpadChar()
-      bullet    = state.getBulletChar().get(Rune(0x200D))
-      lpad      = state.getLpad()
-      rpad      = state.getRpad()
-      preStr    = lpadChar.repeat(lpad)
-      postStr   = $(bullet) & rpadChar.repeat(rpad)
-      widthLoss = preStr.runeLength() + postStr.runeLength() + maxDigits
-      wrapStr   = lpadChar.repeat(widthLoss)
+    var
       savedTW   = state.totalWidth
+      templ8:  string
+      wrapStr: string
+      prelen:  int
 
-    if lpadChar.runeWidth() != 1:
-      raise newException(ValueError,
-                         "Left padding character for lists must be 1 char wide")
-
-    state.totalWidth -= widthLoss
+    (templ8, wrapStr, preLen) = state.formatPaddedBullet(placeholder)
+    state.totalWidth -= prelen
 
     for n, item in r.items:
       state.availableWidth  = state.totalWidth
@@ -681,15 +685,18 @@ proc formatOrderedList(r: Rope, state: var FmtState): FormattedOutput =
       var oneRes = item.internalRopeToString(state)
       for i, line in oneRes.contents:
         if i == 0:
-          let
+          var
             nAsStr  = $(n + 1)
-            fullPre = preStr & lpadChar.repeat(maxDigits - len(nAsStr)) & nAsStr
+          while nAsStr.runeLen() != placeholder.runeLen():
+            nAsStr = ' ' & nAsStr
+          let
+            prefix = templ8.replace(placeholder)
 
-          oneRes.contents[i] = fullPre & postStr & line
+          oneRes.contents[i] = prefix & line
         else:
           oneRes.contents[i] = wrapStr & line
-        oneRes.lineWidths[i] = oneRes.lineWidths[i] + widthLoss
-      oneRes.maxWidth += widthLoss
+        oneRes.lineWidths[i] = oneRes.lineWidths[i] + preLen
+      oneRes.maxWidth += preLen
 
       combineFormattedOutput(result, oneRes)
 
@@ -698,10 +705,26 @@ proc formatOrderedList(r: Rope, state: var FmtState): FormattedOutput =
     result.finalBreak      = true
 
 proc getEmptyCellOfWidth(w: int, state: var FmtState): FormattedOutput =
-  result = internalRopeToString(Rune(' ').repeat(w), state)
+  let savedWidth = state.totalWidth
+  state.totalWidth     = w
+  state.availableWidth = w
+  let
+    s = Rune(' ').repeat(w).toRunes()
+    r = Rope(style: state.curStyle, kind: RopeAtom, length: w,
+               text: s)
+
+  result = r.internalRopeToString(state)
+  state.totalWidth     = savedWidth
+  state.availableWidth = savedWidth
+
+proc getEmptyLineOfWidth(w: int, state: var FmtState): string =
+  let cell = getEmptyCellOfWidth(w, state)
+  result = cell.contents[0]
 
 proc formatRowsForOneTag(r: Rope, tagName: string, widths: seq[int],
                          state: var FmtState): seq[seq[FormattedOutput]] =
+    var realTotalWidth = state.totalWidth
+
     # We automatically pad cells by enclosing them in a left alignment tag rn.
     if r == nil:
       return
@@ -737,7 +760,10 @@ proc formatRowsForOneTag(r: Rope, tagName: string, widths: seq[int],
                   state.availableWidth = state.totalWidth
                   var prePad           = cell.internalRopeToString(state)
                   for k, line in prePad.contents:
-                      prePad.contents[k]    = $(Rune(' ')) & line & $(Rune(' '))
+                      let
+                        l = getEmptyLineOfWidth(1, state)
+                        r = getEmptyLineOfWidth(1, state)
+                      prePad.contents[k]    = l & line & r
                       prePad.lineWidths[k] += 2
                       if prePad.maxWidth < prePad.lineWidths[k]:
                           prePad.maxWidth = prePad.lineWidths[k]
@@ -776,10 +802,8 @@ proc constructTopBorder(state: var FmtState, cwidths: seq[int],
   if state.getUseRightBorder():
     result.add($(style.upperRight))
 
-
 proc constructRowSep(state: var FmtState, cwidths: seq[int], style: BoxStyle):
                     string =
-
   var
     cross      = ""
     horizontal = style.horizontal
@@ -818,6 +842,10 @@ proc constructBottomBorder(state: var FmtState, cwidths: seq[int],
   if state.getUseRightBorder():
     result.add($(style.lowerRight))
 
+
+proc `$`(x: FormattedOutput): string =
+  return $(x.contents)
+
 proc formatTable(r: Rope, state: var FmtState): FormattedOutput =
     let
       colWidths          = r.calculateColumnWidths(state)
@@ -841,7 +869,7 @@ proc formatTable(r: Rope, state: var FmtState): FormattedOutput =
     # the result into mergedRows.
     var mergedRows: seq[FormattedOutput] = @[]
 
-    for i, row in cellContents:
+    for rownum, row in cellContents:
       var rowHeight: int = 1
       # Inner Loop 1, calculate row height.
       for item in row:
@@ -852,16 +880,25 @@ proc formatTable(r: Rope, state: var FmtState): FormattedOutput =
       # Inner Loop 2, go back through and pad the text for any row we
       # added.  Look to the first row for the style. If they managed
       # to sneak in a totally empty row, then oh well.
-      for j, item in row:
+      for cellnum, item in row:
         let style = if item.contents.len() != 0:
                       item.tdStyleCache
                     else:
                       state.curStyle
-        var l = item.contents.len()
         state.withStyle(style):
-          while l > rowHeight:
+          for lineno in 0 ..< cellContents[rownum][cellnum].contents.len():
+            var diff = colWidths[cellnum]
+            diff -= cellContents[rownum][cellnum].lineWidths[lineno]
+            if diff > 0:
+              let s = getEmptyLineOfWidth(diff, state)
+              cellContents[rownum][cellnum].contents[lineno]   &= s
+              cellContents[rownum][cellnum].lineWidths[lineno] += diff
+
+          while cellContents[rownum][cellnum].contents.len() < rowHeight:
             # item isn't mutable directly via the iterator?
-            cellContents[i][j].contents.add((Rune(' ').repeat(colWidths[i] + 2)))
+            let s = getEmptyLineOfWidth(colWidths[cellnum], state)
+            cellContents[rownum][cellnum].contents.add(s)
+            cellContents[rownum][cellnum].lineWidths.add(colWidths[cellnum])
 
       # We could merge w/ the above loop but don't for clarity.  Here,
       # we add interior vertical borders to the table, if they're turned
@@ -869,22 +906,21 @@ proc formatTable(r: Rope, state: var FmtState): FormattedOutput =
       if state.getUseVerticalSeparator():
         var newLines: string
 
-        for j, item in cellContents[i]:
-          if (j + 1) == len(cellContents[i]):
+        for colnum, item in cellContents[rownum]:
+          if (colnum + 1) == len(cellContents[rownum]):
             break
           for k, line in item.contents:
-            cellContents[i][j].contents[k]    = line & verticalBorder
-            cellContents[i][k].lineWidths[k] += 1
+            cellContents[rownum][colnum].contents[k]    = line & verticalBorder
+            cellContents[rownum][colnum].lineWidths[k] += 1
 
       # Now, we combine all the cells in the whole row into a single
       # FormattedOutput object.  Start with column 0's info and append to it.
-      var thisRow = cellContents[i][0]
-      for j in 1 ..< cellContents[i].len():
-        let nextCell = cellContents[i][j]
+      var thisRow = cellContents[rownum][0]
+      for colnum in 1 ..< cellContents[rownum].len():
+        let nextCell = cellContents[rownum][colnum]
         for k, line in nextCell.contents:
           thisRow.contents[k]   &= line
           thisRow.lineWidths[k] += nextCell.lineWidths[k]
-
       # Now, we're going to add borders to the left and right if
       # they're desired.
       let
@@ -1002,7 +1038,8 @@ proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
         let w = state.totalWidth - result.lineWidths[i]
         if w > 0:
           var
-            padRope = Rope(kind: RopeAtom, text: Rune(' ').repeat(w).toRunes())
+            padRope = Rope(kind: RopeAtom, text: Rune(' ').repeat(w).toRunes(),
+                           length: w)
             padRes  = padRope.internalRopeToString(state)
             padStr  = if len(padRes.contents) > 0:
                         padRes.contents[0]
@@ -1019,10 +1056,12 @@ proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
         let w = state.totalWidth - result.lineWidths[i]
         if w > 0:
           let
-            lbase    = Rune(' ').repeat(w div 2).toRunes()
-            rbase    = if (w and 0x01) == 1: lbase & @[Rune(' ')] else: lbase
-            lpadRope = Rope(kind: RopeAtom, text: lbase)
-            rpadRope = Rope(kind: RopeAtom, text: rbase)
+            len1     = w div 2
+            len2     = if (w and 0x01) == 1: len1 + 1 else: len1
+            lbase    = Rune(' ').repeat(len1).toRunes()
+            rbase    = Rune(' ').repeat(len2).toRunes()
+            lpadRope = Rope(kind: RopeAtom, text: lbase, length: len1)
+            rpadRope = Rope(kind: RopeAtom, text: rbase, length: len2)
             lpadRes  = lpadRope.internalRopeToString(state)
             rpadRes  = rpadRope.internalRopeToString(state)
             lpadStr  = if len(lpadRes.contents) > 0:
@@ -1043,7 +1082,8 @@ proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
         let w = state.totalWidth - result.lineWidths[i]
         if w > 0:
           var
-            padRope = Rope(kind: RopeAtom, text: Rune(' ').repeat(w).toRunes())
+            padRope = Rope(kind: RopeAtom, text: Rune(' ').repeat(w).toRunes(),
+                           length: w)
             padRes  = padRope.internalRopeToString(state)
             padStr  = if len(padRes.contents) > 0:
                         padRes.contents[0]
@@ -1093,8 +1133,7 @@ proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
     let next = r.next.internalRopeToString(state)
     combineFormattedOutput(result, next)
 
-proc ropeToString*(r: Rope, stripFront = false, stripEnd = false,
-                   width = -1): string =
+proc stylize*(r: Rope, stripFront = false, stripEnd = false, width = -1): string =
   var
     curState: FmtState
 
@@ -1125,9 +1164,9 @@ proc ropeToString*(r: Rope, stripFront = false, stripEnd = false,
   elif result.len() != 0 and result[^1] != '\n':
     result &= "\n"
 
-proc print*(r: Rope = nil,
-            stripFront = false, stripEnd = false, width = -1) =
+proc print*(r: Rope = nil, file = stdout, stripFront = false, stripEnd = false,
+                                                       width = -1) =
   if r == nil:
     echo ""
   else:
-    stdout.write(ropeToString(r, stripFront, stripEnd, width))
+    file.write(stylize(r, stripFront, stripEnd, width))

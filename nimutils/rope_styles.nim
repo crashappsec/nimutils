@@ -18,12 +18,12 @@ var
 
   styleMap*: Table[string, FmtStyle] = {
     "title" : newStyle(fgColor = "jazzberry", bold = BoldOn,
-                    italic = ItalicOn, casing = CasingUpper),
+          align = AlignC, italic = ItalicOn, casing = CasingUpper),
     "h1" : newStyle(fgColor = "atomiclime", bold = BoldOn,
-                    italic = ItalicOn, casing = CasingUpper),
+           align = AlignC, italic = ItalicOn, casing = CasingUpper),
     "h2" : newStyle(bgColor = "white", fgColor = "jazzberry", bold = BoldOn,
                     italic = ItalicOn, inverse = InverseOn),
-    "h3" : newStyle(fgColor = "fandango", italic = ItalicOn,
+    "h3" : newStyle(bgColor = "fandango", fgColor = "white", italic = ItalicOn,
                     underline = UnderlineDouble, casing = CasingUpper),
     "h4" : newStyle(fgColor = "jazzberry", italic = ItalicOn,
                     underline = UnderlineSingle, casing = CasingTitle),
@@ -33,11 +33,12 @@ var
                     underline = UnderlineSingle, casing = CasingTitle),
     "ol" : newStyle(bulletChar = Rune('.'), lpad = 2),
     "ul" : newStyle(bulletChar = Rune(0x2022), lpad = 2), #•
-    "table" : newStyle(borders = [BorderTypical]),
+    "table" : newStyle(borders = [BorderTypical], overflow = OWrap),
     "th"    : newStyle(fgColor = "black", bgColor = "atomiclime"),
     "tr.even": newStyle(fgColor = "white", bgColor = "jazzberry"),
-    "tr.odd" : newStyle(fgColor = "white", bgColor = "fandango")
-
+    "tr.odd" : newStyle(fgColor = "white", bgColor = "fandango"),
+    "em" : newStyle(fgColor = "atomiclime", bold = BoldOn),
+    "code" : newStyle(inverse = InverseOn, italic = ItalicOn)
     }.toTable()
 
   breakingStyles*: Table[string, bool] = {
@@ -47,7 +48,6 @@ var
     "ul"         : true,
     "li"         : true,
     "blockquote" : true,
-    "code"       : true,
     "pre"        : true,
     "q"          : true,
     "small"      : true,
