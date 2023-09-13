@@ -12,10 +12,13 @@ import misc, strutils, posix, file, os, options
 #include <errno.h>
 #include <termios.h>
 #include <unistd.h>
-#include <util.h>
 #include <limits.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
+
+#ifdef __APPLE__
+#include <util.h>
+#endif
 
 // Already in nimutils
 extern bool write_data(int fd, char *buf, size_t nbytes);
