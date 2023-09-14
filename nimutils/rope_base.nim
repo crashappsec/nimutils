@@ -29,6 +29,9 @@ type
   UnderlineStyle* = enum
     UnderlineIgnore, UnderlineNone, UnderlineSingle, UnderlineDouble
 
+  AlignStyle* = enum
+    AlignIgnore, AlignL, AlignC, AlignR
+
   BorderOpts* = enum
     BorderTop          = 1,
     BorderBottom       = 2,
@@ -56,8 +59,6 @@ type
     italic*:                 Option[bool]
     underlineStyle*:         Option[UnderlineStyle]
     bulletChar*:             Option[Rune]
-    bulletTextColor*:        Option[string]
-    bulletTextBg*:           Option[string]
     minTableColWidth*:       Option[int]   # Currently not used.
     maxTableColWidth*:       Option[int]   # Currently not used.
     useTopBorder*:           Option[bool]
@@ -67,6 +68,7 @@ type
     useVerticalSeparator*:   Option[bool]
     useHorizontalSeparator*: Option[bool]
     boxStyle*:               Option[BoxStyle]
+    alignStyle*:             Option[AlignStyle]
 
   BoxStyle* = ref object
     horizontal*: Rune
@@ -98,7 +100,6 @@ type
     cycle*:      bool
     style*:      FmtStyle  # Style options for this node
     tag*:        string
-    inherited*:  FmtStyle
 
     case kind*: RopeKind
     of RopeAtom:
@@ -221,8 +222,6 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
                     italic:                 inStyle.italic,
                     underlineStyle:         inStyle.underlineStyle,
                     bulletChar:             inStyle.bulletChar,
-                    bulletTextColor:        inStyle.bulletTextColor,
-                    bulletTextBg:           inStyle.bulletTextBg,
                     minTableColWidth:       inStyle.minTableColWidth,
                     maxTableColWidth:       inStyle.maxTableColWidth,
                     useTopBorder:           inStyle.useTopBorder,
@@ -231,7 +230,8 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
                     useRightBorder:         inStyle.useRightBorder,
                     useVerticalSeparator:   inStyle.useVerticalSeparator,
                     useHorizontalSeparator: inStyle.useHorizontalSeparator,
-                    boxStyle:               inStyle.boxStyle)
+                    boxStyle:               inStyle.boxStyle,
+                    alignStyle:             inStyle.alignStyle)
 
 
 proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
@@ -268,10 +268,6 @@ proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
     result.underlineStyle = changes.underlineStyle
   if changes.bulletChar.isSome():
     result.bulletChar = changes.bulletChar
-  if changes.bulletTextColor.isSome():
-    result.bulletTextColor = changes.bulletTextColor
-  if changes.bulletTextBg.isSome():
-    result.bulletTextBg = changes.bulletTextBg
   if changes.minTableColWidth.isSome():
     result.minTableColWidth = changes.minTableColWidth
   if changes.maxTableColWidth.isSome():
@@ -290,6 +286,8 @@ proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
     result.useHorizontalSeparator = changes.useHorizontalSeparator
   if changes.boxStyle.isSome():
     result.boxStyle = changes.boxStyle
+  if changes.alignStyle.isSome():
+    result.alignStyle = changes.alignStyle
 
 proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
                wrapIndent = -1, lpad = -1, rpad = -1, lPadChar = Rune(0x0000),
@@ -297,10 +295,9 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
                paragraphSpacing = -1, bold = BoldIgnore,
                inverse = InverseIgnore, strikethru = StrikeThruIgnore,
                italic = ItalicIgnore, underline = UnderlineIgnore,
-               bulletChar = Rune(0x0000), bulletColor = "",
-               bulletBgColor = "", minColWidth = -1, maxColWidth = -1,
-               borders: openarray[BorderOpts] = [], boxStyle: BoxStyle = nil):
-                 FmtStyle =
+               bulletChar = Rune(0x0000), minColWidth = -1, maxColWidth = -1,
+               borders: openarray[BorderOpts] = [], boxStyle: BoxStyle = nil,
+               align = AlignIgnore): FmtStyle =
     result = FmtStyle()
 
     if fgColor != "":
@@ -355,10 +352,6 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
       result.underlineStyle = some(underline)
     if bulletChar != Rune(0x0000):
       result.bulletChar = some(bulletChar)
-    if bulletColor != "":
-      result.bulletTextColor = some(bulletColor)
-    if bulletBgColor != "":
-      result.bulletTextBg = some(bulletBgColor)
     if minColWidth != -1:
       result.minTableColWidth = some(minColWidth)
     if maxColWidth != -1:
@@ -394,3 +387,5 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
           result.useHorizontalSeparator = some(true)
     if boxStyle != nil:
       result.boxStyle = some(boxStyle)
+    if align != AlignIgnore:
+      result.alignStyle = some(align)

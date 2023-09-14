@@ -400,7 +400,7 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
     elif timeout <= 0:
       timeout = -1
   else:
-    timeout = 5000 # 5 seconds.
+    timeout = 500 # .5 seconds.
 
   if uri.scheme == "https":
     context = newContext(verifyMode = CVerifyPeer)
