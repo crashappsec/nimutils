@@ -371,6 +371,8 @@ proc wrapOne(s: seq[Rune], cIx, mIx: int, bps: seq[int], available: int):
   if widthUsed <= available:
     return (mIx, widthUsed)
   else:
+    if breakpoint == -1:
+      return (mIx, widthUsed)
     return (breakpoint, widthAtBp)
 
 proc wrapToWidth(s: seq[Rune], runeLen: int, state: var FmtState): string =
