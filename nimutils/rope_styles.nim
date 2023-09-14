@@ -34,7 +34,8 @@ var
     "ol" : newStyle(bulletChar = Rune('.'), lpad = 2),
     "ul" : newStyle(bulletChar = Rune(0x2022), lpad = 2), #•
     "table" : newStyle(borders = [BorderTypical], overflow = OWrap),
-    "th"    : newStyle(fgColor = "black", bgColor = "atomiclime"),
+    "th"    : newStyle(fgColor = "black", bold = BoldOn,
+                                 bgColor = "atomiclime"),
     "tr.even": newStyle(fgColor = "white", bgColor = "jazzberry"),
     "tr.odd" : newStyle(fgColor = "white", bgColor = "fandango"),
     "em" : newStyle(fgColor = "atomiclime", bold = BoldOn),

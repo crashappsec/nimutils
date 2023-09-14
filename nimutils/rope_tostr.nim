@@ -54,6 +54,7 @@ type
     lineWidths:      seq[int]
     startsWithBreak: bool
     finalBreak:      bool
+    newParagraph:    bool
     tdStyleCache:    FmtStyle
   FmtState* = object
     availableWidth: int
@@ -134,6 +135,13 @@ proc getBoxStyle(s: FmtState): BoxStyle =
 proc combineFormattedOutput(a: var FormattedOutput, b: FormattedOutput) =
   if b.startsWithBreak:
     a.finalBreak = true
+
+  if a.newParagraph:
+    # TODO, this should be padded, and preserve styling.
+    a.contents.add("")
+    a.linewidths.add(0)
+    a.newParagraph = b.newParagraph
+
   if a.finalBreak:
     a.contents   &= b.contents
     a.lineWidths &= b.lineWidths
@@ -1010,7 +1018,8 @@ proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
                                lineWidths: @[0], finalBreak: true)
     elif r.breakType == BrParagraph:
       result = FormattedOutput(contents: @[""], maxWidth: 0,
-                               lineWidths: @[0], finalBreak: true)
+                               lineWidths: @[0], finalBreak: true,
+                               newParagraph: true)
     else:
       result = FormattedOutput(contents: @[""], maxWidth: 0,
                                lineWidths: @[0], finalBreak: true)
