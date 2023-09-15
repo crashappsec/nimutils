@@ -215,7 +215,8 @@ proc prRopeMaxWidth(r: Rope, soFarThisSubRope: int,
     newSize         = 0
 
   of RopeLink:
-    (newSize, newLargest) = r.guts.prRopeMaxWidth(soFarThisSubrope, curLargest)
+    (newSize, newLargest) = r.toHighlight.prRopeMaxWidth(soFarThisSubrope,
+                                                         curLargest)
 
   of RopeFgColor, RopeBgColor:
     (newSize, newLargest) = r.toColor.prRopeMaxWidth(soFarThisSubrope,

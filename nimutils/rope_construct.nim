@@ -261,6 +261,7 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
       else:
         result = Rope(kind: RopeTaggedContainer)
         result.contained = n.descend()
+
       result.tag = n.contents
   of HtmlText, HtmlCData:
     result = n.contents.rawStrToRope()

@@ -21,8 +21,8 @@ var
           align = AlignC, italic = ItalicOn, casing = CasingUpper),
     "h1" : newStyle(fgColor = "atomiclime", bold = BoldOn,
            align = AlignC, italic = ItalicOn, casing = CasingUpper),
-    "h2" : newStyle(bgColor = "white", fgColor = "jazzberry", bold = BoldOn,
-                    italic = ItalicOn, inverse = InverseOn),
+    "h2" : newStyle(bgColor = "jazzberry", fgColor = "white", bold = BoldOn,
+                    italic = ItalicOn),
     "h3" : newStyle(bgColor = "fandango", fgColor = "white", italic = ItalicOn,
                     underline = UnderlineDouble, casing = CasingUpper),
     "h4" : newStyle(fgColor = "jazzberry", italic = ItalicOn,
@@ -39,6 +39,7 @@ var
     "tr.even": newStyle(fgColor = "white", bgColor = "jazzberry"),
     "tr.odd" : newStyle(fgColor = "white", bgColor = "fandango"),
     "em" : newStyle(fgColor = "atomiclime", bold = BoldOn),
+    "strong" : newStyle(inverse = InverseOn, italic = ItalicOn, lpad=1, rpad=1),
     "code" : newStyle(inverse = InverseOn, italic = ItalicOn)
     }.toTable()
 

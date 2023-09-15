@@ -272,7 +272,6 @@ spawn_pty(char *path, char *argv[], char *envp[], char *topipe, int len)
     pid_t           pid;
     int             fd;
 
-    printf("In spawn_pty, len = %d\n", len);
     pipe(stdin);
 
     if (!isatty(0)) {
