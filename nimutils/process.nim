@@ -50,56 +50,215 @@ read_one(int fd, char *buf, size_t nbytes) {
     return true;
 }
 
-/* This is not yet going to handle window size changes. */
+/* This is not yet going to handle window size changes.
+** Also, should we handle whether to kill() the child if the parent
+** disappears? Right now I am not.
+**
+** Currently, this also doesn't capture the child's stdin or stderr,
+** because we do not need them.
+*/
 
-void
-handle_comms(int fd, int pid)
+#ifdef MIN
+#undef MIN
+#endif
+#define MIN(a,b) ((a) <= (b)) ? (a) : (b)
+
+int
+subprocess_comms(int ptyfd, int child_stdin_fd, char *inp, int inlen,
+                 int timeout_sec, int timeout_usec)
 {
-    fd_set 	   set;
-    char   	   buf[4096];
-    int    	   stat;
-    int            res;
-    int            n;
-    struct timeval timeout;
+    /* We're guaranteed that, if a fd is cleared for write, we can push up to
+     * PIPE_BUF bytes at once.
+     *
+     * Note that we assume it's never a problem to block on writing to stdout.
+     */
+    fd_set 	    readset;
+    fd_set          writeset;
+    fd_set          errset;
+    char   	    to_parent[PIPE_BUF+1];
+    char            to_child_buf[PIPE_BUF];
+    char           *to_child  = &to_child_buf;
+    int             to_child_len  = 0;
+    int             n; // A temporary
+    int             max = ptyfd;
+    struct timeval  timeout;
+    struct timeval *timeval_ptr = NULL;
+    bool            read_available_on_stdin    = false;
+    bool            read_available_on_child    = false;
+    bool            can_write_to_child_stdin   = false;
+    bool            can_write_to_child_tty     = false;
+    bool            stopped_due_to_child_death = false;
 
-    // 1/20th of a second.
-    timeout.tv_sec  = 0;
-    timeout.tv_usec = 500000;
+    if (child_stdin_fd > max) {
+      max = child_stdin_fd;
+    }
 
-    FD_ZERO(&set);
+    max++;
 
+    if (timeout_sec >= 0 && timeout_usec >= 0) {
+      timeout.tv_sec  =  timeout_sec;
+      timeout.tv_usec =  timeout_usec;
+      timeval_ptr     = &timeout;
+    }
+
+    if (inlen < 0 || child_stdin_fd <= 2 || inp == NULL) {
+      // From now on we'll just check this to see if we have anything to pass
+      // down to the child's stdin.
+      inlen = 0;
+    }
+
+
+    FD_ZERO(&readset);
+    FD_ZERO(&writeset);
+    FD_ZERO(&errset);
     while (true) {
-	FD_SET(0,  &set);
-	FD_SET(fd, &set);
-	switch (select(fd + 1, &set, NULL, NULL, &timeout)) {
+        FD_SET(0, &errset);        // If the user went away, shut down.
+        FD_SET(ptyfd, &errset);    // If the child went away, shut down.
+
+        FD_SET(ptyfd, &readset);
+
+        if (inlen != 0) {
+          FD_SET(child_stdin_fd, &writeset);
+        }
+        if (to_child_len == 0) {
+          FD_SET(0, &readset);
+        } else {
+          FD_SET(ptyfd, &writeset);
+        }
+
+	switch (select(max, &readset, &writeset, &errset, timeval_ptr)) {
+        case -1:
+          if (errno == EINVAL || errno == EBADF) {
+            return errno;
+          }
+          // Else, EINTR or EAGAIN
+          exit(-1);
+          continue;
 	case 0:
-	    res = waitpid(pid, &stat, WNOHANG);
-	    if (res != -1) {
-		break;
-	    }
-	    exit(1);
+            continue;
+            // We got the timeout.
+            return -2;
 	default:
-	    if (FD_ISSET(fd, &set) != 0) {
-		n = read_one(fd, buf, 4096);
-		if (n > 0) {
-		    printf("%s", buf);
-		} else {
-		    return;
-		}
-	    }
+            // First, if we have any error conditions, we bail.
+            // If the parent is still around, we'll want to jump to
+            // where we do a final read.
+            if (FD_ISSET(0, &errset)) {
+              FD_CLR(0, &errset);
+              // No more user; shut down the pipe to the child.
+              close(ptyfd);
+              return -1; // There's no point in a final read I think.
+            }
+            if (FD_ISSET(ptyfd, &errset)) {
+              FD_CLR(ptyfd, &errset);
+              stopped_due_to_child_death = true;
+              goto final_read;
+            }
 
-	    if (FD_ISSET(0, &set) != 0) {
-		int n = read_one(0, buf, 4096);
-		if (n > 0) {
-		    write_data(fd, buf, n);
-		}
-	    }
-	}
+            // Now, let's mark everything that we know is ready.
+            if (FD_ISSET(0, &readset)) {
+               FD_CLR(0, &readset);
+               read_available_on_stdin   = true;
+            }
+            if (FD_ISSET(ptyfd, &readset)) {
+               FD_CLR(ptyfd, &readset);
+               read_available_on_child = true;
+            }
+            if (FD_ISSET(ptyfd, &writeset)) {
+               FD_CLR(ptyfd, &writeset);
+               can_write_to_child_tty = true;
+            }
+            if (FD_ISSET(child_stdin_fd, &writeset)) {
+               FD_CLR(child_stdin_fd, &writeset);
+               can_write_to_child_stdin = true;
+            }
+
+            // Cool, now let's test the flags to do whatever work we
+            // can do, then clear any flag that let we do work on.
+
+            // This was only ever set if we have data to pass over stdin,
+            if (can_write_to_child_stdin) {
+              can_write_to_child_stdin = false;
+
+              n = write(child_stdin_fd, inp, MIN(PIPE_BUF, inlen));
+              if (n != -1) {
+                inp   += n;
+                inlen -= n;
+                if (inlen <= 0) {
+                  close(child_stdin_fd);
+                }
+              }
+              else {
+                if (errno != EAGAIN && errno != EINTR) {
+                  return -4;
+                }
+              }
+            }
+
+            if (read_available_on_child) {
+              read_available_on_child = false;
+
+              n = read(ptyfd, to_parent, PIPE_BUF);
+              if (n == 0) {
+                break; // EOF, proper child exit.
+              }
+              if (n == -1) {
+                if (errno != EAGAIN && errno != EINTR) {
+                  return -4;
+                }
+              } else {
+                to_parent[n] = 0;
+                write_data(1, to_parent, n);
+              }
+            }
+
+            if (read_available_on_stdin && to_child_len == 0) {
+
+               to_child_len = read(0, to_child, PIPE_BUF);
+               if (to_child_len == 0) {
+                 close(ptyfd);
+                 return -3;
+               }
+               if (to_child_len == -1) {
+                 if (errno != EAGAIN && errno != EINTR) {
+                  return -4;
+                 } else {
+                   to_child_len = 0;
+                 }
+               }
+            }
+            read_available_on_stdin = false;
+
+
+            if (can_write_to_child_tty) {
+              can_write_to_child_tty = false;
+
+              n = write(ptyfd, to_child, to_child_len);
+              if (n != -1) {
+                to_child_len -= n;
+                to_child     += n;
+                if (to_child_len == 0) {
+                  to_child = &to_child_buf;
+                }
+              }
+              else {
+                if (errno != EAGAIN && errno != EINTR) {
+                   return -4;
+                }
+              }
+            }
+       }
     }
 
-    while ((n = read_one(fd, buf, 4096)) > 0) {
-	printf("%s", buf);
+final_read:
+    while ((n = read_one(ptyfd, to_parent, PIPE_BUF - 1)) > 0) {
+        to_parent[n] = 0;
+        write_data(1, to_parent, n);
     }
+
+    if (stopped_due_to_child_death) {
+      return -1;
+    }
+    return 0;
 }
 
 pid_t
@@ -113,6 +272,7 @@ spawn_pty(char *path, char *argv[], char *envp[], char *topipe, int len)
     pid_t           pid;
     int             fd;
 
+    printf("In spawn_pty, len = %d\n", len);
     pipe(stdin);
 
     if (!isatty(0)) {
@@ -125,6 +285,11 @@ spawn_pty(char *path, char *argv[], char *envp[], char *topipe, int len)
     }
     pid = forkpty(&fd, NULL, term_ptr, win_ptr);
 
+    if (pid < 0) {
+      printf("%s\n", strerror(errno));
+      exit(-1);
+    }
+
     if (pid != 0) {
 	close(stdin[0]);
 	termcap.c_lflag &= ~ICANON;
@@ -132,9 +297,7 @@ spawn_pty(char *path, char *argv[], char *envp[], char *topipe, int len)
 	termcap.c_cc[VTIME] = 0;
 	tcsetattr(0, TCSANOW, term_ptr);
 
-	write_data(stdin[1], topipe, len);
-	close(stdin[1]);
-	handle_comms(fd, pid);
+	subprocess_comms(fd, stdin[1], topipe, len, -1, -1);
 	return pid;
     }
     close(stdin[1]);
@@ -301,6 +464,7 @@ proc spawn_pty*(path: cstring, argv, env: cStringArray, p: cstring, l: cint): in
 
 proc runInteractiveCmd*(path: string, args: seq[string], passToChild = ""):
                       int {.discardable.} =
+  # Returns -1 if it didn't work.
   setStdIoUnbuffered()
 
   var
@@ -312,8 +476,10 @@ proc runInteractiveCmd*(path: string, args: seq[string], passToChild = ""):
     envitems.add(k & "=" & v)
 
   envp = allocCStringArray(envitems)
-  spawn_pty(cstring(path), cargs, envp, cstring(passtoChild),
-            cint(len(passToChild)))
+
+  if spawn_pty(cstring(path), cargs, envp, cstring(passtoChild),
+            cint(len(passToChild))) == -1:
+    raise newException(IoError, "Spawn failed.")
 
 
 proc runPager*(s: string) =
