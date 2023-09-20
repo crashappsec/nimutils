@@ -9,7 +9,7 @@
 ## :Copyright: 2022, 2023, Crash Override, Inc.
 
 
-import tables, strutils, os
+import tables, strutils, os, system/nimscript
 
 type
   FileTable*        = Table[string, string]
@@ -17,10 +17,10 @@ type
 
 
 proc staticListFiles*(arg: string): seq[string] =
-  # Unfortunately, for whatever reason, system/nimutils doesn't seem
-  # to work from here, so we can't use listFiles().  As a result, we
-  # use a staticexec("ls") and parse.  This obviously is not portable
-  # to all versions of Windows.
+  # Unfortunately, for whatever reason, system/nimutils's listFiles()
+  # doesn't seem to work from here, so we can't use listFiles().  As a
+  # result, we use a staticexec("ls") and parse.  This obviously is
+  # not portable to all versions of Windows.
   #
   # This invocation of ls might not be super portable.  Deserves a bit
   # of testing.
@@ -34,31 +34,40 @@ proc staticListFiles*(arg: string): seq[string] =
   for item in items:
     result.add(item.strip())
 
-template ftBase(dir: static[string]) =
 
-  for filename in staticListFiles(`dir`):
-    if filename.endswith("/"): continue
+template newFileTable*(dir: static[string]): FileTable =
+  var
+    ret: FileTable = initTable[string, string]()
+    path = instantiationInfo(fullPaths = true).filename.splitPath().head
+    dst  = path.joinPath(dir)
+
+  let pwd = staticExec("cd " & dst & "; pwd")
+
+  for filename in staticListFiles(dst[0 ..< ^1]):
     let
-      pathToFile   = dir.joinPath(filename)
+      pathToFile   = pwd.joinPath(filename)
       fileContents = staticRead(pathToFile)
       key          = splitFile(filename).name
 
     ret[key] = fileContents
+  ret
 
+template newOrderedFileTable*(dir: static[string]): OrderedFileTable =
+  var
+    ret: OrderedFileTable = initOrderedTable[string, string]()
+    path = instantiationInfo(fullPaths = true).filename.splitPath().head
+    dst  = path.joinPath(dir)
 
-proc newFileTable*(dir: static[string]): FileTable =
-  var ret: FileTable = initTable[string, string]()
+  let pwd = staticExec("cd " & dst & "; pwd")
 
-  ftBase(dir)
-  return ret
+  for filename in staticListFiles(dst[0 ..< ^1]):
+    let
+      pathToFile   = pwd.joinPath(filename)
+      fileContents = staticRead(pathToFile)
+      key          = splitFile(filename).name
 
-
-proc newOrderedFileTable*(dir: static[string]): OrderedFileTable =
-  var ret: OrderedFileTable = initOrderedTable[string, string]()
-
-  ftBase(dir)
-  return ret
-
+    ret[key] = fileContents
+  ret
 
 when isMainModule:
   const x = newFileTable("/Users/viega/dev/sami/src/help/")
