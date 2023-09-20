@@ -27,9 +27,9 @@ proc staticListFiles*(arg: string): seq[string] =
   result = @[]
 
   let
-    lines = staticExec("ls -mp " & arg)
-    line  = lines.replace("\n", " ")
-    items = split(line, ",")
+    lines = staticExec("ls --color=never -pF " & arg &
+      " | grep -v \"[^a-zA-Z0-9]$\"")
+    items = split(lines, "\n")
 
   for item in items:
     result.add(item.strip())

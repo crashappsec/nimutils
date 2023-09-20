@@ -362,3 +362,10 @@ proc getHelp*(corpus: Corpus, inargs: seq[string]): string =
 proc formatHelp*(s: string, corpus: Corpus): string =
   for item in corpus.parseJank(s, terminalWidth() - 3):
     result &= item.content
+  # TODO:
+  # 1. Dump all the embedded docs.
+  # 2. Command-line reference.
+  # 3. Configuration files
+  # 4. Output configuration
+  # 5. metadata reference
+  # 6. Configuration builtins
