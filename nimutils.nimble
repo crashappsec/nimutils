@@ -1,6 +1,6 @@
 # Package
 
-version     = "0.1.3"
+version     = "0.1.4"
 author      = "John Viega"
 description = "Crash Øverride Nim utilities"
 license     = "Apache-2.0"
