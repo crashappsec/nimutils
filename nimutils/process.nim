@@ -481,11 +481,15 @@ proc runInteractiveCmd*(path: string, args: seq[string], passToChild = ""):
     raise newException(IoError, "Spawn failed.")
 
 proc runPager*(s: string) =
-  var exe: string
+  var
+    exe:   string
+    flags: seq[string]
+
 
   let less = findAllExePaths("less")
   if len(less) > 0:
-    exe = less[0]
+    exe   = less[0]
+    flags = @["-r"]
   else:
     let more = findAllExePaths("more")
     if len(more) > 0:
@@ -493,7 +497,7 @@ proc runPager*(s: string) =
     else:
       raise newException(ValueError, "Could not find 'more' or 'less' in your path.")
 
-  runInteractiveCmd(exe, @["-r"], s)
+  runInteractiveCmd(exe, flags, s)
 
 
 
