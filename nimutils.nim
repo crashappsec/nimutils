@@ -18,11 +18,11 @@
 ## but the nimble file denies it.  I think I should remove this from
 ## chalk, there are easy options if I wrap something in C.
 
-import nimutils/[box, random, unicodeid, pubsub, sinks, misc, ansi, texttable],
+import nimutils/[box, random, unicodeid, pubsub, sinks, misc, texttable],
        nimutils/[file, process, filetable, encodings, advisory_lock, formatstr]
 import nimutils/[sha, aes, prp, hexdump, markdown, htmlparse]
 import nimutils/[colortable, rope_base, rope_styles, rope_construct, rope_tostr]
-export box, random, unicodeid, pubsub, sinks, misc, random, ansi, texttable,
+export box, random, unicodeid, pubsub, sinks, misc, random, texttable,
        file, process, filetable, encodings, advisory_lock, formatstr,
        sha, aes, prp, hexdump, markdown, htmlparse
 export colortable, rope_base, rope_styles, rope_construct, rope_tostr

@@ -1185,6 +1185,9 @@ proc stylize*(r: Rope, stripFront = false, stripEnd = false, width = -1): string
   elif result.len() != 0 and result[^1] != '\n':
     result &= "\n"
 
+template withColor*(s: string, c: string): string =
+  stylize("<" & c & ">" & s & "</" & c & ">")
+
 proc print*(r: Rope = nil, file = stdout, stripFront = false, stripEnd = false,
                                                        width = -1) =
   if r == nil:

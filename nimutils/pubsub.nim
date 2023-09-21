@@ -3,8 +3,8 @@
 
 ## For now, not intended to be threadsafe for mutation ops.
 
-import tables, sugar, options, json, strutils, ansi, strutils, std/terminal,
-       unicodeid
+import tables, sugar, options, json, strutils, strutils, std/terminal,
+       unicodeid, rope_tostr
 
 type
   InitCallback*   = ((SinkConfig) -> bool)
@@ -261,10 +261,8 @@ proc addTopic*(msg: string, extra: StringTable): (string, bool) =
   let
     topic   = extra["topic"]
     body    = newLines.join("\n") & "\n"
-    prefix  = toAnsiCode(@[acFont1, acBBlue]) & "[[start " & topic & "]]\n" &
-              toAnsiCode(@[acReset])
-    postfix = toAnsiCode(@[acFont1, acBBlue]) & "[[end " & topic & "]]\n" &
-              toAnsiCode(@[acReset])
-    newstr  = prefix & body & postfix
+    prefix  = "<h4>" & "[[start " & topic & "]]\n" & "</h4>"
+    postfix = "<h4>" & "[[end " & topic & "]]\n" & "</h4>"
+    newstr  = prefix.stylize() & body & postfix.stylize()
 
   return (newstr, true)
