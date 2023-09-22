@@ -59,12 +59,6 @@ proc markdownToHtml*(s: string, opts: openarray[MdOpts] = [MdGithub]): string =
 
   result = container.s
 
-  result = result.replace("<pre><code>", "<code>")
-  result = result.replace("</code></pre>", "</code>")
-  result = result.replace("<code>", "<pre><code>")
-  result = result.replace("</code>", "</code></pre>")
-
-
 when isMainModule:
   echo markdownToHtml("""
 # Hello world!
