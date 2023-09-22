@@ -4,7 +4,7 @@
 # Pretty basic table formatting. Works with fixed width unicode, though
 # I don't factor out non-printable spaces right now, I just count runes.
 
-import rope_tostr, markdown, unicode, std/terminal
+import rope_tostr, markdown, unicode, std/terminal, unicodeid
 
 proc formatCellsAsMarkdownList*(base: seq[seq[string]],
                                 toEmph: openarray[string],
@@ -110,21 +110,27 @@ proc instantTable*(cells: seq[string], html = false): string =
   var
     remainingWidth         = terminalWidth()
     numcol                 = 0
-    rows: seq[seq[string]]
+    maxWidth               = 0
     row:  seq[string]      = @[]
+    rows: seq[seq[string]]
 
-  # Find the ideal with.
+  # This gives every column equal width, and assumes space for borders
+  # and pad.
+
   for item in cells:
-    remainingWidth = remainingWidth - len(item) - 2
-    if remainingWidth < 0: break
-    numcol = numcol + 1
+    let w = item.strip().runeLength()
+    if  w > maxWidth:
+      maxWidth = w
+
+  numcol = remainingWidth div (maxWidth + 3)
+
   if numcol == 0: numcol = 1
 
   for i, item in cells:
     if i != 0 and i mod numcol == 0:
       rows.add(row)
       row = @[]
-    row.add(item)
+    row.add(item.strip())
 
   var n = len(cells)
   while n mod numcol != 0:

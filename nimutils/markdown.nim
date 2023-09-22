@@ -54,12 +54,16 @@ proc markdownToHtml*(s: string, opts: openarray[MdOpts] = [MdGithub]): string =
     flags  = flags or cast[cint](item)
 
   res = c_markdown_to_html(cstring(s), cuint(s.len()), addr container, flags)
+
+  # First removing the good stuff makes it easier to replace reliably.
+
   result = container.s
 
-  # TODO: these should move to HTML tags.
-  result = result.replace(":exclaim:", "❗")
-  result = result.replace(":smiley:", "☺")
-  result = result.replace(":warn:", "⚠️")
+  result = result.replace("<pre><code>", "<code>")
+  result = result.replace("</code></pre>", "</code>")
+  result = result.replace("<code>", "<pre><code>")
+  result = result.replace("</code>", "</code></pre>")
+
 
 when isMainModule:
   echo markdownToHtml("""
