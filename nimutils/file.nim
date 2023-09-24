@@ -98,24 +98,6 @@ proc fWriteData*(fd: cint, s: string): bool =
   # toOpenArray does not convert the null terminator.
   return fWriteData(fd, s.toOpenArray(0, s.len() - 1))
 
-template dirWalk*(recursive: bool, body: untyped) =
-  ## This is a helper function that helps one unify code when a
-  ## program might need to do either a single dir walk or a recursive
-  ## walk.  Specifically, depending on whether you pass in the
-  ## recursive flag or not, this will call either os.walkDirRec or
-  ## os.walkDir.  In either case, it injects a variable named `item`
-  ## into the calling scope.
-  var item {.inject.}: string
-
-  when recursive:
-    for i in walkDirRec(path, yieldFilter = {pcFile, pcLinkToFile}):
-      item = i
-      body
-  else:
-    for i in walkDir(path):
-      item = i.path
-      body
-
 proc tildeExpand(s: string): string {.inline.} =
   var homedir = getHomeDir()
 
@@ -289,3 +271,106 @@ int c_replace_stdin_with_pipe() {
 """.}
 
 proc cReplaceStdinWithPipe*(): cint {.importc: "c_replace_stdin_with_pipe".}
+
+{.emit: """
+#include <unistd.h>
+#include <stdio.h>
+
+static int
+get_path_max()
+{
+  return PATH_MAX;
+}
+
+static void
+do_read_link(const char *filename, char *buf) {
+  readlink(filename, buf, PATH_MAX);
+}
+""".}
+
+proc do_read_link(s: cstring, p: pointer): void {.cdecl,importc,nodecl.}
+proc get_path_max(): cint {.cdecl,importc,nodecl.}
+
+proc readLink*(s: string): string =
+  var v = newStringOfCap(int(get_path_max()));
+  do_read_link(cstring(s), addr s[0])
+  result = resolvePath(v)
+
+proc getAllFileNames*(dir: string,
+                      recurse         = true,
+                      yieldFileLinks  = false,
+                      followFileLinks = false,
+                      yieldDirs       = false,
+                      followDirLinks  = false): seq[string] =
+  # I believe the nim builtin one holds on to dir fds too long.
+  # But there are multiple APIs there too depending on if you
+  # recurse or not, and it was leading to verbose unclear code.
+
+  case getFileInfo(dir, followSymLink = false).kind
+    of pcFile:
+      return @[dir]
+    of pcLinkToFile:
+      if yieldFileLinks:
+        return @[dir]
+      elif followFileLinks:
+        return @[readlink(dir)]
+      else:
+        return @[]
+    else:
+      discard
+
+  var dirent = opendir(dir)
+  var subdirList: seq[string]
+
+  if yieldFileLinks and followFileLinks:
+    raise newException(ValueError, "Do not specify yieldFileLinks and " &
+      "followFileLinks in one call.")
+
+  if dirent == nil:
+    return
+
+  while true:
+    var oneentry = readdir(dirent)
+    if oneentry == nil:
+      break
+    var filename = $cast[cstring](addr oneentry.d_name)
+    if filename in [".", ".."]:
+      continue
+    let fullpath = joinPath(dir, filename)
+    var statbuf: Stat
+    if lstat(fullPath, statbuf) < 0:
+      continue
+    elif S_ISLNK(statbuf.st_mode):
+      if dirExists(fullpath):
+        if recurse and followDirLinks:
+          subdirList.add(fullPath)
+        if yieldDirs:
+          result.add(fullPath)
+      else:
+        if yieldFileLinks:
+          result.add(fullPath)
+        elif followFileLinks:
+          var
+            newPath = fullPath
+            i       = 40
+          while i != 0:
+            newPath = readlink(newPath)
+            let finfo = getFileInfo(newPath, followSymLink = false).kind
+            if finfo != pcLinkToFile:
+              break
+            i -= 0
+          if i != 0:
+            result.add(newPath)
+    elif S_ISREG(statbuf.st_mode):
+      result.add(fullPath)
+    elif S_ISDIR(statbuf.st_mode):
+      if recurse:
+        subdirList.add(fullpath)
+        if yieldDirs:
+          result.add(fullpath)
+    else:
+      continue # Skip sockets, fifos, ...
+
+  discard closedir(dirent)
+  for item in subdirList:
+    result &= item.getAllFileNames()
