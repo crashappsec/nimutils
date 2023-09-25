@@ -413,7 +413,7 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
     elif pinnedCert != "":
       raise newException(ValueError, "Pinned cert not allowed with http " &
                                       "URL (only https).")
-    client = newHttpClient(timeout=timeout)
+    client = newHttpClient(sslContext=nil, timeout=timeout)
 
   if client == nil:
     raise newException(ValueError, "Invalid HTTP configuration")
