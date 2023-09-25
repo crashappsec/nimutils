@@ -296,7 +296,7 @@ proc readLink*(s: string): string =
   do_read_link(cstring(s), addr s[0])
   result = resolvePath(v)
 
-proc getAllFileNames*(path: string,
+proc getAllFileNames*(dir: string,
                       recurse         = true,
                       yieldFileLinks  = false,
                       followFileLinks = false,
@@ -308,7 +308,7 @@ proc getAllFileNames*(path: string,
     raise newException(ValueError, "Do not specify yieldFileLinks and " &
       "followFileLinks in one call.")
 
-  let resolved = resolvePath(path)
+  let resolved = resolvePath(dir)
 
   if resolved.startswith("/proc") or resolved.startswith("/dev"):
     return @[]
