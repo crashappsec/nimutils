@@ -499,7 +499,7 @@ proc runPager*(s: string) =
   let less = findAllExePaths("less")
   if len(less) > 0:
     exe   = less[0]
-    flags = @["-r"]
+    flags = @["-r", "-F"]
   else:
     let more = findAllExePaths("more")
     if len(more) > 0:
