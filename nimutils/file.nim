@@ -310,7 +310,7 @@ proc getAllFileNames*(path: string,
 
   let resolved = resolvePath(path)
 
-  if resolved.startswith("/proc") resolved.startswith("/dev"):
+  if resolved.startswith("/proc") or resolved.startswith("/dev"):
     return @[]
 
   try:
