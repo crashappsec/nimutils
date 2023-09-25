@@ -492,6 +492,10 @@ proc runPager*(s: string) =
   if s == "":
     return
 
+  if isatty(1) == 0:
+    echo s
+    return
+
   let less = findAllExePaths("less")
   if len(less) > 0:
     exe   = less[0]

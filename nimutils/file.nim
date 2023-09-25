@@ -296,17 +296,31 @@ proc readLink*(s: string): string =
   do_read_link(cstring(s), addr s[0])
   result = resolvePath(v)
 
-proc getAllFileNames*(dir: string,
+proc getAllFileNames*(path: string,
                       recurse         = true,
                       yieldFileLinks  = false,
                       followFileLinks = false,
                       yieldDirs       = false,
                       followDirLinks  = false): seq[string] =
-  # I believe the nim builtin one holds on to dir fds too long.
-  # But there are multiple APIs there too depending on if you
-  # recurse or not, and it was leading to verbose unclear code.
+  var kind: PathComponent
 
-  case getFileInfo(dir, followSymLink = false).kind
+  if yieldFileLinks and followFileLinks:
+    raise newException(ValueError, "Do not specify yieldFileLinks and " &
+      "followFileLinks in one call.")
+
+  let resolved = resolvePath(path)
+
+  if resolved.startswith("/proc") resolved dir.startswith("/dev"):
+    return @[]
+
+  try:
+    let info = getFileInfo(dir, followSymLink = false)
+
+    kind = info.kind
+  except:
+    return @[]
+
+  case kind
     of pcFile:
       return @[dir]
     of pcLinkToFile:
@@ -321,10 +335,6 @@ proc getAllFileNames*(dir: string,
 
   var dirent = opendir(dir)
   var subdirList: seq[string]
-
-  if yieldFileLinks and followFileLinks:
-    raise newException(ValueError, "Do not specify yieldFileLinks and " &
-      "followFileLinks in one call.")
 
   if dirent == nil:
     return
