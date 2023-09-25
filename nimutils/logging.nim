@@ -1,7 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import tables, options, streams, pubsub, sinks, ansi
+import tables, options, streams, pubsub, sinks, rope_tostr, strutils
 
 type LogLevel* = enum
   ## LogLevel describes what kind of messages you want to see.
@@ -25,25 +25,18 @@ const llToStrMap = { llNone:  "none",
                      llInfo:  "info",
                      llTrace: "trace" }.toTable()
 
-var logLevelColors = { llNone  : "",
-                       llError : toAnsiCode(@[acBRed]),
-                       llWarn  : toAnsiCode(@[acBYellow]),
-                       llInfo  : toAnsiCode(@[acBGreen]),
-                       llTrace : toAnsiCode(@[acBCyan]), }.toTable()
-
-var logLevelPrefixes = { llNone:  "",
-                         llError: "error: ",
-                         llWarn:  "warn:  ",
-                         llInfo:  "info:  ",
-                         llTrace: "trace: " }.toTable()
+var logLevelPrefixes = {
+  llNone:  "",
+  llError: "<red><b>error: </b></red>".stylize().strip(),
+  llWarn:  "<yellow><b>warn:  </b></yellow>".stylize().strip(),
+  llInfo:  "<atomiclime><b>info:  </b></atomiclime>".stylize().strip(),
+  llTrace: "<cyan><b>trace: </b></cyan>".stylize().strip()
+}.toTable()
 
 const keyLogLevel*  = "loglevel"
 var currentLogLevel = llInfo
 
 proc `$`*(ll: LogLevel): string = llToStrMap[ll]
-
-proc setLogLevelColor*(ll: LogLevel, color: string) =
-  logLevelColors[ll] = color
 
 proc setLogLevelPrefix*(ll: LogLevel, prefix: string) =
   logLevelPrefixes[ll] = prefix
@@ -60,8 +53,6 @@ proc setLogLevel*(ll: string) =
 proc getLogLevel*(): LogLevel = currentLogLevel
 
 proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
-  const reset = toAnsiCode(@[acReset])
-
   if keyLogLevel in info:
     let llStr = info[keyLogLevel]
 
@@ -70,11 +61,7 @@ proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
         msgLevel = toLogLevelMap[llStr]
         prefix   = logLevelPrefixes[msgLevel]
 
-      let outstr = if getShowColors():
-                     logLevelColors[msgLevel] & prefix & reset & msg
-                   else:
-                     prefix & msg
-      return (outstr, true)
+      return (prefix & msg, true)
   else:
     raise newException(ValueError, "Log prefix filter used w/o passing in " &
              "a valid value for 'loglevel' in the publish() call's 'aux' " &

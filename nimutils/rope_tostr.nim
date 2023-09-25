@@ -541,8 +541,9 @@ proc formatAtom(r: Rope, state: var FmtState): FormattedOutput =
         if bgCode != -1:
           codes.add("48;5;" & $(bgCode))
 
-    result.contents[i] = "\e[" & codes.join(";") & "m" &
-      result.contents[i] & "\e[0m"
+    if getShowColor():
+      result.contents[i] = "\e[" & codes.join(";") & "m" &
+        result.contents[i] & "\e[0m"
 
 proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput
 
@@ -1034,16 +1035,10 @@ proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
       combineFormattedOutput(result, sub)
 
   of RopeFgColor:
-    if getShowColor():
-      state.withStyle(FmtStyle(textColor: some(r.color))):
-        result = r.toColor.internalRopeToString(state)
-    else:
+    state.withStyle(FmtStyle(textColor: some(r.color))):
       result = r.toColor.internalRopeToString(state)
   of RopeBgColor:
-    if getShowColor():
-      state.withStyle(FmtStyle(bgColor: some(r.color))):
-        result = r.toColor.internalRopeToString(state)
-    else:
+    state.withStyle(FmtStyle(bgColor: some(r.color))):
       result = r.toColor.internalRopeToString(state)
   of RopeList:
     if r.tag == "ol":
@@ -1184,6 +1179,9 @@ proc stylize*(r: Rope, stripFront = false, stripEnd = false, width = -1): string
     result = result.strip(trailing = false)
   elif result.len() != 0 and result[^1] != '\n':
     result &= "\n"
+
+template withColor*(s: string, c: string): string =
+  stylize("<" & c & ">" & s & "</" & c & ">")
 
 proc print*(r: Rope = nil, file = stdout, stripFront = false, stripEnd = false,
                                                        width = -1) =

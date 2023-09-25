@@ -265,6 +265,7 @@ pid_t
 spawn_pty(char *path, char *argv[], char *envp[], char *topipe, int len)
 {
     struct termios termcap;
+    struct termios saved_termcap;
     struct winsize wininfo;
     struct termios *term_ptr = &termcap;
     struct winsize *win_ptr  = &wininfo;
@@ -291,12 +292,15 @@ spawn_pty(char *path, char *argv[], char *envp[], char *topipe, int len)
 
     if (pid != 0) {
 	close(stdin[0]);
-	termcap.c_lflag &= ~ICANON;
+        tcgetattr(0, &saved_termcap);
+	termcap.c_lflag &= ~(ICANON | ECHO);
 	termcap.c_cc[VMIN] = 1;
 	termcap.c_cc[VTIME] = 0;
 	tcsetattr(0, TCSANOW, term_ptr);
 
 	subprocess_comms(fd, stdin[1], topipe, len, -1, -1);
+
+        tcsetattr(0, TCSANOW, &saved_termcap);
 	return pid;
     }
     close(stdin[1]);
@@ -480,13 +484,22 @@ proc runInteractiveCmd*(path: string, args: seq[string], passToChild = ""):
             cint(len(passToChild))) == -1:
     raise newException(IoError, "Spawn failed.")
 
-
 proc runPager*(s: string) =
-  var exe: string
+  var
+    exe:   string
+    flags: seq[string]
+
+  if s == "":
+    return
+
+  if isatty(1) == 0:
+    echo s
+    return
 
   let less = findAllExePaths("less")
   if len(less) > 0:
-    exe = less[0]
+    exe   = less[0]
+    flags = @["-r", "-F"]
   else:
     let more = findAllExePaths("more")
     if len(more) > 0:
@@ -494,9 +507,7 @@ proc runPager*(s: string) =
     else:
       raise newException(ValueError, "Could not find 'more' or 'less' in your path.")
 
-  runInteractiveCmd(exe, @["-R"], s)
-
-
+  runInteractiveCmd(exe, flags, s)
 
 proc runCmdGetEverything*(exe:      string,
                           args:     seq[string],
