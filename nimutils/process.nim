@@ -419,21 +419,25 @@ template ccall*(code: untyped, success = 0) =
 proc readAllOutput*(pid: Pid, stdout, stderr: cint, timeoutUsec: int):
                   ExecOutput =
   var
-    toRead:   TFdSet
-    timeout:  Timeval
-    stat_ptr: cint
-    buf:      array[0 .. 4096, byte]
+    toRead:      TFdSet
+    timeout:     Timeval
+    timeoutAddr = addr timeout
+    stat_ptr:    cint
+    buf:         array[0 .. 4096, byte]
 
   FD_ZERO(toRead)
 
-  timeout.tv_sec  = Time(timeoutUsec / 1000000)
-  timeout.tv_usec = Suseconds(timeoutUsec mod 1000000)
+  if timeoutUsec == 0:
+    timeoutAddr = nil
+  else:
+    timeout.tv_sec  = Time(timeoutUsec / 1000000)
+    timeout.tv_usec = Suseconds(timeoutUsec mod 1000000)
 
   while true:
     FD_SET(stdout, toRead)
     FD_SET(stderr, toRead)
 
-    case select(2, addr toRead, nil, nil, addr timeout)
+    case select(2, addr toRead, nil, nil, timeoutAddr)
     of 0:
       let res = waitpid(pid, stat_ptr, WNOHANG)
       if res != -1:
@@ -512,22 +516,27 @@ proc runPager*(s: string) =
 proc runCmdGetEverything*(exe:      string,
                           args:     seq[string],
                           newStdIn: string       = "",
+                          passthrough            = false,
                           timeoutUsec            = 1000000): ExecOutput =
   var
     stdOutPipe: array[0 .. 1, cint]
     stdErrPipe: array[0 .. 1, cint]
     stdInPipe:  array[0 .. 1, cint]
+    stat_ptr:   cint
 
-  ccall pipe(stdOutPipe)
-  ccall pipe(stdErrPipe)
+
+  if not passthrough:
+    ccall pipe(stdOutPipe)
+    ccall pipe(stdErrPipe)
 
   if newStdIn != "":
     ccall pipe(stdInPipe)
 
   let pid = fork()
   if pid != 0:
-    ccall close(stdOutPipe[1])
-    ccall close(stdErrPipe[1])
+    if not passthrough:
+      ccall close(stdOutPipe[1])
+      ccall close(stdErrPipe[1])
     if newStdIn != "":
       ccall close(stdInPipe[0])
       if not fWriteData(stdInPipe[1], newStdIn):
@@ -535,9 +544,15 @@ proc runCmdGetEverything*(exe:      string,
           "\n")
       ccall close(stdInPipe[1])
 
-    result = readAllOutput(pid, stdoutPipe[0], stdErrPipe[0], timeoutUsec)
-    ccall close(stdOutPipe[0])
-    ccall close(stdErrPipe[0])
+    if not passthrough:
+      result = readAllOutput(pid, stdoutPipe[0], stdErrPipe[0], timeoutUsec)
+      ccall close(stdOutPipe[0])
+      ccall close(stdErrPipe[0])
+    else:
+      discard waitpid(pid, stat_ptr, cint(0))
+
+      result = ExecOutput(stdout: "", stderr: "",
+                          exitcode: int(WEXITSTATUS(stat_ptr)))
   else:
     let cargs = allocCStringArray(@[exe] & args)
     if newStdIn != "":
@@ -548,12 +563,13 @@ proc runCmdGetEverything*(exe:      string,
       let nullfd = open("/dev/null", O_RDONLY)
       discard dup2(nullfd, 0)
 
-    ccall close(stdOutPipe[0])
-    ccall close(stdErrPipe[0])
-    discard dup2(stdOutPipe[1], 1)
-    discard dup2(stdErrPipe[1], 2)
-    ccall close(stdOutPipe[1])
-    ccall close(stdErrPipe[1])
+    if not passthrough:
+      ccall close(stdOutPipe[0])
+      ccall close(stdErrPipe[0])
+      discard dup2(stdOutPipe[1], 1)
+      discard dup2(stdErrPipe[1], 2)
+      ccall close(stdOutPipe[1])
+      ccall close(stdErrPipe[1])
     ccall(execv(cstring(exe), cargs), -1)
 
     stdout.write("error: " & exe & ": command not found\n")
