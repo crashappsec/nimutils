@@ -163,32 +163,62 @@ proc combineFormattedOutput(a: var FormattedOutput, b: FormattedOutput) =
   elif len(a.contents) == 0:
     a = b
 
-template withStyle(state: var FmtState, style: FmtStyle, code: untyped) =
+template withStyleAndTag(state: var FmtState, r: Rope, style: FmtStyle,
+                         tag: string, code: untyped) =
+  state.styleStack.add(state.curStyle)
+
+  if r.class != "" and r.id in perClassStyles:
+    state.curStyle = state.curStyle.mergeStyles(perClassStyles[r.class])
+
+  if r.id != "" and r.id in perIdStyles:
+    state.curStyle = state.curStyle.mergeStyles(perIdStyles[r.id])
+
+  if tag in styleMap:
+    state.curStyle = state.curStyle.mergeStyles(styleMap[tag])
+
+  state.curStyle = state.curStyle.mergeStyles(style)
+  code
+  state.curStyle = state.styleStack.pop()
+
+
+template withStyle(state: var FmtState, r: Rope, style: FmtStyle,
+                   code: untyped) =
   # This is used when converting a rope back to a string to output.
+  # We assume that the explicit style passed is the highest
+  # precidence, so we apply it last.
+  state.withStyleAndTag(r, style, r.tag, code)
+
+template withStyle(state: var FmtState, style: FmtStyle, code: untyped) =
   state.styleStack.add(state.curStyle)
   state.curStyle = state.curStyle.mergeStyles(style)
   code
   state.curStyle = state.styleStack.pop()
 
-template withStyleAndTag(state: var FmtState, style: FmtStyle, tag: string,
-                         code: untyped) =
-  state.styleStack.add(state.curStyle)
-  if tag in styleMap:
-    var newStyle   = state.curStyle.mergeStyles(styleMap[tag])
-    state.curStyle = newStyle.mergeStyles(style)
-  else:
-    state.curStyle = state.curStyle.mergeStyles(style)
-  code
-  state.curStyle = state.styleStack.pop()
+template withTag(state: var FmtState, r: Rope, tag: string, code: untyped) =
+  var yesStack = false
 
-template withTag(state: var FmtState, tag: string, code: untyped) =
+  if r.class != "" and r.class in perClassStyles:
+    yesStack = true
+    state.curStyle = state.curStyle.mergeStyles(perClassStyles[r.class])
+
+  if r.id != "" and r.id in perIdStyles:
+    yesStack = true
+    state.curStyle = state.curStyle.mergeStyles(perIdStyles[r.id])
+
   if tag in styleMap:
-    state.styleStack.add(state.curStyle)
+    yesStack = true
     state.curStyle = state.curStyle.mergeStyles(styleMap[tag])
-    code
+
+  if yesStack:
+    state.styleStack.add(state.curStyle)
+
+  code
+
+  if yesStack:
     state.curStyle = state.styleStack.pop()
-  else:
-    code
+
+template withElement(state: var FmtState, r: Rope, code: untyped) =
+  state.withTag(r, r.tag, code)
 
 
 proc prRopeMaxWidth(r: Rope, soFarThisSubRope: int,
@@ -572,7 +602,7 @@ proc formatPaddedBullet(state: var FmtState, s = ""): (string, string, int) =
           totallen)
 
 proc formatUnorderedList(r: Rope, state: var FmtState): FormattedOutput =
-  state.withTag("ul"):
+  state.withElement(r):
     var
       savedTW = state.totalWidth
       preStr:  string  # Really, first line str.
@@ -686,7 +716,7 @@ proc formatOrderedList(r: Rope, state: var FmtState): FormattedOutput =
     if n == 0:
       break
 
-  state.withTag("ol"):
+  state.withElement(r):
     var
       savedTW   = state.totalWidth
       templ8:  string
@@ -745,7 +775,7 @@ proc formatRowsForOneTag(r: Rope, tagName: string, widths: seq[int],
     # We automatically pad cells by enclosing them in a left alignment tag rn.
     if r == nil:
       return
-    state.withTag(tagName):
+    state.withTag(r, tagName):
       for i, inRow in r.cells:
         if inRow == nil: continue  # Shouldn't happen but jik
         var
@@ -759,7 +789,7 @@ proc formatRowsForOneTag(r: Rope, tagName: string, widths: seq[int],
           if styleMap.contains(inrow.tag & ".odd"):
             rowTagToUse = inrow.tag & ".odd"
 
-        state.withTag(rowTagToUse):
+        state.withTag(inrow, rowTagToUse):
             for j, cell in inRow.cells:
                 if cell == nil: continue
                 var colTagToUse = cell.tag
@@ -775,7 +805,7 @@ proc formatRowsForOneTag(r: Rope, tagName: string, widths: seq[int],
                 # breakpoints along w/ the style at those breakpoints (which
                 # would be cached in the atom).
 
-                state.withTag(colTagToUse):
+                state.withTag(cell, colTagToUse):
                   let curWidth         = widths[j] - 2 # Hardcode padding
                   state.totalWidth     = curWidth
                   state.availableWidth = state.totalWidth
@@ -1035,10 +1065,10 @@ proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
       combineFormattedOutput(result, sub)
 
   of RopeFgColor:
-    state.withStyle(FmtStyle(textColor: some(r.color))):
+    state.withStyle(r, FmtStyle(textColor: some(r.color))):
       result = r.toColor.internalRopeToString(state)
   of RopeBgColor:
-    state.withStyle(FmtStyle(bgColor: some(r.color))):
+    state.withStyle(r, FmtStyle(bgColor: some(r.color))):
       result = r.toColor.internalRopeToString(state)
   of RopeList:
     if r.tag == "ol":
@@ -1133,14 +1163,14 @@ proc internalRopeToString(r: Rope, state: var FmtState): FormattedOutput =
     if r.tag in breakingStyles:
       state.availableWidth = state.totalWidth
 
-    state.withStyleAndTag(newStyle, r.tag):
+    state.withStyleAndTag(r, newStyle, r.tag):
       result = r.contained.internalRopeToString(state)
 
     if r.tag in breakingStyles:
       result.startsWithBreak = true
       result.finalBreak      = true
   of RopeTable:
-    state.withTag("table"):
+    state.withElement(r):
       result = r.formatTable(state)
   else:
     discard

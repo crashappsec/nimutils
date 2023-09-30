@@ -43,6 +43,9 @@ var
     "code" : newStyle(inverse = InverseOn, italic = ItalicOn)
     }.toTable()
 
+  perClassStyles* = Table[string, FmtStyle]()
+  perIdStyles*    = Table[string, FmtStyle]()
+
   breakingStyles*: Table[string, bool] = {
     "p"          : true,
     "div"        : true,

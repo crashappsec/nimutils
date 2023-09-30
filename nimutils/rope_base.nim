@@ -100,6 +100,8 @@ type
     cycle*:      bool
     style*:      FmtStyle  # Style options for this node
     tag*:        string
+    id*:         string
+    class*:      string
 
     case kind*: RopeKind
     of RopeAtom:

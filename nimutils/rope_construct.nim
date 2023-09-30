@@ -163,12 +163,14 @@ proc descend(n: HtmlNode): Rope =
     result = result + item.htmlTreeToRope()
 
 proc htmlTreeToRope(n: HtmlNode): Rope =
+
   case n.kind
   of HtmlDocument:
     result = n.descend()
   of HtmlElement, HtmlTemplate:
     if n.contents.startswith('<') and n.contents[^1] == '>':
       n.contents = n.contents[1 ..< ^1]
+
     case n.contents
     of "html", "body", "head":
       result = n.descend()
@@ -263,6 +265,14 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
         result.contained = n.descend()
 
       result.tag = n.contents
+
+    # No branches should have returned, but some might not have set a result.
+    if result != Rope(nil):
+      if "id" in n.attrs:
+        result.id = n.attrs["id"]
+      if "class" in n.attrs:
+        result.class = n.attrs["class"]
+
   of HtmlText, HtmlCData:
     result = n.contents.rawStrToRope()
   else:
