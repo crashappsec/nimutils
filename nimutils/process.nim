@@ -516,6 +516,7 @@ proc runPager*(s: string) =
 proc runCmdGetEverything*(exe:      string,
                           args:     seq[string],
                           newStdIn: string       = "",
+                          closeStdIn             = false,
                           passthrough            = false,
                           timeoutUsec            = 1000000): ExecOutput =
   var
@@ -560,8 +561,9 @@ proc runCmdGetEverything*(exe:      string,
       discard dup2(stdInPipe[0], 0)
       ccall close(stdInPipe[0])
     else:
-      let nullfd = open("/dev/null", O_RDONLY)
-      discard dup2(nullfd, 0)
+      if closeStdin:
+        let nullfd = open("/dev/null", O_RDONLY)
+        discard dup2(nullfd, 0)
 
     if not passthrough:
       ccall close(stdOutPipe[0])
@@ -570,6 +572,7 @@ proc runCmdGetEverything*(exe:      string,
       discard dup2(stdErrPipe[1], 2)
       ccall close(stdOutPipe[1])
       ccall close(stdErrPipe[1])
+
     ccall(execv(cstring(exe), cargs), -1)
 
     stdout.write("error: " & exe & ": command not found\n")
