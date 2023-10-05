@@ -30,6 +30,30 @@ const magicRune* = Rune(0x200b)
 
 type AlignmentType* = enum AlignLeft, AlignCenter, AlignRight
 
+proc isPostBreakingChar*(r: Rune): bool =
+  ## Returns true if the codepoint is a hyphen break point.  Note that
+  ## this does NOT return true for the good ol' minus (U+002D) because
+  ## that only is supposed to be a break point if the character prior
+  ## or after is not a numeric character.
+  case r.ord()
+  of 0x00ad, 0x058a, 0x2010, 0x2012 .. 0x2014:
+    return true
+  else:
+    return false
+
+proc isPreBreakingChar*(r: Rune): bool =
+  if r.isWhiteSpace():
+    return true
+  case r.ord()
+  of 0x1806, 0x2014:
+    return true
+  else:
+    return false
+
+proc isPossibleBreakingChar*(r: Rune): bool =
+  if r.isPostBreakingChar() or r.isPreBreakingChar() or r == Rune('-'):
+    return true
+
 proc isPatternSyntax*(r: Rune): bool =
   ## Returns true if the codepoint is part of the Unicode
   ## Pattern_Syntax class.
@@ -124,7 +148,6 @@ proc isValidId*(s: string): bool =
 proc readRune*(s: Stream): Rune =
   ## Read a single rune from a stream.
   var
-    str = newString(4)
     c   = s.readChar()
     n: uint
   case clzll((not uint(c)) shl 56)
@@ -244,7 +267,6 @@ proc toSaver*(orig: string): (SpaceSaver, string) =
   return (res, $(res.postRunes))
 
 proc restoreSaver*(s: string, saver: SpaceSaver, errOk: bool = false): string =
-  var nDbg = 0
 
   if len(saver.stash) == 0:
     return s
@@ -345,7 +367,7 @@ proc width*(pre: string): int =
   ## This (and some of the other functions here) should eventually be
   ## rewritten to not go through the overhead of the space saver.  Not
   ## every important right now.
-  let (x, s) = pre.toSaver()
+  let (_, s) = pre.toSaver()
 
   return olen(s, 0, len(s))
 
@@ -357,7 +379,7 @@ proc colWidth*(pre: string): int =
   ## Note that this implementation does NOT ignore ANSI characters;
   ## use toSaver() before, and restoreSaver() on the output.  It does
   ## handle zws though.
-  let (x, s) = pre.toSaver()
+  let (_, s) = pre.toSaver()
 
   var
     i    = 0

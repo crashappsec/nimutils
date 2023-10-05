@@ -2,10 +2,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import os, unicode, unicodedb, unicodedb/widths, unicodeid, sugar, markdown,
-       htmlparse, tables, std/terminal, parseutils, options, colortable,
-       rope_base
-
+import unicode, tables, rope_base
 
 var
   defaultStyle* = newStyle(overflow = OWrap, rpad = 1, lpadChar = Rune(' '),

@@ -1,15 +1,16 @@
-import os, unicode, unicodedb, unicodedb/widths, unicodeid, sugar, markdown,
-       htmlparse, tables, std/terminal, parseutils, options, colortable
+import unicode, tables, options
 
-const defaultTextWidth* {.intdefine.} = 80
-const bareMinimumColWidth* {.intdefine.} = 2
+const
+ defaultTextWidth* {.intdefine.}    = 80
+ bareMinimumColWidth* {.intdefine.} = 2
+ StylePop*                          = 0xffffffff'u32
 
 type
   FmtKind* = enum
     FmtTerminal, FmtHtml
 
   OverflowPreference* = enum
-    OIgnore, OTruncate, ODots, Overflow, OWrap, OIndent, OHardWrap
+    OIgnore, OTruncate, ODots, Overflow, OWrap, OHardWrap
 
   TextCasing* = enum
     CasingIgnore, CasingAsIs, CasingLower, CasingUpper, CasingTitle
@@ -30,7 +31,17 @@ type
     UnderlineIgnore, UnderlineNone, UnderlineSingle, UnderlineDouble
 
   AlignStyle* = enum
-    AlignIgnore, AlignL, AlignC, AlignR
+    AlignIgnore, AlignL, AlignC, AlignR, AlignJ, AlignF
+    # J == Normal justify, where the last line (even if it is the
+    #      first line) will be left-justified. If a line only
+    #      has one word, it will also be left-justified.
+    # F == Full Justify, meaning that the final line of a box
+    #      will fully justify to the available width.
+    #
+    # Otherwise, no munging of spaces inside a line is done.
+    # For centering, if spaces do not divide evenly, we add the
+    # single extra space to the right.
+
 
   BorderOpts* = enum
     BorderTop          = 1,
@@ -49,6 +60,8 @@ type
     wrapIndent*:             Option[int]
     lpad*:                   Option[int]
     rpad*:                   Option[int]
+    tmargin*:                Option[int]
+    bmargin*:                Option[int]
     lpadChar*:               Option[Rune]
     rpadChar*:               Option[Rune]
     casing*:                 Option[TextCasing]
@@ -95,6 +108,10 @@ type
     # it might also be a paragraph break depending on the context.
     BrSoftLine, BrHardLine, BrParagraph, BrPage
 
+  ColInfo* = object
+    span*:     int
+    widthPct*: int
+
   Rope* = ref object
     next*:       Rope
     cycle*:      bool
@@ -118,6 +135,7 @@ type
     of RopeTaggedContainer, RopeAlignedContainer:
       contained*: Rope
     of RopeTable:
+      colInfo*: seq[ColInfo]
       thead*:   Rope # RopeTableRows
       tbody*:   Rope # RopeTableRows
       tfoot*:   Rope # RopeTableRows
@@ -127,6 +145,11 @@ type
     of RopeFgColor, RopeBgColor:
       color*: string
       toColor*: Rope
+
+  TextPlane* = object
+    styleMap*: Table[uint32, FmtStyle]
+    lines*:    seq[seq[uint32]]
+    width*:    int # Advisory.
 
 let
   BoxStylePlain* =     BoxStyle(horizontal: Rune(0x2500),
@@ -391,3 +414,5 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
       result.boxStyle = some(boxStyle)
     if align != AlignIgnore:
       result.alignStyle = some(align)
+
+let DefaultBoxStyle* = BoxStyleDouble

@@ -68,6 +68,7 @@ proc refCopy*(dst: var Rope, src: Rope) =
     dst.contained = sub
 
   of RopeTable:
+    dst.colInfo = src.colInfo
     if src.thead != nil:
       dst.thead = Rope()
       refCopy(dst.thead, src.thead)
@@ -162,8 +163,27 @@ proc descend(n: HtmlNode): Rope =
   for item in n.children:
     result = result + item.htmlTreeToRope()
 
-proc htmlTreeToRope(n: HtmlNode): Rope =
+proc extractColumnInfo(n: HtmlNode): seq[ColInfo] =
+  for item in n.children:
+    var
+      span: int
+      pct:  int
 
+    if "span" in item.attrs:
+      discard parseInt(item.attrs["span"], span)
+
+    if span <= 0:
+      span = 1
+
+    if "width" in item.attrs:
+      discard parseInt(item.attrs["width"], pct)
+
+    if pct < 0:
+      pct = 0
+
+    result.add(ColInfo(span: span, widthPct: pct))
+
+proc htmlTreeToRope(n: HtmlNode): Rope =
   case n.kind
   of HtmlDocument:
     result = n.descend()
@@ -215,6 +235,9 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
       result = Rope(kind: RopeTable, tag: "table")
       for item in n.children:
         if item.kind == HtmlWhiteSpace:
+          continue
+        if item.contents == "colgroup":
+          result.colInfo = item.extractColumnInfo()
           continue
         let asRope = item.htmlTreeToRope()
         case asRope.kind

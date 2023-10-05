@@ -1,6 +1,6 @@
 # Taken from:HTML color list as found at:
 # https://en.wikipedia.org/wiki/Web_colors
-import tables, os
+import tables, os, parseUtils
 
 var colorTable* = {
   "mediumvioletred"      : 0xc71585,
@@ -352,5 +352,39 @@ proc autoDetectTermPrefs*() =
 
   if term in ["xterm-kitty"] or termprog == "WezTerm":
     unicodeOverAnsi = false
+
+proc hexColorTo8Bit*(hex: string): int =
+  # Returns -1 if invalid.
+  var color: int
+
+  if parseHex(hex, color) != 6:
+    return -1
+
+  let
+    blue  = color          and 0xff
+    green = (color shr 8)  and 0xff
+    red   = (color shr 16) and 0xff
+
+  result = int(red * 7 / 255) shl 5 or
+           int(green * 7 / 255) shl 2 or
+           int(blue * 3 / 255)
+
+proc colorNameToHex*(name: string): (int, int, int) =
+  let colorTable = getColorTable()
+  var color: int
+
+  if name in colorTable:
+    color = colorTable[name]
+  elif parseHex(name, color) != 6:
+      result = (-1, -1, -1)
+  result = (color shr 16, (color shr 8) and 0xff, color and 0xff)
+
+proc colorNameToVga*(name: string): int =
+  let color8Bit = get8BitTable()
+
+  if name in color8Bit:
+    return color8Bit[name]
+  else:
+    return hexColorTo8Bit(name)
 
 autoDetectTermPrefs()
