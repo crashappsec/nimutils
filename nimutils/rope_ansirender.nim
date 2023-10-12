@@ -1,7 +1,8 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import tables, options, unicode, misc, colortable, rope_base, rope_prerender
+import tables, options, unicode, misc, colortable, rope_base, rope_prerender,
+       rope_styles
 
 from strutils import join
 
@@ -13,7 +14,7 @@ type AnsiStyleInfo = object
 
 proc ansiStyleInfo(b: TextPlane, ch: uint32): AnsiStyleInfo =
   var codes: seq[string]
-  let style = b.styleMap[ch]
+  let style = ch.idToStyle()
 
   result.casing = style.casing.getOrElse(CasingIgnore)
 
@@ -84,9 +85,13 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
           result &= ansiReset()
         if ch == StylePop:
           discard styleStack.pop()
+          if len(styleStack) > 0:
+            styleInfo = b.ansiStyleInfo(styleStack[^1])
+          result &= ansiReset()
+          continue
         else:
           styleStack.add(ch)
-        styleInfo = b.ansiStyleInfo(ch)
+          styleInfo = b.ansiStyleInfo(ch)
         if styleInfo.ansiStart.len() > 0:
           result &= styleInfo.ansiStart
         if styleInfo.casing == CasingTitle:
@@ -114,7 +119,6 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
 
 template stylize*(r: Rope, width = -1): string =
   r.preRender(width).preRenderBoxToAnsiString()
-
 
 template withColor*(s: string, c: string): string =
   stylize("<" & c & ">" & s & "</" & c & ">")

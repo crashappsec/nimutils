@@ -209,6 +209,8 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
     of "ol", "ul":
       result = Rope(kind: RopeList, tag: n.contents)
       for item in n.children:
+        if item.kind == HtmlWhiteSpace:
+          continue
         result.items.add(item.htmlTreeToRope())
     of "right":
       result = Rope(kind: RopeAlignedContainer, tag: "ralign",
@@ -305,4 +307,5 @@ converter htmlStringToRope*(s: string): Rope =
   let html = markdownToHtml(s)
   let tree = parseDocument(html)
 
+  #echo tree
   return tree.htmlTreeToRope()

@@ -26,6 +26,17 @@ type
     root: HtmlNode
     cur:  HtmlNode
 
+proc stringize(n: HtmlNode, indent = 0): string =
+  let c = n.contents.replace("\n", "\\n")
+  result = Rune(' ').repeat(indent) & " - " & c & " (" & $(n.kind) & ")" & "\n"
+
+  for kid in n.children:
+    result &= kid.stringize(indent + 2)
+
+proc `$`*(n: HtmlNode): string =
+  return n.stringize()
+
+
 proc make_gumbo(html: cstring, userdata: pointer): void {.cdecl, importc.}
 
 proc enter_callback(ctx: var Walker, kind: HtmlNodeType, contents: cstring)
@@ -53,13 +64,6 @@ proc add_attribute(ctx: var Walker, n, v: cstring) {.exportc, cdecl.} =
     val  = $(v)
 
   ctx.cur.attrs[name] = val
-
-proc basicPrintTree*(n: HtmlNode, indent = 0) =
-  let c = n.contents.replace("\n", "\\n")
-  echo Rune(' ').repeat(indent), " - ", c, " (", $(n.kind), ")"
-
-  for kid in n.children:
-    kid.basicPrintTree(indent + 2)
 
 proc parseDocument*(html: string): HtmlNode =
   var walker = Walker(root: nil, cur: nil)

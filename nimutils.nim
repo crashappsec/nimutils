@@ -21,11 +21,13 @@
 import nimutils/[box, random, unicodeid, pubsub, sinks, misc, texttable],
        nimutils/[file, process, filetable, encodings, advisory_lock, formatstr]
 import nimutils/[sha, aes, prp, hexdump, markdown, htmlparse]
-import nimutils/[colortable, rope_base, rope_styles, rope_construct, rope_tostr]
+import nimutils/[colortable, rope_base, rope_styles, rope_construct,
+                 rope_prerender, rope_ansirender]
 export box, random, unicodeid, pubsub, sinks, misc, random, texttable,
        file, process, filetable, encodings, advisory_lock, formatstr,
        sha, aes, prp, hexdump, markdown, htmlparse
-export colortable, rope_base, rope_styles, rope_construct, rope_tostr
+export colortable, rope_base, rope_styles, rope_construct, rope_prerender,
+       rope_ansirender
 
 ## Things we don't want to force people to consume need to be imported
 ## manually. Currently, that's:

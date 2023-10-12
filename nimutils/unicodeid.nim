@@ -30,6 +30,9 @@ const magicRune* = Rune(0x200b)
 
 type AlignmentType* = enum AlignLeft, AlignCenter, AlignRight
 
+template repeat*(ch: uint32, n: int): seq[uint32] =
+  cast[seq[uint32]](Rune(ch).repeat(n))
+
 proc isPostBreakingChar*(r: Rune): bool =
   ## Returns true if the codepoint is a hyphen break point.  Note that
   ## this does NOT return true for the good ol' minus (U+002D) because
@@ -50,7 +53,10 @@ proc isPreBreakingChar*(r: Rune): bool =
   else:
     return false
 
-proc isPossibleBreakingChar*(r: Rune): bool =
+proc isPossibleBreakingChar*(n: uint32): bool =
+  if n > 0x10ffff:
+    return false
+  let r = Rune(n)
   if r.isPostBreakingChar() or r.isPreBreakingChar() or r == Rune('-'):
     return true
 
@@ -219,9 +225,27 @@ proc runeWidth*(r: Rune): int =
   else:
     return 1
 
+template runeWidth*(r: uint32): int =
+  if r > 0x0010ffff:
+    0
+  else:
+    Rune(r).runeWidth()
+
 proc runeLength*(s: string): int =
   for r in s.toRunes():
     result += r.runeWidth()
+
+proc truncateToWidth*(l: seq[uint32], width: int): seq[uint32] =
+  var total = 0
+
+  for ch in l:
+    if ch > 0x0010ffff:
+      result.add(ch)
+    else:
+      let w = ch.runeWidth()
+      total += w
+      if total < width:
+        result.add(ch)
 
 proc toSaver*(orig: string): (SpaceSaver, string) =
   ## This method stashes data drom a string that will impact width

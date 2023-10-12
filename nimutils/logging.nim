@@ -1,7 +1,8 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import tables, options, streams, pubsub, sinks, rope_tostr, strutils
+import tables, options, streams, pubsub, sinks, rope_construct, rope_ansirender,
+       strutils
 
 type LogLevel* = enum
   ## LogLevel describes what kind of messages you want to see.

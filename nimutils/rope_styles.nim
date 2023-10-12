@@ -29,14 +29,15 @@ var
     "h6" : newStyle(fgColor = "fandango", bgColor = "white",
                     underline = UnderlineSingle, casing = CasingTitle),
     "ol" : newStyle(bulletChar = Rune('.'), lpad = 2),
-    "ul" : newStyle(bulletChar = Rune(0x2022), lpad = 2), #•
+    "ul" : newStyle(bulletChar = Rune(0x2022),lpad = 2), #•
+    "li" : newStyle(lpad = 1),
     "table" : newStyle(borders = [BorderTypical], overflow = OWrap),
     "th"    : newStyle(fgColor = "black", bold = BoldOn,
                                  bgColor = "atomiclime"),
     "tr.even": newStyle(fgColor = "white", bgColor = "jazzberry"),
     "tr.odd" : newStyle(fgColor = "white", bgColor = "fandango"),
     "em" : newStyle(fgColor = "atomiclime", bold = BoldOn),
-    "strong" : newStyle(inverse = InverseOn, italic = ItalicOn, lpad=1, rpad=1),
+    "strong" : newStyle(inverse = InverseOn, italic = ItalicOn),
     "code" : newStyle(inverse = InverseOn, italic = ItalicOn)
     }.toTable()
 
@@ -63,3 +64,39 @@ var
     "h5"         : true,
     "h6"         : true
     }.toTable()
+
+{.emit: """
+#include <stdatomic.h>
+#include <stdint.h>
+
+_Atomic(uint32_t) next_id = ATOMIC_VAR_INIT(0x1ffffff);
+
+uint32_t
+next_style_id() {
+  return atomic_fetch_add(&next_id, 1);
+}
+
+""" .}
+
+# I'd love for each style is going to get one unique ID that we can
+# look up in both directions. Currently this won't work in a
+# multi-threaded world, but I'm going to soon migrate it to my
+# lock-free, wait-free hash tables.
+
+proc next_style_id(): cuint {.importc, nodecl.}
+
+var
+  idToStyleMap: Table[uint32, FmtStyle]
+  styleToIdMap: Table[FmtStyle, uint32]
+
+proc getStyleId*(s: FmtStyle): uint32 =
+  if s in styleToIdMap:
+    return styleToIdMap[s]
+
+  result = uint32(next_style_id())
+
+  idToStyleMap[result] = s
+  styleToIdMap[s]      = result
+
+proc idToStyle*(n: uint32): FmtStyle =
+  result = idToStyleMap[n]
