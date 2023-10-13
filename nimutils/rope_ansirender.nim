@@ -74,25 +74,20 @@ proc ansiStyleInfo(b: TextPlane, ch: uint32): AnsiStyleInfo =
 proc preRenderBoxToAnsiString*(b: TextPlane): string =
   # TODO: Add back in unicode underline, etc.
   var
-    styleStack: seq[uint32]
     styleInfo:  AnsiStyleInfo
     shouldTitle = false
+    stack: seq[AnsiStyleInfo]
 
   for line in b.lines:
     for ch in line:
       if ch > 0x10ffff:
-        if len(styleStack) > 0:
-          result &= ansiReset()
         if ch == StylePop:
-          discard styleStack.pop()
-          if len(styleStack) > 0:
-            styleInfo = b.ansiStyleInfo(styleStack[^1])
           result &= ansiReset()
           continue
         else:
-          styleStack.add(ch)
           styleInfo = b.ansiStyleInfo(ch)
         if styleInfo.ansiStart.len() > 0:
+          result &= ansiReset()
           result &= styleInfo.ansiStart
         if styleInfo.casing == CasingTitle:
           shouldTitle = true

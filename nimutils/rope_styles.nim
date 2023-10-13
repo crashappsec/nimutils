@@ -4,10 +4,8 @@
 
 import unicode, tables, rope_base, options
 
-
 proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
-               lpad = -1, rpad = -1, lPadChar = Rune(0x0000),
-               rpadChar = Rune(0x0000), casing = CasingIgnore,
+               lpad = -1, rpad = -1, casing = CasingIgnore,
                tmargin = -1, bmargin = -1, bold = BoldIgnore,
                inverse = InverseIgnore, strikethru = StrikeThruIgnore,
                italic = ItalicIgnore, underline = UnderlineIgnore,
@@ -30,10 +28,6 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
       result.tmargin = some(tmargin)
     if bmargin >= 0:
       result.bmargin = some(bmargin)
-    if lpadChar != Rune(0x0000):
-      result.lpadChar = some(lpadChar)
-    if rpadChar != Rune(0x0000):
-      result.rpadChar = some(rpadChar)
     if casing != CasingIgnore:
       result.casing = some(casing)
     case bold
@@ -107,12 +101,14 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
       result.alignStyle = some(align)
 
 var
-  defaultStyle* = newStyle(overflow = OWrap, rpad = 1, lpadChar = Rune(' '),
+  defaultStyle* = newStyle(overflow = OWrap, rpad = 0,
                            bgColor = "white", fgColor = "fandango",
-                           lpad = 0, rpadChar = Rune(' '))
+                           lpad = 0)
   # 1. Even / odd columns
   # 2. Table margins
   styleMap*: Table[string, FmtStyle] = {
+    "body" : newStyle(rpad = 0),
+    "p" : defaultStyle,
     "title" : newStyle(fgColor = "jazzberry", bold = BoldOn,
           align = AlignC, italic = ItalicOn, casing = CasingUpper),
     "h1" : newStyle(fgColor = "jazzberry", bold = BoldOn,
@@ -134,7 +130,7 @@ var
     "table" : newStyle(borders = [BorderTypical], overflow = OWrap,
                                  #bgcolor = "fandango",
                        tmargin = 0),
-    "td"    : newStyle(tmargin = 0),
+    "td"    : newStyle(tmargin = 0, lpad = 1, rpad = 1),
     "th"    : newStyle(fgColor = "black", bold = BoldOn, align = AlignC,
               casing = CasingUpper, tmargin = 0, bgColor = "atomiclime"),
     "tr"    : newStyle(fgColor = "white", bold = BoldOn,
@@ -206,29 +202,25 @@ proc getStyleId*(s: FmtStyle): uint32 =
 proc idToStyle*(n: uint32): FmtStyle =
   result = idToStyleMap[n]
 
+  if result == defaultStyle:
+    return
+  for k, v in styleMap:
+    if v == result:
+      return
 
 proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
-  result = base.copyStyle()
-  if changes == nil:
-    return
+  result         = base.copyStyle()
+  result.lpad    = changes.lpad
+  result.rpad    = changes.rpad
+  result.tmargin = changes.tmargin
+  result.bmargin = changes.bmargin
+
   if changes.textColor.isSome():
     result.textColor = changes.textColor
   if changes.bgColor.isSome():
     result.bgColor = changes.bgColor
   if changes.overflow.isSome():
     result.overflow = changes.overflow
-  if changes.lpad.isSome():
-    result.lpad = changes.lpad
-  if changes.rpad.isSome():
-    result.rpad = changes.rpad
-  if changes.tmargin.isSome():
-    result.tmargin = changes.tmargin
-  if changes.bmargin.isSome():
-    result.bmargin =changes.bmargin
-  if changes.lpadChar.isSome():
-    result.lpadChar = changes.lpadChar
-  if changes.rpadChar.isSome():
-    result.rpadChar = changes.rpadChar
   if changes.casing.isSome():
     result.casing = changes.casing
   if changes.bold.isSome():

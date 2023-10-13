@@ -305,7 +305,6 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
 
 converter htmlStringToRope*(s: string): Rope =
   let html = markdownToHtml(s)
-  let tree = parseDocument(html)
+  let tree = parseDocument(html).children[1]
 
-  #echo tree
   return tree.htmlTreeToRope()

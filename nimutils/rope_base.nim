@@ -61,8 +61,6 @@ type
     rpad*:                   Option[int]
     tmargin*:                Option[int]
     bmargin*:                Option[int]
-    lpadChar*:               Option[Rune]
-    rpadChar*:               Option[Rune]
     casing*:                 Option[TextCasing]
     bold*:                   Option[bool]
     inverse*:                Option[bool]
@@ -232,12 +230,8 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
   result = FmtStyle(textColor:              inStyle.textColor,
                     bgColor:                inStyle.bgColor,
                     overflow:               inStyle.overFlow,
-                    lpad:                   inStyle.lpad,
-                    rpad:                   inStyle.rpad,
                     tmargin:                inStyle.tmargin,
                     bmargin:                inStyle.bmargin,
-                    lpadChar:               inStyle.lpadChar,
-                    rpadChar:               inStyle.rpadChar,
                     casing:                 inStyle.casing,
                     bold:                   inStyle.bold,
                     inverse:                inStyle.inverse,
@@ -392,6 +386,7 @@ proc findTruncationIndex(s: seq[uint32], width: int): int =
   return len(s)
 
 proc ensureFormattingIsPerLine(plane: var TextPlane) =
+  return
   var stack: seq[uint32]
 
   for i in 0 ..< len(plane.lines):
@@ -428,13 +423,7 @@ proc wrapToWidth*(plane: var TextPlane, style: FmtStyle, w: int) =
       discard
     of OTruncate:
       for i in 0 ..< plane.lines.len():
-        let ix = plane.lines[i].findTruncationIndex(w)
-        if ix < len(plane.lines[i]):
-          let truncating = plane.lines[i][ix .. ^1]
-          plane.lines[i] = plane.lines[i][0 ..< ix]
-          for ch in truncating:
-            if ch > 0x10ffff:
-              plane.lines[i].add(ch)
+        plane.lines[i] = plane.lines[i].truncateToWidth(w)
     of ODots:
       for i in 0 ..< plane.lines.len():
         let ix = plane.lines[i].findTruncationIndex(w - 1)

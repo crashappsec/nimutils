@@ -246,7 +246,7 @@ proc truncateToWidth*(l: seq[uint32], width: int): seq[uint32] =
     else:
       let w = ch.runeWidth()
       total += w
-      if total < width:
+      if total <= width:
         result.add(ch)
 
 proc toSaver*(orig: string): (SpaceSaver, string) =
