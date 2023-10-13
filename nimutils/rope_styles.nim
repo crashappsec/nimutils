@@ -2,7 +2,109 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import unicode, tables, rope_base
+import unicode, tables, rope_base, options
+
+
+proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
+               wrapIndent = -1, lpad = -1, rpad = -1, lPadChar = Rune(0x0000),
+               rpadChar = Rune(0x0000), casing = CasingIgnore,
+               paragraphSpacing = -1, bold = BoldIgnore,
+               inverse = InverseIgnore, strikethru = StrikeThruIgnore,
+               italic = ItalicIgnore, underline = UnderlineIgnore,
+               bulletChar = Rune(0x0000), minColWidth = -1, maxColWidth = -1,
+               borders: openarray[BorderOpts] = [], boxStyle: BoxStyle = nil,
+               align = AlignIgnore): FmtStyle =
+    result = FmtStyle()
+
+    if fgColor != "":
+      result.textColor = some(fgColor)
+    if bgColor != "":
+      result.bgColor   = some(bgColor)
+    if overflow != OIgnore:
+      result.overFlow = some(overflow)
+    if wrapIndent >= 0:
+      result.wrapIndent = some(wrapIndent)
+    if lpad >= 0:
+      result.lpad = some(lpad)
+    if rpad >= 0:
+      result.rpad = some(rpad)
+    if lpadChar != Rune(0x0000):
+      result.lpadChar = some(lpadChar)
+    if rpadChar != Rune(0x0000):
+      result.rpadChar = some(rpadChar)
+    if casing != CasingIgnore:
+      result.casing = some(casing)
+    if paragraphSpacing > 0:
+      result.paragraphSpacing = some(paragraphSpacing)
+    case bold
+    of BoldOn:
+      result.bold = some(true)
+    of BoldOff:
+      result.bold = some(false)
+    else:
+      discard
+    case inverse
+    of InverseOn:
+      result.inverse = some(true)
+    of InverseOff:
+      result.inverse = some(false)
+    else:
+      discard
+    case strikethru
+    of StrikeThruOn:
+      result.strikethrough = some(true)
+    of StrikeThruOff:
+      result.strikethrough = some(false)
+    else:
+      discard
+    case italic
+    of ItalicOn:
+      result.italic = some(true)
+    of ItalicOff:
+      result.italic = some(false)
+    else:
+      discard
+    if underline != UnderlineIgnore:
+      result.underlineStyle = some(underline)
+    if bulletChar != Rune(0x0000):
+      result.bulletChar = some(bulletChar)
+    if minColWidth != -1:
+      result.minTableColWidth = some(minColWidth)
+    if maxColWidth != -1:
+      result.maxTableColWidth = some(maxColWidth)
+
+    if len(borders) != 0:
+      for item in borders:
+        case item
+        of BorderTop:
+          result.useTopBorder = some(true)
+        of BorderBottom:
+          result.useBottomBorder = some(true)
+        of BorderLeft:
+          result.useLeftBorder = some(true)
+        of BorderRight:
+          result.useRightBorder = some(true)
+        of HorizontalInterior:
+          result.useHorizontalSeparator = some(true)
+        of VerticalInterior:
+          result.useVerticalSeparator = some(true)
+        of BorderTypical:
+          result.useTopBorder = some(true)
+          result.useBottomBorder = some(true)
+          result.useLeftBorder = some(true)
+          result.useRightBorder = some(true)
+          result.useVerticalSeparator = some(true)
+        of BorderAll:
+          result.useTopBorder = some(true)
+          result.useBottomBorder = some(true)
+          result.useLeftBorder = some(true)
+          result.useRightBorder = some(true)
+          result.useVerticalSeparator = some(true)
+          result.useHorizontalSeparator = some(true)
+    if boxStyle != nil:
+      result.boxStyle = some(boxStyle)
+    if align != AlignIgnore:
+      result.alignStyle = some(align)
 
 var
   defaultStyle* = newStyle(overflow = OWrap, rpad = 1, lpadChar = Rune(' '),
@@ -100,3 +202,58 @@ proc getStyleId*(s: FmtStyle): uint32 =
 
 proc idToStyle*(n: uint32): FmtStyle =
   result = idToStyleMap[n]
+
+proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
+  result = base.copyStyle()
+  if changes == nil:
+    return
+  if changes.textColor.isSome():
+    result.textColor = changes.textColor
+  if changes.bgColor.isSome():
+    result.bgColor = changes.bgColor
+  if changes.overflow.isSome():
+    result.overflow = changes.overflow
+  if changes.wrapIndent.isSome():
+    result.wrapIndent = changes.wrapIndent
+  if changes.lpad.isSome():
+    result.lpad = changes.lpad
+  if changes.rpad.isSome():
+    result.rpad = changes.rpad
+  if changes.lpadChar.isSome():
+    result.lpadChar = changes.lpadChar
+  if changes.rpadChar.isSome():
+    result.rpadChar = changes.rpadChar
+  if changes.casing.isSome():
+    result.casing = changes.casing
+  if changes.bold.isSome():
+    result.bold = changes.bold
+  if changes.inverse.isSome():
+    result.inverse = changes.inverse
+  if changes.strikethrough.isSome():
+    result.strikethrough = changes.strikethrough
+  if changes.italic.isSome():
+    result.italic = changes.italic
+  if changes.underlineStyle.isSome():
+    result.underlineStyle = changes.underlineStyle
+  if changes.bulletChar.isSome():
+    result.bulletChar = changes.bulletChar
+  if changes.minTableColWidth.isSome():
+    result.minTableColWidth = changes.minTableColWidth
+  if changes.maxTableColWidth.isSome():
+    result.maxTableColWidth = changes.maxTableColWidth
+  if changes.useTopBorder.isSome():
+    result.useTopBorder = changes.useTopBorder
+  if changes.useBottomBorder.isSome():
+    result.useBottomBorder = changes.useBottomBorder
+  if changes.useLeftBorder.isSome():
+    result.useLeftBorder = changes.useLeftBorder
+  if changes.useRightBorder.isSome():
+    result.useRightBorder = changes.useRightBorder
+  if changes.useVerticalSeparator.isSome():
+    result.useVerticalSeparator = changes.useVerticalSeparator
+  if changes.useHorizontalSeparator.isSome():
+    result.useHorizontalSeparator = changes.useHorizontalSeparator
+  if changes.boxStyle.isSome():
+    result.boxStyle = changes.boxStyle
+  if changes.alignStyle.isSome():
+    result.alignStyle = changes.alignStyle

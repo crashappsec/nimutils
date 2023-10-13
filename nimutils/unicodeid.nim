@@ -532,3 +532,55 @@ proc perLineWrap*(s: string,
                                       newLine)
       parts.add(wrapped.restoreSaver(saver))
     return parts.join("\n")
+
+proc u32LineLength*(line: seq[uint32]): int =
+  for item in line:
+    if item <= 0x10ffff:
+      result += item.runeWidth()
+
+proc toWords*(line: seq[uint32]): seq[seq[uint32]] =
+  var cur: seq[uint32]
+
+  for item in line:
+    if item < 0x10ffff and Rune(item).isWhiteSpace():
+      if len(cur) != 0:
+        result.add(cur)
+        cur = @[]
+    else:
+      cur.add(item)
+
+  if len(cur) != 0:
+    result.add(cur)
+
+proc justify*(line: seq[uint32], width: int): seq[uint32] =
+  let actual = line.u32LineLength()
+
+  if actual >= width:
+    return line
+
+  var
+    words = line.toWords()
+    sum   = 0
+
+  if len(words) == 1:
+    return words[0]
+
+  for word in words:
+    sum += word.u32LineLength()
+
+  var
+    base = sum div (len(words) - 1)
+    rem  = sum mod (len(words) - 1)
+
+  for i, word in words:
+    result &= word
+
+    if i == len(words) - 1:
+      break
+
+    for j in 0 ..< base:
+      result.add(uint32(Rune(' ')))
+
+    if rem != 0:
+      result.add(uint32(Rune(' ')))
+      rem -= 1

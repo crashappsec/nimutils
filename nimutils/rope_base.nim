@@ -1,4 +1,4 @@
-import unicode, tables, options
+import unicode, tables, options, unicodeid, unicodedb/properties, misc
 
 const
  defaultTextWidth* {.intdefine.}    = 80
@@ -146,8 +146,7 @@ type
       color*: string
       toColor*: Rope
 
-  TextPlane* = object
-    styleMap*: Table[uint32, FmtStyle]
+  TextPlane* = ref object
     lines*:    seq[seq[uint32]]
     width*:    int # Advisory.
 
@@ -259,160 +258,211 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
                     alignStyle:             inStyle.alignStyle)
 
 
-proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
-  result = base.copyStyle()
-  if changes == nil:
-    return
-  if changes.textColor.isSome():
-    result.textColor = changes.textColor
-  if changes.bgColor.isSome():
-    result.bgColor = changes.bgColor
-  if changes.overflow.isSome():
-    result.overflow = changes.overflow
-  if changes.wrapIndent.isSome():
-    result.wrapIndent = changes.wrapIndent
-  if changes.lpad.isSome():
-    result.lpad = changes.lpad
-  if changes.rpad.isSome():
-    result.rpad = changes.rpad
-  if changes.lpadChar.isSome():
-    result.lpadChar = changes.lpadChar
-  if changes.rpadChar.isSome():
-    result.rpadChar = changes.rpadChar
-  if changes.casing.isSome():
-    result.casing = changes.casing
-  if changes.bold.isSome():
-    result.bold = changes.bold
-  if changes.inverse.isSome():
-    result.inverse = changes.inverse
-  if changes.strikethrough.isSome():
-    result.strikethrough = changes.strikethrough
-  if changes.italic.isSome():
-    result.italic = changes.italic
-  if changes.underlineStyle.isSome():
-    result.underlineStyle = changes.underlineStyle
-  if changes.bulletChar.isSome():
-    result.bulletChar = changes.bulletChar
-  if changes.minTableColWidth.isSome():
-    result.minTableColWidth = changes.minTableColWidth
-  if changes.maxTableColWidth.isSome():
-    result.maxTableColWidth = changes.maxTableColWidth
-  if changes.useTopBorder.isSome():
-    result.useTopBorder = changes.useTopBorder
-  if changes.useBottomBorder.isSome():
-    result.useBottomBorder = changes.useBottomBorder
-  if changes.useLeftBorder.isSome():
-    result.useLeftBorder = changes.useLeftBorder
-  if changes.useRightBorder.isSome():
-    result.useRightBorder = changes.useRightBorder
-  if changes.useVerticalSeparator.isSome():
-    result.useVerticalSeparator = changes.useVerticalSeparator
-  if changes.useHorizontalSeparator.isSome():
-    result.useHorizontalSeparator = changes.useHorizontalSeparator
-  if changes.boxStyle.isSome():
-    result.boxStyle = changes.boxStyle
-  if changes.alignStyle.isSome():
-    result.alignStyle = changes.alignStyle
-
-proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
-               wrapIndent = -1, lpad = -1, rpad = -1, lPadChar = Rune(0x0000),
-               rpadChar = Rune(0x0000), casing = CasingIgnore,
-               paragraphSpacing = -1, bold = BoldIgnore,
-               inverse = InverseIgnore, strikethru = StrikeThruIgnore,
-               italic = ItalicIgnore, underline = UnderlineIgnore,
-               bulletChar = Rune(0x0000), minColWidth = -1, maxColWidth = -1,
-               borders: openarray[BorderOpts] = [], boxStyle: BoxStyle = nil,
-               align = AlignIgnore): FmtStyle =
-    result = FmtStyle()
-
-    if fgColor != "":
-      result.textColor = some(fgColor)
-    if bgColor != "":
-      result.bgColor   = some(bgColor)
-    if overflow != OIgnore:
-      result.overFlow = some(overflow)
-    if wrapIndent >= 0:
-      result.wrapIndent = some(wrapIndent)
-    if lpad >= 0:
-      result.lpad = some(lpad)
-    if rpad >= 0:
-      result.rpad = some(rpad)
-    if lpadChar != Rune(0x0000):
-      result.lpadChar = some(lpadChar)
-    if rpadChar != Rune(0x0000):
-      result.rpadChar = some(rpadChar)
-    if casing != CasingIgnore:
-      result.casing = some(casing)
-    if paragraphSpacing > 0:
-      result.paragraphSpacing = some(paragraphSpacing)
-    case bold
-    of BoldOn:
-      result.bold = some(true)
-    of BoldOff:
-      result.bold = some(false)
-    else:
-      discard
-    case inverse
-    of InverseOn:
-      result.inverse = some(true)
-    of InverseOff:
-      result.inverse = some(false)
-    else:
-      discard
-    case strikethru
-    of StrikeThruOn:
-      result.strikethrough = some(true)
-    of StrikeThruOff:
-      result.strikethrough = some(false)
-    else:
-      discard
-    case italic
-    of ItalicOn:
-      result.italic = some(true)
-    of ItalicOff:
-      result.italic = some(false)
-    else:
-      discard
-    if underline != UnderlineIgnore:
-      result.underlineStyle = some(underline)
-    if bulletChar != Rune(0x0000):
-      result.bulletChar = some(bulletChar)
-    if minColWidth != -1:
-      result.minTableColWidth = some(minColWidth)
-    if maxColWidth != -1:
-      result.maxTableColWidth = some(maxColWidth)
-
-    if len(borders) != 0:
-      for item in borders:
-        case item
-        of BorderTop:
-          result.useTopBorder = some(true)
-        of BorderBottom:
-          result.useBottomBorder = some(true)
-        of BorderLeft:
-          result.useLeftBorder = some(true)
-        of BorderRight:
-          result.useRightBorder = some(true)
-        of HorizontalInterior:
-          result.useHorizontalSeparator = some(true)
-        of VerticalInterior:
-          result.useVerticalSeparator = some(true)
-        of BorderTypical:
-          result.useTopBorder = some(true)
-          result.useBottomBorder = some(true)
-          result.useLeftBorder = some(true)
-          result.useRightBorder = some(true)
-          result.useVerticalSeparator = some(true)
-        of BorderAll:
-          result.useTopBorder = some(true)
-          result.useBottomBorder = some(true)
-          result.useLeftBorder = some(true)
-          result.useRightBorder = some(true)
-          result.useVerticalSeparator = some(true)
-          result.useHorizontalSeparator = some(true)
-    if boxStyle != nil:
-      result.boxStyle = some(boxStyle)
-    if align != AlignIgnore:
-      result.alignStyle = some(align)
-
 let DefaultBoxStyle* = BoxStyleDouble
+
+proc mergeTextPlanes*(dst: var TextPlane, append: TextPlane) =
+  if len(dst.lines) == 0:
+    dst.lines = append.lines
+  elif len(append.lines) != 0:
+    dst.lines[^1].add(append.lines[0])
+    dst.lines &= append.lines[1 .. ^1]
+
+proc mergeTextPlanes*(planes: seq[TextPlane]): TextPlane =
+  result = TextPlane()
+  for plane in planes:
+    result.mergeTextPlanes(plane)
+
+proc getBreakOpps(s: seq[uint32]): seq[int] =
+  # Should eventually upgrade this to full Annex 14 at some point.
+  # This is just basic acceptability. If the algorithm finds no
+  # breakpoints, then the soft wrap can decide what to do (we hard
+  # wrap only for now).
+
+  # Basically, we should only generate one opp for a group of spaces,
+  # and we should generally be willing to wrap at a dash, but then we
+  # will be conservative on the rest for now. Note that for us, the
+  # 'break' point is always the first character that would NOT appear
+  # on a given line, but if it's spaces, it'll end up getting stripped
+  # as part of the wrap (currently, we're not supporting a hanging
+  # indent).
+
+  # We don't want to break at the front of a line, and once we see a
+  # breakpoint, we want to not generate another one until we've seen
+  # at least ONE character that has width.
+  var
+    canGenerateBreakpoint  = false
+    breakThereIfNotNumeric = false
+
+  for i, rune in s[0 ..< ^1]:
+    if not canGenerateBreakpoint:
+      if rune > 0x10ffff or Rune(rune).isWhiteSpace():
+        continue
+      if Rune(rune).isPostBreakingChar():
+        result.add(i + 1)
+      else:
+        canGenerateBreakpoint = true
+      continue
+
+    if not rune.isPossibleBreakingChar():
+      if breakThereIfNotNumeric:
+        if Rune(rune).unicodeCategory() in ctgN:
+          result.add(i)
+          # Can generate a breakpoint at the next char too.
+        breakThereIfNotNumeric = false
+      continue
+
+    if breakThereIfNotNumeric:
+      result.add(i)
+      continue
+
+    if Rune(rune).isPostBreakingChar():
+      if Rune(rune).isPreBreakingChar():
+        result.add(i)
+
+      result.add(i + 1)
+      canGenerateBreakpoint = false
+      continue
+
+    elif Rune(rune) == Rune('-'):
+      breakThereIfNotNumeric = true
+      continue
+
+    else: # is pre-breaking char.
+      result.add(i)
+      canGenerateBreakpoint = false
+      continue
+
+  # Finally, the last character should never be a breakpoint, nor
+  # should the index one past the end of the input.
+  while len(result) != 0 and result[^1] >= s.len() - 1:
+    result = result[0 ..< ^1]
+
+proc stripSpacesButNotFormatters(input: seq[uint32]): seq[uint32] =
+  for i, ch in input:
+    if ch > 0x10ffff:
+      result.add(ch)
+    elif not Rune(ch).isWhiteSpace():
+      result &= input[i .. ^1]
+      return
+
+proc softWrapLine(input: seq[uint32], width: int): seq[seq[uint32]] =
+  # After any line wrap, we will want to just drop trailing spaces,
+  # but keep in formatting.
+  var line = input
+
+  while true:
+    if len(line) == 0:
+      break
+
+    var
+      breakOps      = line.getBreakOpps()
+      curBpIx       = 0
+      curWidth      = 0
+      bestBp        = -1
+
+    for i, ch in line:
+      if curWidth + ch.runeWidth() > width:
+        if bestBp == -1:
+          # Hard break here, sorry.
+          result.add(line[0 ..< i])
+          line = line[i .. ^1].stripSpacesButNotFormatters()
+          break
+      curWidth += ch.runeWidth()
+
+      if curBpIx < len(breakOps) and breakOps[curBpIx] == i:
+        bestBp   = i
+        curBpIx += 1
+
+    if len(line) == 0:
+      break
+    if curWidth <= width:
+      result.add(line)
+      break
+
+    result.add(line[0 ..< bestBp])
+    line = line[bestBp .. ^1].stripSpacesButNotFormatters()
+
+proc findTruncationIndex(s: seq[uint32], width: int): int =
+  var remaining = width
+
+  for i, ch in s:
+    remaining -= ch.runeWidth()
+    if remaining < 0:
+      return i
+
+  return len(s)
+
+proc ensureFormattingIsPerLine(plane: var TextPlane) =
+  var stack: seq[uint32]
+
+  for i in 0 ..< len(plane.lines):
+    let savedStack = stack
+
+    for ch in plane.lines[i]:
+      if ch <= 0x10ffff:
+        continue
+      if ch == StylePop:
+        discard stack.pop()
+      else:
+        stack.add(ch)
+
+    if len(savedStack) != 0:
+      plane.lines[i] = savedStack & plane.lines[i]
+
+    for j in 0 ..< len(stack):
+      plane.lines[i].add(StylePop)
+
+  assert len(stack) == 0
+
+proc wrapToWidth*(plane: var TextPlane, style: FmtStyle, w: int) =
+  # First, we're going to do a basic wrap, without regard to style
+  # indicators. But then we want each line to have the correct stack
+  # state, so we'll go back through and figure out when we need to add
+  # pops to the end of one line, which will cause us to add
+  # corresponding pushes to the start of the next line.
+  #
+  # Ideally, we'd be able to optimize that some, but not going to
+  # bother.
+
+  case style.overFlow.getOrElse(OIgnore):
+    of OverFlow, OIgnore:
+      discard
+    of OTruncate:
+      for i in 0 ..< plane.lines.len():
+        let ix = plane.lines[i].findTruncationIndex(w)
+        if ix < len(plane.lines[i]):
+          let truncating = plane.lines[i][ix .. ^1]
+          plane.lines[i] = plane.lines[i][0 ..< ix]
+          for ch in truncating:
+            if ch > 0x10ffff:
+              plane.lines[i].add(ch)
+    of ODots:
+      for i in 0 ..< plane.lines.len():
+        let ix = plane.lines[i].findTruncationIndex(w - 1)
+        if ix < len(plane.lines[i]):
+          let truncating = plane.lines[i][ix .. ^1]
+          plane.lines[i] = plane.lines[i][0 ..< ix]
+          plane.lines[i].add(0x2026) # "…"
+          for ch in truncating:
+            if ch > 0x10ffff:
+              plane.lines[i].add(ch)
+    of OHardWrap:
+      var newLines: seq[seq[uint32]]
+      for i in 0 ..< plane.lines.len():
+        var line = plane.lines[i]
+        while true:
+          let ix = line.findTruncationIndex(w)
+          if ix == line.len():
+            newLines.add(line)
+            break
+          else:
+            newlines.add(line[0 ..< ix])
+            line = line[ix .. ^1]
+      plane.lines = newLines
+    of OWrap:
+      var newLines: seq[seq[uint32]]
+      for line in plane.lines:
+        newLines &= line.softWrapLine(w)
+      plane.lines = newLines
+
+  plane.ensureFormattingIsPerLine()
