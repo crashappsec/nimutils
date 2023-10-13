@@ -30,8 +30,10 @@ const magicRune* = Rune(0x200b)
 
 type AlignmentType* = enum AlignLeft, AlignCenter, AlignRight
 
-template repeat*(ch: uint32, n: int): seq[uint32] =
-  cast[seq[uint32]](Rune(ch).repeat(n))
+proc repeat*(ch: uint32, n: int): seq[uint32] =
+  for i in 0 ..< n:
+    result.add(ch)
+  #cast[seq[uint32]](Rune(ch).repeat(n))
 
 proc isPostBreakingChar*(r: Rune): bool =
   ## Returns true if the codepoint is a hyphen break point.  Note that

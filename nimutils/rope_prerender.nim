@@ -12,140 +12,108 @@ type
 
   RenderBox* = ref object
     contents*:   TextPlane
-    lpad*:       int
-    rpad*:       int
     tmargin*:    int
     bmargin*:    int
     width*:      int
-    align*:      AlignStyle
     nextRope*:   Rope
 
   FmtState = object
     totalWidth:   int
     curStyle:     FmtStyle
     styleStack:   seq[FmtStyle]
-    padStack:     seq[int]
     colStack:     seq[seq[int]]
+
 
 proc `$`*(plane: TextPlane): string =
   for line in plane.lines:
     for ch in line:
       if ch <= 0x10ffff:
         result.add(Rune(ch))
+      else:
+        result &= "<<" & $(ch) & ">>"
     result.add('\n')
 
 proc `$`*(box: RenderBox): string =
     result &= $(box.contents)
     result &= "\n"
 
-proc applyAlignment(box: RenderBox, w: int) =
+template styleRunes(state: FmtState, runes: seq[uint32]): seq[uint32] =
+  @[state.curStyle.getStyleId()] & runes & @[StylePop]
+
+proc applyCurrentStyleToPlane(state: FmtState, p: TextPlane) =
+  for i in 0 ..< p.lines.len():
+    p.lines[i] = state.styleRunes(p.lines[i])
+
+template pad(state: FmtState, w: int): seq[uint32] =
+  state.styleRunes(uint32(Rune(' ')).repeat(w))
+
+proc applyAlignment(state: FmtState, box: RenderBox, w: int) =
   for i in 0 ..< box.contents.lines.len():
-    let toFill =  w - box.contents.lines[i].u32LineLength()
+    let
+      toFill =  w - box.contents.lines[i].u32LineLength()
+
     if toFill <= 0: continue
-    case box.align
+    case state.curStyle.alignStyle.getOrElse(AlignIgnore)
     of AlignL:
-      for j in 0 ..< toFill:
-        box.contents.lines[i].add(uint32(Rune(' ')))
+      box.contents.lines[i] &= state.pad(toFill)
     of AlignR:
-      var toAdd: seq[uint32]
-      for j in 0 ..< toFill:
-        toAdd.add(uint32(Rune(' ')))
-        box.contents.lines[i] = toAdd & box.contents.lines[i]
+      box.contents.lines[i] = state.pad(toFill) & box.contents.lines[i]
     of AlignC:
       var
-        toAdd:  seq[uint32]
-        leftAmt  = toFill div 2
-
-      for j in 0 ..< leftAmt:
-        toAdd.add(uint32(Rune(' ')))
+        leftAmt = toFill div 2
+        toAdd   = state.pad(leftAmt)
 
       box.contents.lines[i] = toAdd & box.contents.lines[i] & toAdd
 
       if w mod 2 != 0:
-        box.contents.lines[i].add(uint32(Rune(' ')))
+        box.contents.lines[i].add(state.pad(1))
     of AlignF:
       box.contents.lines[i] = justify(box.contents.lines[i], w)
     of AlignJ:
       if i == len(box.contents.lines) - 1:
         for j in 0 ..< toFill:
-          box.contents.lines[i].add(uint32(Rune(' ')))
+          box.contents.lines[i].add(state.pad(1))
       else:
         box.contents.lines[i] = justify(box.contents.lines[i], w)
     else:
       discard
 
-proc applyLeftRightPadding(box: RenderBox) =
+proc applyLeftRightPadding(state: FmtState, box: RenderBox, w: int) =
   var
-    lpad: seq[uint32]
-    rpad: seq[uint32]
-
-  for i in 0 ..< box.lpad:
-    lpad.add(uint32(Rune(' ')))
-  for i in 0 ..< box.rpad:
-    rpad.add(uint32(Rune(' ')))
+    lpad    = state.curStyle.lpad.getOrElse(0)
+    rpad    = state.curStyle.rpad.getOrElse(0)
+    lpadTxt = state.pad(lpad)
+    rpadTxt = state.pad(rpad)
+    extra: seq[uint32]
 
   for i in 0 ..< len(box.contents.lines):
-    box.contents.lines[i] = lpad & box.contents.lines[i] & rpad
+    var toFill = (w - box.contents.lines[i].u32LineLength())
+    if toFill >= lpad + rpad:
+      extra = state.pad(toFill)
+      box.contents.lines[i] = lpadTxt & box.contents.lines[i] & rpadTxt & extra
 
-proc movePaddingInsideFirstStyleMarkers(box: RenderBox) =
-  for n in 0 ..< box.contents.lines.len():
-    # Track the first non-space index and the last non-space index.
-    var
-      first = -1
-      last  = len(box.contents.lines[n]) - 1
+proc alignAndPad(state: FmtState, box: RenderBox) =
+  let
+    lpad    = state.curStyle.lpad.getOrElse(0)
+    rpad    = state.curStyle.rpad.getOrElse(0)
 
-    for i in 0 ..< len(box.contents.lines[n]):
-      if box.contents.lines[n][i] != uint32(Rune(' ')):
-        if box.contents.lines[n][i] > 0x10ffff:
-          first = i
-        else:
-          first = -1
-        break
+  state.applyAlignment(box, state.totalWidth - lpad - rpad)
+  state.applyLeftRightPadding(box, state.totalWidth)
 
-    while last != 0:
-      if box.contents.lines[n][last] != uint32(Rune(' ')):
-        if box.contents.lines[n][last] <= 0x10ffff:
-          last = len(box.contents.lines[n])
-        break
-      last = last - 1
-
-    var
-      prefix, postfix, inside: seq[uint32]
-      c1, c2: uint32
-
-    if first != -1:
-      prefix  = box.contents.lines[n][0 ..< first]
-      c1      = box.contents.lines[n][first]
-
-    if last != len(box.contents.lines[n]):
-      postfix = box.contents.lines[n][last + 1 .. ^1]
-      c2      = box.contents.lines[n][last]
-
-    inside  = box.contents.lines[n][first + 1 ..< last]
-
-    box.contents.lines[n] = @[c1] & prefix & inside & postfix & @[c2]
-
-proc applyAlignmentAndLeftRightPadding(box: RenderBox, w: int) =
-  box.applyAlignment(w)
-  box.applyLeftRightPadding()
-  box.movePaddingInsideFirstStyleMarkers()
-  box.lpad  = 0
-  box.rpad  = 0
-
-proc collapseColumn(boxes: seq[RenderBox], width: int): RenderBox =
-  var plane: TextPlane = TextPlane()
-
+proc collapseColumn(state: FmtState, boxes: seq[RenderBox]): RenderBox =
   ## Combine renderboxes at the same level into one renderbox.  These
   ## boxes are expected to all be the same width after padding, and
   ## each contain only a single TextPlane, but margins between these
   ## need to be respected.
 
-  for i, box in boxes:
-    box.applyAlignmentAndLeftRightPadding(width)
+  var plane: TextPlane = TextPlane()
 
+  for i, box in boxes:
     if i != 0:
       for j in 0 ..< box.tmargin:
-        plane.lines.add(@[])
+        plane.lines.add(state.pad(state.totalWidth))
+
+    state.alignAndPad(box)
 
     plane.lines &= box.contents.lines
 
@@ -154,17 +122,16 @@ proc collapseColumn(boxes: seq[RenderBox], width: int): RenderBox =
         plane.lines.add(@[])
 
   result = RenderBox(contents: plane, nextRope: boxes[^1].nextRope,
-                     tmargin: boxes[0].tmargin, bmargin: boxes[^1].bmargin,
-                     width: boxes[0].width + boxes[0].lpad + boxes[0].rpad)
+                     tmargin: boxes[0].tmargin, bmargin: boxes[^1].bmargin)
 
-proc collapsedBoxToTextPlane(box: RenderBox): TextPlane =
+proc collapsedBoxToTextPlane(state: FmtState, box: RenderBox): TextPlane =
   assert box.nextRope == nil
   result       = box.contents
   result.width = box.width
   for i in 0 ..< box.tmargin:
-    result.lines = @[uint32(Rune(' ')).repeat(result.width)] & result.lines
+    result.lines = @[state.pad(result.width)] & result.lines
   for i in 0 ..< box.bmargin:
-    result.lines &= @[uint32(Rune(' ')).repeat(result.width)]
+    result.lines &= @[state.pad(result.width)]
 
 proc pushTableWidths(state: var FmtState, widths: seq[int]) =
   state.colStack.add(widths)
@@ -218,41 +185,9 @@ proc getNewStartStyle(state: FmtState, r: Rope,
   if styleChange:
     return some(newStyle)
 
-proc pushPadding(state: var FmtState) =
-  let
-    style      = state.curStyle
-    toSubtract = style.lpad.getOrElse(0) + style.rpad.getOrElse(0)
-
-  if toSubtract == 0:
-    return
-
-  if state.totalWidth <= toSubtract:
-    # Nah. But push a 0.
-    state.padStack.add(0)
-  else:
-    state.totalWidth -= toSubtract
-    state.padStack.add(toSubtract)
-
-proc popPadding(state: var FmtState) =
-  if state.curStyle.lpad.isSome() or state.curStyle.rpad.isSome():
-    let toAdd = state.padStack.pop()
-    state.totalWidth += toAdd
-
-proc applyCurrentStyleToPlane(state: var FmtState, p: TextPlane) =
-  p.lines[0]  = @[state.curStyle.getStyleId()] & p.lines[0]
-  p.lines[^1].add(StylePop)
-
 proc annotatePaddingAndAlignment(b: RenderBox, style: FmtStyle) =
   # Here we're going to add to the width of the box, not
   # just denote the padding for later rendering.
-
-  if style.lpad.isSome():
-    b.lpad   = style.lpad.get()
-    b.width += b.lpad
-
-  if style.rpad.isSome():
-    b.rpad   = style.rpad.get()
-    b.width += b.rpad
 
   if style.tmargin.isSome():
     b.tmargin = style.tmargin.get()
@@ -260,18 +195,12 @@ proc annotatePaddingAndAlignment(b: RenderBox, style: FmtStyle) =
   if style.bmargin.isSome():
     b.bmargin = style.bmargin.get()
 
-  # If the second condition isn't true, then this is a
-  # RopedAlignedContainer, in which case that trumps what we inherited
-  # from a style, being explicit.
-  if style.alignStyle.isSome() and b.align == AlignIgnore:
-    b.align = style.alignStyle.get()
-
 proc preRenderUnorderedList(state: var FmtState, r: Rope): seq[RenderBox] =
   let
     bulletChar = state.curStyle.bulletChar.getOrElse(Rune(0x2022))
-    bullet     = @[uint32(bulletChar)]
+    bullet     = state.styleRunes(@[uint32(bulletChar)])
     bulletLen  = bullet.u32LineLength()
-    hangPrefix = uint32(' ').repeat(bulletLen)
+    hangPrefix = state.styleRunes(state.pad(bulletLen))
   var
     bullets: seq[RenderBox]
     subedWidth = true
@@ -282,7 +211,7 @@ proc preRenderUnorderedList(state: var FmtState, r: Rope): seq[RenderBox] =
     subedWidth = false
 
   for n, item in r.items:
-    var oneItem = state.preRender(item).collapseColumn(state.totalWidth)
+    var oneItem = state.collapseColumn(state.preRender(item))
 
     for i in 0 ..< oneItem.contents.lines.len():
       if i == 0:
@@ -294,20 +223,18 @@ proc preRenderUnorderedList(state: var FmtState, r: Rope): seq[RenderBox] =
   if subedWidth:
     state.totalWidth += bulletLen
 
-proc toNumberBullet(n, maxdigits: int, bulletChar: Option[Rune]): seq[uint32] =
+proc toNumberBullet(state: FmtState, n, maxdigits: int): seq[uint32] =
   # Formats a number n that's meant to be in a bulleted list, where the
   # left is padded if the number is smaller than the max digits for a
   # bullet number, and the right gets any explicit bullet character
   # (such as a dot or right paren.)
   let codepoints = toRunes($(n))
 
-  for i in len(codepoints) ..< maxdigits:
-    result.add(uint32(Rune(' ')))
-
+  result  = state.pad(maxdigits - len(codepoints))
   result &= cast[seq[uint32]](codepoints)
 
-  if bulletChar.isSome():
-    result.add(uint32(bulletChar.get()))
+  if state.curStyle.bulletChar.isSome():
+    result.add(uint32(state.curStyle.bulletChar.get()))
 
 proc preRenderOrderedList(state: var FmtState, r: Rope): seq[RenderBox] =
   var
@@ -325,8 +252,9 @@ proc preRenderOrderedList(state: var FmtState, r: Rope): seq[RenderBox] =
       break
 
   if state.curStyle.bulletChar.isSome():
-    for i in 0 ..< state.curStyle.bulletChar.get().runeWidth():
-      hangPrefix.add(uint32(Rune(' ')))
+    hangPrefix &= state.pad(state.curStyle.bulletChar.get().runeWidth())
+
+  hangPrefix = state.styleRunes(hangPrefix)
 
   if hangPrefix.len() < state.totalWidth:
     state.totalWidth -= hangPrefix.len()
@@ -334,13 +262,15 @@ proc preRenderOrderedList(state: var FmtState, r: Rope): seq[RenderBox] =
     subedWidth = false
 
   for n, item in r.items:
-    var oneItem = state.preRender(item).collapseColumn(state.totalWidth)
-    let s       = toNumberBullet(n + 1, maxDigits, state.curStyle.bulletChar)
-    for i in 0 ..< oneItem.contents.lines.len():
-      if i == 0:
-        oneItem.contents.lines[0] = s & oneItem.contents.lines[0]
-      else:
-        oneItem.contents.lines[i] = hangPrefix & oneItem.contents.lines[i]
+    var oneItem = state.collapseColumn(state.preRender(item))
+    let
+      bulletText = state.toNumberBullet(n + 1, maxDigits)
+      styled     = state.styleRunes(bulletText)
+
+    oneItem.contents.lines[0] = styled & oneItem.contents.lines[0]
+    for i in 1 ..< oneItem.contents.lines.len():
+      oneItem.contents.lines[i] = hangPrefix & oneItem.contents.lines[i]
+
     result.add(oneItem)
 
   if subedWidth:
@@ -353,11 +283,11 @@ proc percentToActualColumns(state: var FmtState, pcts: seq[int]): seq[int] =
   var overhead = 0
 
   if style.useLeftBorder.getOrElse(false):
-    overhead -= 1
+    overhead += 1
   if style.useRightBorder.getOrElse(false):
-    overhead -= 1
+    overhead += 1
   if style.useVerticalSeparator.getOrElse(false):
-    overhead -= (len(pcts) - 1)
+    overhead += (len(pcts) - 1)
 
   let availableWidth = state.totalWidth - overhead
 
@@ -466,7 +396,7 @@ proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
 
   state.popTableWidths()
 
-  result = @[result.collapseColumn(state.totalWidth)]
+  result = @[state.collapseColumn(result)]
 
 proc emptyTableCell(state: var FmtState): seq[RenderBox] =
   var styleId: uint32
@@ -509,9 +439,7 @@ proc adjacentCellsToRow(state: var FmtState, cells: seq[TextPlane]): TextPlane =
   # Any cells not of the max height, pad them with spaces.
   for col in cells:
     if col.lines.len() < rowLines:
-      var blankLine: seq[uint32]
-      for i in 0 ..< col.width:
-        blankLine.add(uint32(Rune(' ')))
+      var blankLine = state.pad(col.width)
       while true:
         col.lines.add(blankLine)
         if col.lines.len() == rowLines:
@@ -555,12 +483,14 @@ proc preRenderRow(state: var FmtState, r: Rope): seq[RenderBox] =
     cell: seq[RenderBox]
 
   # Step 1, make sure col widths are right
+
   if widths.len() == 0:
     state.popTableWidths()
     let pct = 100 div len(r.cells)
     for i in 0 ..< len(r.cells):
       widths.add(pct)
-    state.pushTableWidths(state.percentToActualColumns(widths))
+    widths = state.percentToActualColumns(widths)
+    state.pushTableWidths(widths)
 
   var
     cellBoxes: seq[RenderBox]
@@ -576,7 +506,8 @@ proc preRenderRow(state: var FmtState, r: Rope): seq[RenderBox] =
       state.totalWidth = width
       cellBoxes = state.preRender(r.cells[i])
 
-    rowPlanes.add(cellBoxes.collapseColumn(width).collapsedBoxToTextPlane())
+    let boxes = state.collapseColumn(cellBoxes)
+    rowPlanes.add(state.collapsedBoxToTextPlane(boxes))
 
   # Step 4, Combine the cells horizontally into a single RbText
   # object. This involves adding any vertical borders, and filling
@@ -654,12 +585,12 @@ template addStyledText(code: untyped) =
 proc extractText(state: var FmtState, r: Rope, extract: var TextExtraction) =
   case r.kind
   of RopeAtom:
-    extract.addRunesToExtraction(r.text)
+    addStyledText(extract.addRunesToExtraction(r.text))
   of RopeLink:
     let urlRunes = @[Rune('(')] & r.url.toRunes() & @[Rune(')')]
 
     subextract(r.toHighlight)
-    extract.addRunestoExtraction(urlRunes)
+    addStyledText(extract.addRunestoExtraction(urlRunes))
   else:
     if r.noBoxRequired() == false:
       extract.nextRope = r
@@ -716,10 +647,10 @@ template planesToBox() =
     consecutivePlanes = @[]
 
 proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
-  ## Prerender returns a COLUMN of boxes of one single width.
-  ## But generally, there should only be one item in the column
-  ## when possible, which itself should consist of one TextPlane
-  ## item.
+  ## This version of prerender returns a COLUMN of boxes of one single
+  ## width.  But generally, there should only be one item in the
+  ## column when possible, which itself should consist of one
+  ## TextPlane item.
   ##
   ## The exception to that is RopeTableRows, which leaves it to
   ## RopeTable to do the combination.
@@ -743,7 +674,6 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
 
       if styleOpt.isSome():
         state.pushStyle(styleOpt.get())
-        state.pushPadding()
         # The way we handle padding, is by looking at the current
         # style's padding value. We subtract from the total width, and
         # let the resulting box come back. Then, ad the end, we add
@@ -762,21 +692,30 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
       of RopeTableRows:
         newBoxes = state.preRenderRows(curRope)
       of RopeAlignedContainer:
+        var tweak: Option[AlignStyle]
+
+        case curRope.tag[0]
+        of 'l':
+          tweak = some(AlignL)
+        of 'c':
+          tweak = some(AlignC)
+        of 'r':
+          tweak = some(AlignR)
+        of 'j':
+          tweak = some(AlignJ)
+        of 'f':
+          tweak = some(AlignF)
+        else:
+          discard
+        if tweak.isSome():
+          let tweakedStyle = FmtStyle(alignStyle: tweak)
+          state.pushStyle(state.curStyle.mergeStyles(tweakedStyle))
+
         newBoxes = state.preRender(curRope)
-        for box in newBoxes:
-          case curRope.tag[0]
-          of 'l':
-            box.align = AlignL
-          of 'c':
-            box.align = AlignC
-          of 'r':
-            box.align = AlignR
-          of 'j':
-            box.align = AlignJ
-          of 'f':
-            box.align = AlignF
-          else:
-            discard
+
+        if tweak.isSome():
+          state.popStyle()
+
       of RopeBreak:
         newBoxes = state.preRender(curRope.guts)
       of RopeTaggedContainer:
@@ -794,41 +733,19 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
       curRope   = curRope.next
 
       if styleOpt.isSome():
-        state.popPadding()
         state.popStyle()
 
   planesToBox()
-
-  # This probably isn't needed.
-  for box in result:
-    for i in 0 ..< len(box.contents.lines):
-       box.contents.lines[i] = box.contents.lines[i].truncateToWidth(box.width)
+  for item in result:
+    state.alignAndPad(item)
 
 proc preRender*(r: Rope, width = -1): TextPlane =
-  ## This function takes a rope, and returns a pre-render box, which
-  ## will have all formatting applied that
+  ## Denoted in the stream of characters to output, what styles
+  ## should be applied, when. We do this by dropping in unique
+  ## values into the uint32 stream that cannot be codepoints.  This
+  ## instructs the rendering implementation what style to push.
   ##
-  ## 1. Applied any padding, alignment and wrapping / cropping that is
-  ##    explict in the formatting. This is done by putting values in
-  ##    for number of pad chars, not by adding chars into the content.
-
-  ##    the approach here is to defer the actual padding until we go
-  ##    to render when possible. If we get the width of a character
-  ##    wrong relative to what actually gets printed due to some font
-  ##    issue, the terminal may be able to tell us our position, and
-  ##    we may be able to correct by adding extra padding to the
-  ##    right.
-  ##
-
-  ## 2. Denoted in the stream of characters to output, what styles
-  ##    should be applied, when. We do this by dropping in unique
-  ##    values into the uint32 stream that cannot be codepoints.  This
-  ##    instructs the rendering implementation what style to push.
-  ##
-  ##    There's a value for pop as well.
-  ##
-  ##    Plus, boxes have a 'start' style that gets pushed at the start
-  ##    of a box, and popped at the end, implicitly.
+  ## There's a value for pop as well.
   ##
   ## Note that if you don't pass a width in, we end up calling an
   ## ioctl to query the terminal width. That does seem a bit
@@ -841,14 +758,13 @@ proc preRender*(r: Rope, width = -1): TextPlane =
     state = FmtState(curStyle: defaultStyle)
 
   if width <= 0:
-    # The -1 shouldn't be necessary...
-    state.totalWidth = terminalWidth()
+    state.totalWidth = terminalWidth() - 1
   else:
     state.totalWidth = width
 
   if state.totalWidth <= 0:
     state.totalWidth = defaultTextWidth
 
-  let preRender = state.preRender(r).collapseColumn(state.totalWidth)
-  result        = preRender.collapsedBoxToTextPlane()
+  let preRender = state.collapseColumn(state.preRender(r))
+  result        = state.collapsedBoxToTextPlane(preRender)
   result.width  = state.totalWidth

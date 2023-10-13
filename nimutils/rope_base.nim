@@ -57,7 +57,6 @@ type
     textColor*:              Option[string]
     bgColor*:                Option[string]
     overflow*:               Option[OverflowPreference]
-    wrapIndent*:             Option[int]
     lpad*:                   Option[int]
     rpad*:                   Option[int]
     tmargin*:                Option[int]
@@ -65,7 +64,6 @@ type
     lpadChar*:               Option[Rune]
     rpadChar*:               Option[Rune]
     casing*:                 Option[TextCasing]
-    paragraphSpacing*:       Option[int]
     bold*:                   Option[bool]
     inverse*:                Option[bool]
     strikethrough*:          Option[bool]
@@ -234,9 +232,10 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
   result = FmtStyle(textColor:              inStyle.textColor,
                     bgColor:                inStyle.bgColor,
                     overflow:               inStyle.overFlow,
-                    wrapIndent:             inStyle.wrapIndent,
                     lpad:                   inStyle.lpad,
                     rpad:                   inStyle.rpad,
+                    tmargin:                inStyle.tmargin,
+                    bmargin:                inStyle.bmargin,
                     lpadChar:               inStyle.lpadChar,
                     rpadChar:               inStyle.rpadChar,
                     casing:                 inStyle.casing,

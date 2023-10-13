@@ -6,9 +6,9 @@ import unicode, tables, rope_base, options
 
 
 proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
-               wrapIndent = -1, lpad = -1, rpad = -1, lPadChar = Rune(0x0000),
+               lpad = -1, rpad = -1, lPadChar = Rune(0x0000),
                rpadChar = Rune(0x0000), casing = CasingIgnore,
-               paragraphSpacing = -1, bold = BoldIgnore,
+               tmargin = -1, bmargin = -1, bold = BoldIgnore,
                inverse = InverseIgnore, strikethru = StrikeThruIgnore,
                italic = ItalicIgnore, underline = UnderlineIgnore,
                bulletChar = Rune(0x0000), minColWidth = -1, maxColWidth = -1,
@@ -22,20 +22,20 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
       result.bgColor   = some(bgColor)
     if overflow != OIgnore:
       result.overFlow = some(overflow)
-    if wrapIndent >= 0:
-      result.wrapIndent = some(wrapIndent)
     if lpad >= 0:
       result.lpad = some(lpad)
     if rpad >= 0:
       result.rpad = some(rpad)
+    if tmargin >= 0:
+      result.tmargin = some(tmargin)
+    if bmargin >= 0:
+      result.bmargin = some(bmargin)
     if lpadChar != Rune(0x0000):
       result.lpadChar = some(lpadChar)
     if rpadChar != Rune(0x0000):
       result.rpadChar = some(rpadChar)
     if casing != CasingIgnore:
       result.casing = some(casing)
-    if paragraphSpacing > 0:
-      result.paragraphSpacing = some(paragraphSpacing)
     case bold
     of BoldOn:
       result.bold = some(true)
@@ -108,22 +108,20 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
 
 var
   defaultStyle* = newStyle(overflow = OWrap, rpad = 1, lpadChar = Rune(' '),
-                           lpad = 0, rpadChar = Rune(' '), paragraphSpacing = 1)
-  # To figure out what you're not properly formatting yet, add this to the default style:
-  # bgcolor = "thunder", fgcolor = "black",
-  #
-  # Then, anything not selected is not yet done!
-
-
+                           bgColor = "white", fgColor = "fandango",
+                           lpad = 0, rpadChar = Rune(' '))
+  # 1. Even / odd columns
+  # 2. Table margins
   styleMap*: Table[string, FmtStyle] = {
     "title" : newStyle(fgColor = "jazzberry", bold = BoldOn,
           align = AlignC, italic = ItalicOn, casing = CasingUpper),
-    "h1" : newStyle(fgColor = "atomiclime", bold = BoldOn,
+    "h1" : newStyle(fgColor = "jazzberry", bold = BoldOn,
            align = AlignC, italic = ItalicOn, casing = CasingUpper),
-    "h2" : newStyle(bgColor = "jazzberry", fgColor = "white", bold = BoldOn,
-                    italic = ItalicOn),
-    "h3" : newStyle(bgColor = "fandango", fgColor = "white", italic = ItalicOn,
-                    underline = UnderlineDouble, casing = CasingUpper),
+    "h2" : newStyle(fgColor = "atomiclime", bgColor = "black", bold = BoldOn,
+                                                      align = AlignL,
+                    italic = ItalicOn, tmargin = 1),
+    "h3" : newStyle(bgColor = "jazzberry", fgColor = "white", italic = ItalicOn,
+                    tmargin = 1, casing = CasingUpper),
     "h4" : newStyle(fgColor = "jazzberry", italic = ItalicOn,
                     underline = UnderlineSingle, casing = CasingTitle),
     "h5" : newStyle(fgColor = "atomiclime", bgColor = "black",
@@ -133,12 +131,17 @@ var
     "ol" : newStyle(bulletChar = Rune('.'), lpad = 2),
     "ul" : newStyle(bulletChar = Rune(0x2022),lpad = 2), #•
     "li" : newStyle(lpad = 1),
-    "table" : newStyle(borders = [BorderTypical], overflow = OWrap),
-    "th"    : newStyle(fgColor = "black", bold = BoldOn,
-                                 bgColor = "atomiclime"),
+    "table" : newStyle(borders = [BorderTypical], overflow = OWrap,
+                                 #bgcolor = "fandango",
+                       tmargin = 0),
+    "td"    : newStyle(tmargin = 0),
+    "th"    : newStyle(fgColor = "black", bold = BoldOn, align = AlignC,
+              casing = CasingUpper, tmargin = 0, bgColor = "atomiclime"),
+    "tr"    : newStyle(fgColor = "white", bold = BoldOn,
+                       tmargin = 0, bgColor = "jazzberry"),
     "tr.even": newStyle(fgColor = "white", bgColor = "jazzberry"),
     "tr.odd" : newStyle(fgColor = "white", bgColor = "fandango"),
-    "em" : newStyle(fgColor = "atomiclime", bold = BoldOn),
+    "em" : newStyle(fgColor = "jazzberry", bold = BoldOn),
     "strong" : newStyle(inverse = InverseOn, italic = ItalicOn),
     "code" : newStyle(inverse = InverseOn, italic = ItalicOn)
     }.toTable()
@@ -203,6 +206,7 @@ proc getStyleId*(s: FmtStyle): uint32 =
 proc idToStyle*(n: uint32): FmtStyle =
   result = idToStyleMap[n]
 
+
 proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
   result = base.copyStyle()
   if changes == nil:
@@ -213,12 +217,14 @@ proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
     result.bgColor = changes.bgColor
   if changes.overflow.isSome():
     result.overflow = changes.overflow
-  if changes.wrapIndent.isSome():
-    result.wrapIndent = changes.wrapIndent
   if changes.lpad.isSome():
     result.lpad = changes.lpad
   if changes.rpad.isSome():
     result.rpad = changes.rpad
+  if changes.tmargin.isSome():
+    result.tmargin = changes.tmargin
+  if changes.bmargin.isSome():
+    result.bmargin =changes.bmargin
   if changes.lpadChar.isSome():
     result.lpadChar = changes.lpadChar
   if changes.rpadChar.isSome():
