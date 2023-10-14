@@ -4,7 +4,8 @@
 # Pretty basic table formatting. Works with fixed width unicode, though
 # I don't factor out non-printable spaces right now, I just count runes.
 
-import rope_tostr, markdown, unicode, std/terminal, unicodeid
+import rope_construct, rope_ansirender, markdown, unicode, std/terminal,
+       unicodeid
 
 proc formatCellsAsMarkdownList*(base: seq[seq[string]],
                                 toEmph: openarray[string],

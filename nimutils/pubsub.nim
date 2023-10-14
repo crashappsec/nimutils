@@ -4,7 +4,7 @@
 ## For now, not intended to be threadsafe for mutation ops.
 
 import tables, sugar, options, json, strutils, strutils, std/terminal,
-       unicodeid, rope_tostr
+       unicodeid, rope_ansirender, rope_construct
 
 type
   InitCallback*   = ((SinkConfig) -> bool)
@@ -209,9 +209,6 @@ proc prettyJson*(msg: string, extra: StringTable): (string, bool) =
       stderr.writeLine(getCurrentException().getStackTrace())
       stderr.writeLine(getCurrentExceptionMsg())
     return ("[Error: Invalid Json formatting] " & msg, false)
-
-proc terminalWrap*(msg: string, extra: StringTable): (string, bool) =
-  return (msg.perLineWrap(), true)
 
 proc prettyJsonl*(msg: string, extra: StringTable): (string, bool) =
   var toReturn = ""

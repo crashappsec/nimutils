@@ -1,7 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022-2023, Crash Override, Inc.
 
-import macros, times, os, strutils, osproc, posix, posix_utils
+import macros, times, os, posix
 
 # The name flatten conflicts with a method in the options module.
 from options import get, Option, isSome, isNone
