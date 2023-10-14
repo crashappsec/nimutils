@@ -8,15 +8,41 @@ import os, unicode, unicodedb, unicodedb/widths, unicodeid, sugar, markdown,
 from strutils import startswith, replace
 
 
-proc rawStrToRope*(instr: string): Rope =
-  var s = instr
+proc rawStrToRope*(s: string, pre: bool): Rope =
+  var
+    curStr = ""
+    lines: seq[string]
 
-  s = s.replace("\n\n", $(0x2028))
-  s = s.replace("\n", " ")
-  s = s.replace("\t", " ")
+  if pre:
+    for c in s:
+      if c == '\n':
+        lines.add(curStr)
+        curStr = ""
+      elif c == '\t':
+        curStr.add("    ")
+      else:
+        curStr.add(c)
+  else:
+    var skipNewline = false
+
+    for i, c in s:
+      if c == '\t':
+        curStr.add(c)
+      elif c == '\n':
+        if skipNewline:
+          skipNewLine = false
+        elif i + 1 != s.len() and s[i + 1] == '\n':
+          lines.add(curStr)
+          curStr = ""
+          skipNewLine = true
+        else:
+          curStr.add(' ')
+      else:
+        curStr.add(c)
+
+  lines.add(curStr)
 
   var
-    lines = s.split(Rune(0x2028))
     prev: Rope
     brk:  Rope
     cur:  Rope
@@ -157,11 +183,14 @@ proc `+`*(r1: Rope, r2: Rope): Rope =
 
   return r1
 
-proc htmlTreeToRope(n: HtmlNode): Rope
+proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope
 
-proc descend(n: HtmlNode): Rope =
+proc doDescend(n: HtmlNode, pre: var seq[bool]): Rope =
   for item in n.children:
-    result = result + item.htmlTreeToRope()
+    result = result + item.htmlTreeToRope(pre)
+
+template descend(n: HtmlNode): Rope =
+  n.doDescend(pre)
 
 proc extractColumnInfo(n: HtmlNode): seq[ColInfo] =
   for item in n.children:
@@ -183,7 +212,7 @@ proc extractColumnInfo(n: HtmlNode): seq[ColInfo] =
 
     result.add(ColInfo(span: span, widthPct: pct))
 
-proc htmlTreeToRope(n: HtmlNode): Rope =
+proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
   case n.kind
   of HtmlDocument:
     result = n.descend()
@@ -211,7 +240,7 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
       for item in n.children:
         if item.kind == HtmlWhiteSpace:
           continue
-        result.items.add(item.htmlTreeToRope())
+        result.items.add(item.htmlTreeToRope(pre))
     of "right":
       result = Rope(kind: RopeAlignedContainer, tag: "ralign",
                     contained: n.descend())
@@ -226,13 +255,13 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
       for item in n.children:
         if item.kind == HtmlWhiteSpace:
           continue
-        result.cells.add(item.htmlTreeToRope())
+        result.cells.add(item.htmlTreeToRope(pre))
     of "tr":
       result = Rope(kind: RopeTableRow, tag: n.contents)
       for item in n.children:
         if item.kind == HtmlWhiteSpace:
           continue
-        result.cells.add(item.htmlTreeToRope())
+        result.cells.add(item.htmlTreeToRope(pre))
     of "table":
       result = Rope(kind: RopeTable, tag: "table")
       for item in n.children:
@@ -241,7 +270,7 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
         if item.contents == "colgroup":
           result.colInfo = item.extractColumnInfo()
           continue
-        let asRope = item.htmlTreeToRope()
+        let asRope = item.htmlTreeToRope(pre)
         case asRope.kind
         of RopeTaggedContainer:
           if asRope.tag == "caption":
@@ -262,7 +291,7 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
         else: # whitespace colgroup; currently not handling.
           discard
     of "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote",
-       "code", "ins", "del", "kbd", "mark", "pre", "q", "s", "small",
+       "code", "ins", "del", "kbd", "mark", "q", "s", "small",
        "sub", "sup", "title", "em", "i", "b", "strong", "u", "caption",
        "var", "italic", "strikethrough", "strikethru", "underline", "bold":
       # Since we know about this list, short-circuit the color checking code,
@@ -270,25 +299,34 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
       # in this branch...
       result = Rope(kind: RopeTaggedContainer, tag: n.contents,
                     contained: n.descend())
+    of "pre":
+      pre.add(true)
+      result = Rope(kind: RopeTaggedContainer, tag: n.contents,
+                    contained: n.descend())
+      discard pre.pop()
     of "td", "th":
       result = Rope(kind: RopeTaggedContainer, tag: n.contents,
                          contained: n.descend())
     else:
       let colorTable = getColorTable()
+      let below      = n.descend()
       if n.contents in colorTable:
-        result = Rope(kind: RopeFgColor, color: n.contents)
-        result.toColor = n.descend()
+        result = Rope(kind: RopeFgColor, color: n.contents, toColor: below)
       elif n.contents.startsWith("bg-") and n.contents[3 .. ^1] in colorTable:
-        result = Rope(kind: RopeBgColor, color: n.contents[3 .. ^1])
-        result.toColor = n.descend()
+        result = Rope(kind: RopeBgColor, color: n.contents[3 .. ^1],
+                      toColor: below)
       elif n.contents.startsWith("#") and len(n.contents) == 7:
-        result = Rope(kind: RopeFgColor, color: n.contents[1 .. ^1])
+        result = Rope(kind: RopeFgColor, color: n.contents[1 .. ^1],
+                      toColor: below)
       elif n.contents.startsWith("bg#") and len(n.contents) == 10:
-        result = Rope(kind: RopeBgColor, color: n.contents[3 .. ^1])
+        result = Rope(kind: RopeBgColor, color: n.contents[3 .. ^1],
+                      toColor: below)
+      elif n.contents in ["default", "none", "off", "nocolor"]:
+        result = Rope(kind: RopeFgColor, color: "", toColor: below)
+      elif n.contents in ["bg-default", "bg-none", "bg-off", "bg-nocolor"]:
+        result = Rope(kind: RopeBgColor, color: "", toColor: below)
       else:
-        result = Rope(kind: RopeTaggedContainer)
-        result.contained = n.descend()
-
+        result = Rope(kind: RopeTaggedContainer, contained: below)
       result.tag = n.contents
 
     # No branches should have returned, but some might not have set a result.
@@ -299,12 +337,24 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
         result.class = n.attrs["class"]
 
   of HtmlText, HtmlCData:
-    result = n.contents.rawStrToRope()
+    result = n.contents.rawStrToRope(pre[^1])
   else:
     discard
+
+proc htmlTreeToRope(n: HtmlNode): Rope =
+  var pre = @[false]
+
+  n.htmlTreeToRope(pre)
 
 converter htmlStringToRope*(s: string): Rope =
   let html = markdownToHtml(s)
   let tree = parseDocument(html).children[1]
 
-  return tree.htmlTreeToRope()
+  if len(tree.children) == 2 and
+     tree.children[1].kind == HtmlWhiteSpace and
+     tree.children[0].contents == "p" and
+     tree.children[1].contents == "\n" and
+     tree.children[0].children.len() == 1:
+    return tree.children[0].children[0].htmlTreeToRope()
+  else:
+    return tree.htmlTreeToRope()

@@ -143,8 +143,9 @@ type
       toColor*: Rope
 
   TextPlane* = ref object
-    lines*:    seq[seq[uint32]]
-    width*:    int # Advisory.
+    lines*:     seq[seq[uint32]]
+    width*:     int # Advisory.
+    softBreak*: bool
 
 let
   BoxStylePlain* =     BoxStyle(horizontal: Rune(0x2500),
@@ -253,6 +254,16 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
 
 let DefaultBoxStyle* = BoxStyleDouble
 
+proc `$`*(plane: TextPlane): string =
+  # This is more intended for rebugging.
+  for line in plane.lines:
+    for ch in line:
+      if ch <= 0x10ffff:
+        result.add(Rune(ch))
+      else:
+        result &= "<<" & $(ch) & ">>"
+    result.add('\n')
+
 proc mergeTextPlanes*(dst: var TextPlane, append: TextPlane) =
   if len(dst.lines) == 0:
     dst.lines = append.lines
@@ -330,7 +341,7 @@ proc getBreakOpps(s: seq[uint32]): seq[int] =
   while len(result) != 0 and result[^1] >= s.len() - 1:
     result = result[0 ..< ^1]
 
-proc stripSpacesButNotFormatters(input: seq[uint32]): seq[uint32] =
+proc stripSpacesButNotFormatters*(input: seq[uint32]): seq[uint32] =
   for i, ch in input:
     if ch > 0x10ffff:
       result.add(ch)
@@ -338,10 +349,27 @@ proc stripSpacesButNotFormatters(input: seq[uint32]): seq[uint32] =
       result &= input[i .. ^1]
       return
 
-proc softWrapLine(input: seq[uint32], width: int): seq[seq[uint32]] =
+proc stripSpacesButNotFormattersFromEnd*(input: seq[uint32]): seq[uint32] =
+  var n = len(input)
+  while n != 0:
+    n -= 1
+    if input[n] > 0x10ffff or not Rune(input[n]).isWhiteSpace():
+      break
+
+  while n != 0:
+    n -= 1
+    let ch = input[n]
+    if ch > 0x10ffff:
+      result = @[ch] & result
+    else:
+      return input[0 ..< n] & result
+
+proc softWrapLine(input: seq[uint32], maxWidth: int): seq[seq[uint32]] =
   # After any line wrap, we will want to just drop trailing spaces,
   # but keep in formatting.
-  var line = input
+  var
+    line       = input
+    lineWidth  = line.u32LineLength()
 
   while true:
     if len(line) == 0:
@@ -354,23 +382,29 @@ proc softWrapLine(input: seq[uint32], width: int): seq[seq[uint32]] =
       bestBp        = -1
 
     for i, ch in line:
-      if curWidth + ch.runeWidth() > width:
+      if (curWidth + ch.runeWidth()) > maxWidth:
         if bestBp == -1:
           # Hard break here, sorry.
-          result.add(line[0 ..< i])
-          line = line[i .. ^1].stripSpacesButNotFormatters()
+          bestBp = i
           break
+        else:
+          break
+
       curWidth += ch.runeWidth()
 
       if curBpIx < len(breakOps) and breakOps[curBpIx] == i:
         bestBp   = i
         curBpIx += 1
 
+    if bestBp == -1:
+      bestBp = len(line)
     if len(line) == 0:
       break
-    if curWidth <= width:
+    if curWidth < maxWidth:
       result.add(line)
       break
+
+    lineWidth -= curWidth
 
     result.add(line[0 ..< bestBp])
     line = line[bestBp .. ^1].stripSpacesButNotFormatters()
@@ -386,27 +420,26 @@ proc findTruncationIndex(s: seq[uint32], width: int): int =
   return len(s)
 
 proc ensureFormattingIsPerLine(plane: var TextPlane) =
-  return
-  var stack: seq[uint32]
+  var
+    nextStart: uint32
+    n: int
+
 
   for i in 0 ..< len(plane.lines):
-    let savedStack = stack
-
-    for ch in plane.lines[i]:
-      if ch <= 0x10ffff:
-        continue
-      if ch == StylePop:
-        discard stack.pop()
+    if i != 0:
+      if plane.lines.len() == 0:
+        plane.lines[i] = @[nextStart]
       else:
-        stack.add(ch)
+        plane.lines[i] = @[nextStart] & plane.lines[i]
+    n = len(plane.lines[i])
+    while n != 0:
+      n         = n - 1
+      nextStart = plane.lines[i][n]
 
-    if len(savedStack) != 0:
-      plane.lines[i] = savedStack & plane.lines[i]
-
-    for j in 0 ..< len(stack):
-      plane.lines[i].add(StylePop)
-
-  assert len(stack) == 0
+      if nextStart > 0x10ffff:
+        break
+    if i + 1 != len(plane.lines):
+      plane.lines[i] &= @[StylePop]
 
 proc wrapToWidth*(plane: var TextPlane, style: FmtStyle, w: int) =
   # First, we're going to do a basic wrap, without regard to style

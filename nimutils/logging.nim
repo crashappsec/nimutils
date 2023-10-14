@@ -10,28 +10,37 @@ type LogLevel* = enum
 
 addDefaultSinks()
 
-const toLogLevelMap* = { "none"    : llNone,
-                         "silent"  : llNone,
-                         "error"   : llError,
-                         "warn"    : llWarn,
-                         "warning" : llWarn,
-                         "info"    : llInfo,
-                         "inform"  : llInfo,
-                         "verbose" : llTrace,
-                         "trace"   : llTrace }.toTable()
+const
+  toLogLevelMap* = { "none"    : llNone,
+                     "silent"  : llNone,
+                     "error"   : llError,
+                     "warn"    : llWarn,
+                     "warning" : llWarn,
+                     "info"    : llInfo,
+                     "inform"  : llInfo,
+                     "verbose" : llTrace,
+                     "trace"   : llTrace }.toTable()
 
-const llToStrMap = { llNone:  "none",
-                     llError: "error",
-                     llWarn:  "warn",
-                     llInfo:  "info",
-                     llTrace: "trace" }.toTable()
+  llToStrMap = { llNone:  "none",
+                 llError: "error",
+                 llWarn:  "warn",
+                 llInfo:  "info",
+                 llTrace: "trace" }.toTable()
+
+  pre        = "<bg-default>"
+  post       = "</bg-default>"
+  errPrefix  = pre & "<red>error:  </red>" & post
+  warnPrefix = pre & "<yellow>warn:  </yellow>" & post
+  infoPrefix = pre & "<atomiclime>info:  </atomiclime>" & post
+  trPrefix   = pre & "<jazzberry>trace: </jazzberry>" & post
+
 
 var logLevelPrefixes = {
   llNone:  "",
-  llError: "<red><b>error: </b></red>".stylize().strip(),
-  llWarn:  "<yellow><b>warn:  </b></yellow>".stylize().strip(),
-  llInfo:  "<atomiclime><b>info:  </b></atomiclime>".stylize().strip(),
-  llTrace: "<cyan><b>trace: </b></cyan>".stylize().strip()
+  llError: errPrefix.stylize(),
+  llWarn:  warnPrefix.stylize(),
+  llInfo:  infoPrefix.stylize(),
+  llTrace: trPrefix.stylize(),
 }.toTable()
 
 const keyLogLevel*  = "loglevel"

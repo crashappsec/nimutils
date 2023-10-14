@@ -101,51 +101,66 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore,
       result.alignStyle = some(align)
 
 var
-  defaultStyle* = newStyle(overflow = OWrap, rpad = 0,
-                           bgColor = "white", fgColor = "fandango",
+  defaultStyle* = newStyle(overflow = OWrap, rpad = 0, tmargin = 0,
+                           bgColor = "gainsboro", fgColor = "fandango",
                            lpad = 0)
+  anotherStyle* = newStyle(overflow = OWrap, rpad = 0, tmargin = 0,
+                           bgColor = "fandango", fgColor = "white",
+                           lpad = 0)
+  tableDefault  = newStyle(borders = [BorderAll], overflow = OWrap,
+                                 fgColor = "gainsboro",
+                                 bgcolor = "jazberry")
   # 1. Even / odd columns
   # 2. Table margins
   styleMap*: Table[string, FmtStyle] = {
-    "body" : newStyle(rpad = 0),
-    "p" : defaultStyle,
-    "title" : newStyle(fgColor = "jazzberry", bold = BoldOn,
-          align = AlignC, italic = ItalicOn, casing = CasingUpper),
-    "h1" : newStyle(fgColor = "jazzberry", bold = BoldOn,
-           align = AlignC, italic = ItalicOn, casing = CasingUpper),
-    "h2" : newStyle(fgColor = "atomiclime", bgColor = "black", bold = BoldOn,
-                                                      align = AlignL,
-                    italic = ItalicOn, tmargin = 1),
-    "h3" : newStyle(bgColor = "jazzberry", fgColor = "white", italic = ItalicOn,
-                    tmargin = 1, casing = CasingUpper),
-    "h4" : newStyle(fgColor = "jazzberry", italic = ItalicOn,
-                    underline = UnderlineSingle, casing = CasingTitle),
-    "h5" : newStyle(fgColor = "atomiclime", bgColor = "black",
-                              italic = ItalicOn, casing = CasingTitle),
-    "h6" : newStyle(fgColor = "fandango", bgColor = "white",
-                    underline = UnderlineSingle, casing = CasingTitle),
-    "ol" : newStyle(bulletChar = Rune('.'), lpad = 2),
-    "ul" : newStyle(bulletChar = Rune(0x2022),lpad = 2), #•
-    "li" : newStyle(lpad = 1),
-    "table" : newStyle(borders = [BorderTypical], overflow = OWrap,
-                                 #bgcolor = "fandango",
-                       tmargin = 0),
-    "td"    : newStyle(tmargin = 0, lpad = 1, rpad = 1),
-    "th"    : newStyle(fgColor = "black", bold = BoldOn, align = AlignC,
-              casing = CasingUpper, tmargin = 0, bgColor = "atomiclime"),
-    "tr"    : newStyle(fgColor = "white", bold = BoldOn,
-                       tmargin = 0, bgColor = "jazzberry"),
-    "tr.even": newStyle(fgColor = "white", bgColor = "jazzberry"),
-    "tr.odd" : newStyle(fgColor = "white", bgColor = "fandango"),
-    "em" : newStyle(fgColor = "jazzberry", bold = BoldOn),
-    "strong" : newStyle(inverse = InverseOn, italic = ItalicOn),
-    "code" : newStyle(inverse = InverseOn, italic = ItalicOn)
+    "body"     : newStyle(rpad = 1, lpad = 1),
+    "title"    : newStyle(fgColor = "jazzberry", bold = BoldOn,
+                align = AlignC, italic = ItalicOn, casing = CasingUpper),
+    "h1"       : newStyle(fgColor = "jazzberry", bold = BoldOn,
+                 align = AlignC, italic = ItalicOn, casing = CasingUpper),
+    "h2"       : newStyle(fgColor = "atomiclime", bgColor = "darkslategray",
+                 bold = BoldOn, align = AlignL, italic = ItalicOn, tmargin = 2),
+    "h3"       : newStyle(bgColor = "jazzberry", fgColor = "white",
+                 italic = ItalicOn, tmargin = 1, casing = CasingUpper),
+    "h4"       : newStyle(fgColor = "jazzberry", italic = ItalicOn,
+                          underline = UnderlineSingle, casing = CasingTitle),
+    "h5"       : newStyle(fgColor = "atomiclime", bgColor = "black",
+                                    italic = ItalicOn, casing = CasingTitle),
+    "h6"       : newStyle(fgColor = "fandango", bgColor = "gainsboro",
+                          underline = UnderlineSingle, casing = CasingTitle),
+    "ol"       : newStyle(bulletChar = Rune('.'), lpad = 2, align = AlignL),
+    "ul"       : newStyle(bulletChar = Rune(0x2022), lpad = 2,
+                                         align = AlignL), #•
+    "li"       : newStyle(lpad = 1, overflow = OWrap, align = AlignL),
+    "table"    : tableDefault,
+    "thead"    : tableDefault,
+    "tbody"    : tableDefault,
+    "tfoot"    : tableDefault,
+    "tborder"  : tableDefault,
+    "td"       : newStyle(tmargin = 0, overflow = OWrap, align = AlignL,
+                                                  lpad = 1, rpad = 1),
+    "th"       : newStyle(fgColor = "black", bold = BoldOn, overflow = OWrap,
+                 casing = CasingUpper, tmargin = 0, bgColor = "atomiclime",
+                 align = AlignC),
+    "tr"       : newStyle(fgColor = "white", bold = BoldOn, lpad = 0, rpad = 0,
+                          overflow = OWrap, tmargin = 0, bgColor = "jazzberry"),
+    "tr.even"  : newStyle(fgColor = "white", bgColor = "jazzberry",
+                                    overflow = OWrap),
+    "tr.odd"   : newStyle(fgColor = "white", bgColor = "fandango",
+                                    overflow = OWrap),
+    "em"       : newStyle(fgColor = "jazzberry", italic = ItalicOn),
+    "strong"   : newStyle(inverse = InverseOn, italic = ItalicOn),
+    "code"     : newStyle(inverse = InverseOn, italic = ItalicOn),
+    "caption"  : newStyle(bgColor = "black", fgColor = "atomiclime",
+                          align = AlignC, italic = ItalicOn, bmargin = 2)
+
     }.toTable()
 
-  perClassStyles* = Table[string, FmtStyle]()
   perIdStyles*    = Table[string, FmtStyle]()
+  perClassStyles* = Table[string, FmtStyle]()
 
   breakingStyles*: Table[string, bool] = {
+    "caption"    : true,
     "p"          : true,
     "div"        : true,
     "ol"         : true,

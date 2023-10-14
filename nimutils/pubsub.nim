@@ -210,9 +210,6 @@ proc prettyJson*(msg: string, extra: StringTable): (string, bool) =
       stderr.writeLine(getCurrentExceptionMsg())
     return ("[Error: Invalid Json formatting] " & msg, false)
 
-proc terminalWrap*(msg: string, extra: StringTable): (string, bool) =
-  return (msg.perLineWrap(), true)
-
 proc prettyJsonl*(msg: string, extra: StringTable): (string, bool) =
   var toReturn = ""
 

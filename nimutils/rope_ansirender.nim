@@ -46,24 +46,24 @@ proc ansiStyleInfo(b: TextPlane, ch: uint32): AnsiStyleInfo =
     bgOpt = style.bgColor
 
   if getColor24Bit():
-    if fgOpt.isSome():
+    if fgOpt.isSome() and fgOpt.get() != "":
       let fgCode = fgOpt.get().colorNameToHex()
       if fgCode[0] != -1:
         codes.add("38;2;" & $(fgCode[0]) & ";" & $(fgCode[1]) & ";" &
                   $(fgCode[2]))
 
-    if bgOpt.isSome():
+    if bgOpt.isSome() and bgOpt.get() != "":
       let bgCode = bgOpt.get().colorNameToHex()
       if bgCode[0] != -1:
         codes.add("48;2;" & $(bgCode[0]) & ";" & $(bgCode[1]) & ";" &
                   $(bgCode[2]))
   else:
-    if fgOpt.isSome():
+    if fgOpt.isSome() and fgOpt.get() != "":
       let fgCode = fgOpt.get().colorNameToVga()
       if fgCode != -1:
         codes.add("38;5;" & $(fgCode))
 
-    if bgOpt.isSome():
+    if bgOpt.isSome() and bgOpt.get() != "":
       let bgCode = bgOpt.get().colorNameToVga()
       if bgCode != -1:
         codes.add("48;5;" & $(bgCode))
@@ -82,7 +82,6 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
     for ch in line:
       if ch > 0x10ffff:
         if ch == StylePop:
-          result &= ansiReset()
           continue
         else:
           styleInfo = b.ansiStyleInfo(ch)
@@ -110,7 +109,10 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
           result &= $(Rune(ch).toLower())
         else:
           result &= $(Rune(ch))
-    result &= "\n"
+    if not b.softBreak:
+      result &= "\n"
+    result &= ansiReset()
+
 
 template stylize*(r: Rope, width = -1): string =
   r.preRender(width).preRenderBoxToAnsiString()

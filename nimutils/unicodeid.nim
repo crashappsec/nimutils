@@ -1,25 +1,7 @@
 ## This module has morphed into a set of "missing" unicode
 ## functionality.  The "ID" at the end of the file name now stands for
 ## "is dope", at least until I figure out what to rename the file to!
-##
-## Several of the functions are improvements on the Nim
-## functions. Particularly, we work on grapheme lengths, instead of
-## codepoints or characters.  And, where Nim's unicode does work on
-## graphemes (particularly their wrap function), we properly do not
-## count the zero-width space as a space.
-##
-## We then use that fact to make it easy for ourselves to deal with
-## strings that have ANSI formatting; we have a type called SpaceSaver
-## that allows us to replace an ANSI-formatted string with a
-## non-formatted string, leaving in zero-width spaces, and then do
-## things like wrap, truncate or align, and then restore the
-## formatting.
-##
-## All of this is currently a little bit janky; I wasn't sure whether
-## to make the ANSI-skipping a flag per call, and I wanted to be able
-## to not restore strings immediately for when I want to make multiple
-## calls.
-##
+
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022
 
@@ -41,7 +23,7 @@ proc isPostBreakingChar*(r: Rune): bool =
   ## that only is supposed to be a break point if the character prior
   ## or after is not a numeric character.
   case r.ord()
-  of 0x00ad, 0x058a, 0x2010, 0x2012 .. 0x2014:
+  of 0x00ad, 0x058a, 0x2010, 0x2012 .. 0x2014, '_'.ord():
     return true
   else:
     return false
@@ -184,11 +166,6 @@ proc peekRune*(s: Stream): Rune =
   result = s.readRune()
   s.setPosition(n)
 
-type SpaceSaver* = ref object
-  pre*:       string
-  postRunes*: seq[Rune]
-  stash*:     seq[seq[Rune]]
-
 proc isPrintable*(r: Rune): bool =
   return r.unicodeCategory() in ctgL + ctgM + ctgN + ctgP + ctgS + ctgZs
 
@@ -249,107 +226,11 @@ proc truncateToWidth*(l: seq[uint32], width: int): seq[uint32] =
       if total <= width:
         result.add(ch)
 
-proc toSaver*(orig: string): (SpaceSaver, string) =
-  ## This method stashes data drom a string that will impact width
-  ## calculations, so that we can do those width calculations and any
-  ## associated (order-preserving) transformations, and then replace
-  ## these values later.
-  ##
-  ## Right now, we only stash ANSI color/graphics mode sequences. The
-  ## thinking is that, in the face of things like cursor movement, it
-  ## makes little sense to try to get an accurate sense of spacing, so
-  ## just do the things we explicitly need to handle.
-  ##
-  ## For now, we assume here that all sequences starting with '\e' are
-  ## well formed, and end with the letter 'm'.
-
-  var
-    res   = SpaceSaver(pre: orig, stash: @[], postRunes: @[])
-    s     = orig.toRunes()
-    escIx = 0
-    zwsIx = 0
-
-  while len(s) != 0:
-    escIx = s.find(Rune('\e'))
-    zwsIx = s.find(magicRune)
-    if escIx == -1 and zwsIx == -1:
-      res.postRunes &= s
-      return (res, $(res.postRunes))
-    elif zwsIx >= 0 and (escIx == -1 or escIx > zwsIx):
-      # Include the zwsIx in the copy, instead of adding it ourselves.
-      res.postRunes &= s[0 .. zwsIx]
-      res.stash.add(@[magicRune])
-      s = s[zwsIx + 1 .. ^1]
-    else:
-      res.postRunes &= s[0 ..< escIx]
-      res.postRunes.add(magicRune)
-      s = s[escIx .. ^1]
-      let mIx = s.find(Rune('m'))
-      if mIx == -1:
-        raise newException(ValueError, "Invalid ANSI color/graphics mode escape")
-      res.stash.add(s[0 .. mIx])
-      s = s[mIx + 1 .. ^1]
-
-  return (res, $(res.postRunes))
-
-proc restoreSaver*(s: string, saver: SpaceSaver, errOk: bool = false): string =
-
-  if len(saver.stash) == 0:
-    return s
-
-  var
-    outRunes: seq[Rune]
-    toProcess = s.toRunes()
-
-  for item in saver.stash:
-    let ix = toProcess.find(magicRune)
-    if ix == -1:
-      if not errOk:
-        raise newException(ValueError,
-                           "Input string doesn't preserve save points")
-      else:
-        outRunes.add(toProcess)
-        return $(outRunes)
-
-    outRunes.add(toProcess[0 ..< ix])
-    outRunes.add(item)
-    toProcess = toProcess[ix + 1 .. ^1]
-
-  outRunes.add(toProcess)
-
-  return $(outRunes)
-
 proc count*[T](list: seq[T], target: T): int =
   result = 0
   for item in list:
     if item == target:
       result = result + 1
-
-proc count*(s: string, target: Rune): int =
-  return s.toRunes().count(target)
-
-proc truncate*(instr: string, w: int): string =
-  let
-    (ss, contents) = instr.toSaver()
-
-  if len(contents) <= w:
-    return instr
-
-  var
-    ix    = 0
-    count = 0
-
-  while count < w:
-    let chrlen = graphemeLen(contents, ix)
-    if runeAt(contents, ix) != magicRune:
-      count = count + 1
-    ix += chrlen
-    if ix >= len(contents):
-      return instr
-
-  let truncated = contents[0 ..< ix]
-
-  return truncated.restoreSaver(ss, true)
 
 # This function, and indentWrap below, are from the Nim wordwrap
 # implementation, but are changed to 1) add indentation for hanging
@@ -363,101 +244,12 @@ proc olen(s: string, start, lastExclusive: int): int =
     let L = graphemeLen(s, i)
     inc i, L
 
-proc width*(pre: string): int =
-  ## Return one version of a length of a string. This is an attempt to
-  ## get the printable length on a fixed width terminal in a unicode
-  ## environment.
-  ##
-  ## We look at full graphemes, instead of bytes or runes.  And, if
-  ## you want to skip ANSI formatting sequences when calculating
-  ## width, use toSaver(), and calculate width on the string part of
-  ## the output.
-  ##
-  ## Note well:
-  ##
-  ## 1) We do not take into account ANSI sequences that aren't about
-  ##    formatting (that is, we only process ones that end in 'm').
-  ## 2) We don't take into account how things might get rendered...
-  ##    we assume we have a fixed-width font, and ignore the fact
-  ##    that some characters in the Unicode standard are 'wide' or
-  ##    'narrow' (or even, 'ambiguous').
-  ##
-  ## There is no correct, universal algorithm here.  Especially
-  ## because there are some unicode sequences that can be displayed as
-  ## a single character, or four, depending on the environment (e.g.,
-  ## 'family' emojis).
-  ##
-  ## Still, our approach should be good enough for a lot of use cases,
-  ## especially when in a terminal.
-  ##
-  ## This (and some of the other functions here) should eventually be
-  ## rewritten to not go through the overhead of the space saver.  Not
-  ## every important right now.
-  let (_, s) = pre.toSaver()
-
-  return olen(s, 0, len(s))
-
-proc colWidth*(pre: string): int =
-  ## Look at a multi-line string, and return the longest line.  It's
-  ## called colWidth because we use it when we have a set of lines in
-  ## a column to figure out the widest line.
-  ##
-  ## Note that this implementation does NOT ignore ANSI characters;
-  ## use toSaver() before, and restoreSaver() on the output.  It does
-  ## handle zws though.
-  let (_, s) = pre.toSaver()
-
-  var
-    i    = 0
-    last = len(s)
-
-  result = 0
-  while i < last:
-    var n = i
-    while n < last and s[n] != '\n':
-      n = n + 1
-    let linelen = olen(s, i, n)
-    if linelen > result:
-      result = linelen
-    i = n + 1
-
-proc align*(s: string, w: int, kind: AlignmentType): string =
-  ## Align a unicode string to a particular width.
-  ##
-  ## Note that this implementation does NOT ignore ANSI characters;
-  ## use toSaver() before, and restoreSaver() on the output.  It does
-  ## handle zws though.
-  let
-    sWidth = width(s)
-    padLen = w - sWidth
-
-  if sWidth > w:
-    return s
-
-  case kind
-  of AlignLeft:
-    let pad = repeat(Rune(' '), padLen)
-    return s & pad
-  of AlignRight:
-    let pad = repeat(Rune(' '), padLen)
-    return pad & s
-  else:
-    let
-      lpadlen = int(padLen/2)
-      rpadlen = padlen - lPadLen
-      lpad    = repeat(Rune(' '), lpadlen)
-      rpad    = repeat(Rune(' '), rpadlen)
-    return lpad & s & rpad
-
 proc indentWrap*( s: string,
                   startingMaxLineWidth = -1,
                   hangingIndent = 2,
                   splitLongWords = true,
                   seps: set[char] = Whitespace,
                   newLine = "\n"): string =
-  ## This wraps text.  Handles zws right, and can indent hanging lines.
-  ## But if you want to ignore ANSI sequences, use the saver object.
-
   result           = newStringOfCap(s.len + s.len shr 6)
   var startWidth   = if startingMaxLineWidth < 1:
                       terminalWidth() + startingMaxLineWidth
@@ -510,30 +302,6 @@ proc indentWrap*( s: string,
         result.add(lastSep)
         for k in i..<j: result.add(s[k])
     i = j
-
-proc perLineWrap*(s: string,
-                  startingMaxLineWidth = -1,
-                  firstHangingIndent   = 2,
-                  remainingIndents     = 0,
-                  splitLongWords       = true,
-                  seps: set[char]      = Whitespace,
-                  newLine              = "\n"): string =
-    let lines             = split(s, "\n")
-    var parts:seq[string] = @[]
-
-    for i, line in lines:
-      let
-        (saver, str) = line.toSaver()
-        wrapped      = str.indentWrap(startingMaxLineWidth,
-                                      if i == 0:
-                                        firstHangingIndent
-                                      else:
-                                        remainingIndents,
-                                      splitLongWords,
-                                      seps,
-                                      newLine)
-      parts.add(wrapped.restoreSaver(saver))
-    return parts.join("\n")
 
 proc u32LineLength*(line: seq[uint32]): int =
   for item in line:
