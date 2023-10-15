@@ -9,15 +9,12 @@
 #    branch where I did fix the issue, but the branches have diverged
 #    a lot and cannot for the life of me find the issue even w/ that.
 #
-# 2) Similarly, I haven't yet figured out why the formatting for table
-#    horizontal borders/dividers don't work.
+# 2) Support column spans.
 #
-# 3) Support column spans.
-#
-# 4) Support absolute column sizes (right now if specified it's pct, and
+# 3) Support absolute column sizes (right now if specified it's pct, and
 #    if it's not every column is sized evenly).
 #
-# 5) Fix jusfication and add <justify/> and <full/> tags.
+# 4) Fix jusfication and add <justify/> and <full/> tags.
 #
 # Plus there are definitely plenty of little bits I haven't made work,
 # like almost anything that not gets done in a style sheet that could
@@ -140,12 +137,10 @@ proc applyAlignment(state: FmtState, box: RenderBox, w: int) =
     of AlignC:
       var
         leftAmt = toFill div 2
-        toAdd   = state.pad(leftAmt)
+        toAddL  = state.pad(leftAmt)
+        toAddR  = if w mod 2 != 0: state.pad(leftAmt + 1) else: toAddL
+      box.contents.lines[i] = toAddL & box.contents.lines[i] & toAddR
 
-      box.contents.lines[i] = toAdd & box.contents.lines[i] & toAdd
-
-      if w mod 2 != 0:
-        box.contents.lines[i].add(state.pad(1))
     of AlignF:
       box.contents.lines[i] = justify(box.contents.lines[i], w)
     of AlignJ:
@@ -286,7 +281,6 @@ template boxContent(state: var FmtState, style: FmtStyle, symbol: untyped,
 
   let collapsed = state.collapseColumn(symbol)
   state.alignAndPad(collapsed)
-
   state.popStyle()
 
   symbol = @[collapsed]
@@ -300,19 +294,37 @@ template fmtBox(styleTweak: Option[FmtStyle], code: untyped) =
     style = state.curStyle
   state.boxContent(style, result, code)
 
-template standardBox(code: untyped) =
-  let
-    styleOpt = state.getNewStartStyle(r, "")
-    style    = styleOpt.getOrElse(state.curStyle)
-
-  state.boxContent(style, result, code)
-
 template taggedBox(tag: string, code: untyped) =
   let
-    styleOpt = state.getNewStartStyle(r, tag)
-    style    = styleOpt.getOrElse(state.curStyle)
+    styleOpt   = state.getNewStartStyle(r, tag)
+    style      = styleOpt.getOrElse(state.curStyle)
+    savedWidth = state.totalWidth
+    lpad       = style.lpad.getOrElse(0)
+    rpad       = style.rpad.getOrElse(0)
+    p          = lpad + rpad
 
-  state.boxContent(style, result, code)
+  state.pushStyle(style)
+
+  if r.width != 0 and r.width < state.totalWidth:
+    state.totalWidth = r.width - p
+  else:
+    state.totalWidth -= p
+  code
+  state.totalWidth = savedWidth
+  for item in result:
+    if style.tmargin.isSome():
+      item.tmargin = style.tmargin.get()
+    if style.bmargin.isSome():
+      item.bmargin = style.bmargin.get()
+
+  let collapsed = state.collapseColumn(result)
+  state.alignAndPad(collapsed)
+  state.popStyle()
+
+  result = @[collapsed]
+
+template standardBox(code: untyped) =
+  taggedBox("", code)
 
 proc preRender*(state: var FmtState, r: Rope): seq[RenderBox]
 

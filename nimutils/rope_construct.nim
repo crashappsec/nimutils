@@ -225,12 +225,6 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
       result = n.descend()
     of "br":
       result = Rope(kind: RopeBreak, breakType: BrHardLine, tag: "br")
-    of "p":
-      result = Rope(kind: RopeBreak, breakType: BrParagraph,
-                    guts: n.descend(), tag: "p")
-    of "div":
-      result = Rope(kind: RopeBreak, breakType: BrPage,
-                    guts: n.descend(), tag: "div")
     of "a":
       let url = if "href" in n.attrs: n.attrs["href"] else: "https://unknown"
       result = Rope(kind: RopeLink, url: url, toHighlight: n.descend(),
@@ -290,7 +284,7 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
           result.cells.add(asRope)
         else: # whitespace colgroup; currently not handling.
           discard
-    of "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote",
+    of "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div",
        "code", "ins", "del", "kbd", "mark", "q", "s", "small",
        "sub", "sup", "title", "em", "i", "b", "strong", "u", "caption",
        "var", "italic", "strikethrough", "strikethru", "underline", "bold":
@@ -335,7 +329,10 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
         result.id = n.attrs["id"]
       if "class" in n.attrs:
         result.class = n.attrs["class"]
-
+      if "width" in n.attrs:
+        var width: int
+        discard parseInt(n.attrs["width"], width)
+        result.width = width
   of HtmlText, HtmlCData:
     result = n.contents.rawStrToRope(pre[^1])
   else:

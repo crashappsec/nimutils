@@ -104,16 +104,17 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
 
 var
   defaultStyle* = newStyle(overflow = OWrap, lpad = 0, rpad = 0, tmargin = 0)
-  tableDefault  = newStyle(borders = [BorderAll], overflow = OWrap,
-                                 fgColor = "white",
-                                 bgcolor = "dodgerblue")
+  tableDefault  = newStyle(borders = [BorderAll], overflow = OWrap, tmargin = 0,
+                           fgColor = "white", bgcolor = "dodgerblue")
   # 1. Even / odd columns
   # 2. Table margins
   styleMap*: Table[string, FmtStyle] = {
     "body"     : newStyle(rpad = 1, lpad = 1),
+    "div"      : newStyle(rpad = 1, lpad = 1, bgColor = "none"),
     "p"        : newStyle(bmargin = 1),
     "h1"       : newStyle(fgColor = "red", bold = BoldOn,
-                 align = AlignC, italic = ItalicOn, casing = CasingUpper),
+                          align = AlignL, italic = ItalicOn, casing = CasingUpper,
+                          tmargin = 1, bmargin = 0),
     "h2"       : newStyle(fgColor = "lime", bgColor = "darkslategray",
                  bold = BoldOn, align = AlignL, italic = ItalicOn, tmargin = 2),
     "h3"       : newStyle(bgColor = "red", fgColor = "white",
@@ -141,9 +142,9 @@ var
     "tr"       : newStyle(fgColor = "white", bold = BoldOn, lpad = 0, rpad = 0,
                           overflow = OWrap, tmargin = 0, bgColor = "dodgerblue"),
     "tr.even"  : newStyle(fgColor = "white", bgColor = "dodgerblue",
-                                    overflow = OWrap),
+                           tmargin = 0, overflow = OWrap),
     "tr.odd"   : newStyle(fgColor = "white", bgColor = "steelblue",
-                                    overflow = OWrap),
+                           tmargin = 0, overflow = OWrap),
     "em"       : newStyle(fgColor = "jazzberry", italic = ItalicOn),
     "strong"   : newStyle(inverse = InverseOn, italic = ItalicOn),
     "code"     : newStyle(inverse = InverseOn, italic = ItalicOn),
