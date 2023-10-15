@@ -351,12 +351,12 @@ proc stripSpacesButNotFormatters*(input: seq[uint32]): seq[uint32] =
 
 proc stripSpacesButNotFormattersFromEnd*(input: seq[uint32]): seq[uint32] =
   var n = len(input)
-  while n != 0:
+  while n > 0:
     n -= 1
     if input[n] > 0x10ffff or not Rune(input[n]).isWhiteSpace():
       break
 
-  while n != 0:
+  while n > 0:
     n -= 1
     let ch = input[n]
     if ch > 0x10ffff:
@@ -370,6 +370,7 @@ proc softWrapLine(input: seq[uint32], maxWidth, hang: int): seq[seq[uint32]] =
   var
     line       = input
     lineWidth  = line.u32LineLength()
+    width      = if maxWidth < 1: 1 else: maxWidth
 
   while true:
     if len(line) == 0:
@@ -382,7 +383,7 @@ proc softWrapLine(input: seq[uint32], maxWidth, hang: int): seq[seq[uint32]] =
       bestBp        = -1
 
     for i, ch in line:
-      if (curWidth + ch.runeWidth()) > maxWidth:
+      if (curWidth + ch.runeWidth()) > width:
         if bestBp == -1:
           # Hard break here, sorry.
           bestBp = i
@@ -396,11 +397,9 @@ proc softWrapLine(input: seq[uint32], maxWidth, hang: int): seq[seq[uint32]] =
         bestBp   = i
         curBpIx += 1
 
-    if bestBp == -1:
-      bestBp = len(line)
     if len(line) == 0:
       break
-    if curWidth < maxWidth:
+    if bestBp == -1 or curWidth < width:
       result.add(line)
       break
 
@@ -408,7 +407,8 @@ proc softWrapLine(input: seq[uint32], maxWidth, hang: int): seq[seq[uint32]] =
 
     result.add(line[0 ..< bestBp])
     line = line[bestBp .. ^1].stripSpacesButNotFormatters()
-    line = uint32(Rune(' ')).repeat(hang) & line
+    if hang < width:
+      line = uint32(Rune(' ')).repeat(hang) & line
 
 proc findTruncationIndex(s: seq[uint32], width: int): int =
   var remaining = width
