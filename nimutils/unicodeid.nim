@@ -186,6 +186,8 @@ template isSeparator*(r: Rune): bool =
 proc runeWidth*(r: Rune): int =
   let category = r.unicodeCategory()
 
+  if int(r) in [0xfe0f]:
+    return 1
   if category in ctgMn + ctgMe + ctgCf:
     return 0
 

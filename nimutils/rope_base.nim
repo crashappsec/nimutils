@@ -1,5 +1,4 @@
 import unicode, tables, options, unicodeid, unicodedb/properties, misc
-
 const
  defaultTextWidth* {.intdefine.}    = 80
  bareMinimumColWidth* {.intdefine.} = 2
@@ -10,7 +9,7 @@ type
     FmtTerminal, FmtHtml
 
   OverflowPreference* = enum
-    OIgnore, OTruncate, ODots, Overflow, OWrap, OHardWrap
+    OIgnore, OTruncate, ODots, Overflow, OWrap, OHardWrap, OIndentWrap
 
   TextCasing* = enum
     CasingIgnore, CasingAsIs, CasingLower, CasingUpper, CasingTitle
@@ -57,6 +56,7 @@ type
     textColor*:              Option[string]
     bgColor*:                Option[string]
     overflow*:               Option[OverflowPreference]
+    hang*:                   Option[int]
     lpad*:                   Option[int]
     rpad*:                   Option[int]
     tmargin*:                Option[int]
@@ -364,7 +364,7 @@ proc stripSpacesButNotFormattersFromEnd*(input: seq[uint32]): seq[uint32] =
     else:
       return input[0 ..< n] & result
 
-proc softWrapLine(input: seq[uint32], maxWidth: int): seq[seq[uint32]] =
+proc softWrapLine(input: seq[uint32], maxWidth, hang: int): seq[seq[uint32]] =
   # After any line wrap, we will want to just drop trailing spaces,
   # but keep in formatting.
   var
@@ -408,6 +408,7 @@ proc softWrapLine(input: seq[uint32], maxWidth: int): seq[seq[uint32]] =
 
     result.add(line[0 ..< bestBp])
     line = line[bestBp .. ^1].stripSpacesButNotFormatters()
+    line = uint32(Rune(' ')).repeat(hang) & line
 
 proc findTruncationIndex(s: seq[uint32], width: int): int =
   var remaining = width
@@ -450,6 +451,7 @@ proc wrapToWidth*(plane: var TextPlane, style: FmtStyle, w: int) =
   #
   # Ideally, we'd be able to optimize that some, but not going to
   # bother.
+  var newLines: seq[seq[uint32]]
 
   case style.overFlow.getOrElse(OIgnore):
     of OverFlow, OIgnore:
@@ -481,9 +483,13 @@ proc wrapToWidth*(plane: var TextPlane, style: FmtStyle, w: int) =
             line = line[ix .. ^1]
       plane.lines = newLines
     of OWrap:
-      var newLines: seq[seq[uint32]]
       for line in plane.lines:
-        newLines &= line.softWrapLine(w)
+        newLines &= line.softWrapLine(w, 0)
+      plane.lines = newLines
+    of OIndentWrap:
+      let hang = style.hang.getOrElse(2)
+      for line in plane.lines:
+        newLines &= line.softWrapLine(w, hang)
       plane.lines = newLines
 
   plane.ensureFormattingIsPerLine()
