@@ -225,9 +225,6 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
       result = n.descend()
     of "br":
       result = Rope(kind: RopeBreak, breakType: BrHardLine, tag: "br")
-    of "p":
-      result = Rope(kind: RopeBreak, breakType: BrParagraph,
-                    guts: n.descend(), tag: "p")
     of "div":
       result = Rope(kind: RopeBreak, breakType: BrPage,
                     guts: n.descend(), tag: "div")
