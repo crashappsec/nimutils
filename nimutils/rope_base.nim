@@ -115,6 +115,7 @@ type
     tag*:        string
     id*:         string
     class*:      string
+    width*:      int       # Requested width in columns for a container
 
     case kind*: RopeKind
     of RopeAtom:

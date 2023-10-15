@@ -140,12 +140,10 @@ proc applyAlignment(state: FmtState, box: RenderBox, w: int) =
     of AlignC:
       var
         leftAmt = toFill div 2
-        toAdd   = state.pad(leftAmt)
+        toAddL  = state.pad(leftAmt)
+        toAddR  = if w mod 2 != 0: state.pad(leftAmt + 1) else: toAddL
+      box.contents.lines[i] = toAddL & box.contents.lines[i] & toAddR
 
-      box.contents.lines[i] = toAdd & box.contents.lines[i] & toAdd
-
-      if w mod 2 != 0:
-        box.contents.lines[i].add(state.pad(1))
     of AlignF:
       box.contents.lines[i] = justify(box.contents.lines[i], w)
     of AlignJ:
@@ -302,17 +300,26 @@ template fmtBox(styleTweak: Option[FmtStyle], code: untyped) =
 
 template standardBox(code: untyped) =
   let
-    styleOpt = state.getNewStartStyle(r, "")
-    style    = styleOpt.getOrElse(state.curStyle)
+    styleOpt   = state.getNewStartStyle(r, "")
+    style      = styleOpt.getOrElse(state.curStyle)
+    savedWidth = state.totalWidth
 
+  if r.width != 0 and r.width < state.totalWidth:
+    state.totalWidth = r.width
   state.boxContent(style, result, code)
+  state.totalWidth = savedWidth
 
 template taggedBox(tag: string, code: untyped) =
   let
-    styleOpt = state.getNewStartStyle(r, tag)
-    style    = styleOpt.getOrElse(state.curStyle)
+    styleOpt   = state.getNewStartStyle(r, tag)
+    style      = styleOpt.getOrElse(state.curStyle)
+    savedWidth = state.totalWidth
 
+  if r.width != 0 and r.width < state.totalWidth:
+    state.totalWidth = r.width
   state.boxContent(style, result, code)
+  state.totalWidth = savedWidth
+
 
 proc preRender*(state: var FmtState, r: Rope): seq[RenderBox]
 
