@@ -19,11 +19,6 @@
 #
 # 5) Fix jusfication and add <justify/> and <full/> tags.
 #
-# 6) Add back in indent-wrapping.
-#
-# 7) I think tr should only impact rendering for cells not
-#    the space in the row outside the cell, let that be determined by
-#
 # Plus there are definitely plenty of little bits I haven't made work,
 # like almost anything that not gets done in a style sheet that could
 # be an attribute.
@@ -208,7 +203,7 @@ proc collapseColumn(state: FmtState, boxes: seq[RenderBox]): RenderBox =
 
     if i != len(boxes) - 1:
       for j in 0 ..< box.bmargin:
-        plane.lines.add(@[])
+        plane.lines.add(blank)
 
   result = RenderBox(contents: plane, tmargin: tmargin, bmargin: bmargin)
 
@@ -546,11 +541,11 @@ proc emptyTableCell(state: var FmtState): seq[RenderBox] =
 
   return @[ RenderBox(width: state.totalWidth, contents: pane) ]
 
-proc adjacentCellsToRow(state: var FmtState, cells: seq[TextPlane]): TextPlane =
+proc adjacentCellsToRow(state: var FmtState, cells: seq[TextPlane],
+                        widths: seq[int]): TextPlane =
   var
     style    = state.curStyle
     boxStyle = style.boxStyle.getOrElse(DefaultBoxStyle)
-    widths   = state.colStack[^1]
     leftBorder:  seq[uint32]
     sep:         seq[uint32]
     rightBorder: seq[uint32]
@@ -581,14 +576,11 @@ proc adjacentCellsToRow(state: var FmtState, cells: seq[TextPlane]): TextPlane =
       if l.len() > 0 and l[0].len() >= 1 and l[0][0] > 0x01ffff:
         blankLine = @[l[0][0]] & blankLine & @[StylePop]
 
-      while true:
+      while col.lines.len() < rowLines:
         col.lines.add(blankLine)
-        if col.lines.len() == rowLines:
-          break
 
   # Now we go left to right, line-by-line and assemble the result.  We
   # do this by mutating boxes[0]'s state; we'll end up returning it.
-
   for n in 0 ..< rowLines:
     if len(cells) == 1:
       cells[0].lines[n] = leftBorder & cells[0].lines[n]
@@ -648,15 +640,18 @@ proc preRenderRow(state: var FmtState, r: Rope): seq[RenderBox] =
         state.totalWidth = width
         cellBoxes = state.preRender(r.cells[i])
 
+      for cell in cellBoxes:
+        cell.tmargin = 0
+        cell.bmargin = 0
       let boxes = state.collapseColumn(cellBoxes)
       rowPlanes.add(state.collapsedBoxToTextPlane(boxes))
 
-    # Step 4, Combine the cells horizontally into a single RbText
-    # object. This involves adding any vertical borders, and filling
-    # in any blank lines if individual cells span multiple lines.
-    let resPlane     = state.adjacentCellsToRow(rowPlanes)
-    result           = @[RenderBox(contents: resPlane, width: savedWidth)]
-    state.totalWidth = savedWidth
+  # Step 4, Combine the cells horizontally into a single RbText
+  # object. This involves adding any vertical borders, and filling
+  # in any blank lines if individual cells span multiple lines.
+  let resPlane     = state.adjacentCellsToRow(rowPlanes, widths)
+  result           = @[RenderBox(contents: resPlane, width: savedWidth)]
+  state.totalWidth = savedWidth
 
 proc preRenderRows(state: var FmtState, r: Rope): seq[RenderBox] =
   # Each row returns a single item.
