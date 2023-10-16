@@ -83,7 +83,10 @@ proc stdoutSinkOut(msg:    string,
                    cfg:    SinkConfig,
                    t:      Topic,
                    ignore: StringTable) =
-  stdout.write(msg)
+  if msg.endswith('\n'):
+    stdout.write(msg)
+  else:
+    echo msg
 
 proc addStdoutSink*() =
   registerSink("stdout", SinkImplementation(outputFunction: stdoutSinkOut))
@@ -92,7 +95,10 @@ proc stdErrSinkOut(msg:    string,
                    cfg:    SinkConfig,
                    t:      Topic,
                    ignore: StringTable) =
-  stderr.write(msg)
+  if msg.endswith('\n'):
+    stderr.write(msg)
+  else:
+    stderr.write(msg & "\n")
 
 proc addStdErrSink*() =
   registerSink("stderr", SinkImplementation(outputFunction: stderrSinkOut))
