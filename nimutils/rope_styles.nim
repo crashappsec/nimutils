@@ -72,6 +72,8 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
     if len(borders) != 0:
       for item in borders:
         case item
+        of BorderNone:
+          discard
         of BorderTop:
           result.useTopBorder = some(true)
         of BorderBottom:
