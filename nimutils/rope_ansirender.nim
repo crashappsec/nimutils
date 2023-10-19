@@ -1,10 +1,10 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import tables, options, unicode, misc, colortable, rope_base, rope_prerender,
-       rope_styles
+import tables, options, unicode, misc, colortable, rope_construct,
+       rope_base, rope_prerender, rope_styles
 
-from strutils import join
+from strutils import join, endswith
 
 template ansiReset(): string = "\e[0m"
 
@@ -71,7 +71,7 @@ proc ansiStyleInfo(b: TextPlane, ch: uint32): AnsiStyleInfo =
   if len(codes) > 0:
     result.ansiStart = "\e[" & codes.join(";") & "m"
 
-proc preRenderBoxToAnsiString*(b: TextPlane): string =
+proc preRenderBoxToAnsiString*(b: TextPlane, ensureNl = true): string =
   # TODO: Add back in unicode underline, etc.
   var
     styleInfo:  AnsiStyleInfo
@@ -114,14 +114,58 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
     if getShowColor():
       result &= ansiReset()
 
-template stylize*(r: Rope, width = -1): string =
-  r.preRender(width).preRenderBoxToAnsiString()
+  if ensureNl and not result.endswith("\n"):
+    if styleInfo.ansiStart.len() > 0 and getShowColor():
+      result &= ansiReset() & styleInfo.ansiStart & "\n" & ansiReset()
+    else:
+      result = "\n"
 
-template withColor*(s: string, c: string): string =
-  stylize("<" & c & ">" & s & "</" & c & ">")
+template stylizeMd*(s: string, width = -1, showLinks = false,
+                    ensureNl = true, style = defaultStyle): string =
+  s.htmlStringToRope().
+    preRender(width, showLinks, style).
+    preRenderBoxToAnsiString(ensureNl)
 
-proc print*(r: Rope = nil, file = stdout, width = -1) =
-  if r == nil:
-    file.write("\n")
+template stylizeHtml*(s: string, width = -1, showLinks = false,
+                      ensureNl = true, style = defaultStyle): string =
+  s.htmlStringToRope(false).
+    preRender(width, showLinks, style).
+    preRenderBoxToAnsiString(ensureNl)
+
+proc stylize*(s: string, width = -1, showLinks = false,
+              ensureNl = true, style = defaultStyle): string =
+  let r = Rope(kind: RopeAtom, text: s.toRunes())
+  return r.preRender(width, showLinks, style).
+           preRenderBoxToAnsiString(ensureNl)
+
+proc stylize*(s: string, tag: string, width = -1, showLinks = false,
+              ensureNl = true, style = defaultStyle): string =
+  var r: Rope
+
+  if tag != "":
+    r = Rope(kind: RopeTaggedContainer, tag: tag,
+                 contained: Rope(kind: RopeAtom, text: s.toRunes()))
   else:
-    file.write(stylize(r, width))
+    r = Rope(kind: RopeAtom, text: s.toRunes())
+
+  return r.preRender(width, showLinks, style).
+           preRenderBoxToAnsiString(ensureNl)
+
+proc withColor*(s: string, fg: string, bg = ""): string =
+  if fg == "" and bg == "":
+    result = s
+  else:
+    result =  s.stylize(ensureNl = false, style = newStyle(fgColor = fg,
+                        bgColor = bg))
+
+  result = result.strip()
+
+proc print*(s: string, file = stdout, md = true, width = -1, ensureNl = true,
+           showLinks = false, style = defaultStyle) =
+  var toWrite: string
+  if md:
+    toWrite = s.stylizeMd(width, showLinks, ensureNl, style)
+  else:
+    toWrite = s.stylizeHtml(width, showLinks, ensureNl, style)
+
+  file.write(toWrite)

@@ -853,7 +853,8 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
 
   planesToBox()
 
-proc preRender*(r: Rope, width = -1, showLinkTargets = false): TextPlane =
+proc preRender*(r: Rope, width = -1, showLinkTargets = false,
+                defaultStyle = defaultStyle): TextPlane =
   ## Denoted in the stream of characters to output, what styles
   ## should be applied, when. We do this by dropping in unique
   ## values into the uint32 stream that cannot be codepoints.  This

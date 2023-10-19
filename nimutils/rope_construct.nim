@@ -343,8 +343,8 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
 
   n.htmlTreeToRope(pre)
 
-converter htmlStringToRope*(s: string): Rope =
-  let html = markdownToHtml(s)
+proc htmlStringToRope*(s: string, markdown = true): Rope =
+  let html = if markdown: markdownToHtml(s) else: s
   let tree = parseDocument(html).children[1]
 
   if len(tree.children) == 2 and
