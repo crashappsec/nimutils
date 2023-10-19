@@ -85,7 +85,7 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
           continue
         else:
           styleInfo = b.ansiStyleInfo(ch)
-        if styleInfo.ansiStart.len() > 0:
+        if styleInfo.ansiStart.len() > 0 and getShowColor():
           result &= ansiReset()
           result &= styleInfo.ansiStart
         if styleInfo.casing == CasingTitle:
