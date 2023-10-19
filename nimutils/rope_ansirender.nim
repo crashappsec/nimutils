@@ -111,8 +111,8 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
           result &= $(Rune(ch))
     if not b.softBreak:
       result &= "\n"
-    result &= ansiReset()
-
+    if getShowColor():
+      result &= ansiReset()
 
 template stylize*(r: Rope, width = -1): string =
   r.preRender(width).preRenderBoxToAnsiString()
