@@ -233,6 +233,8 @@ proc getNewStartStyle(state: FmtState, r: Rope,
   # First, apply any style object associated with the rope's html tag.
   # Second, if the rope has a class, apply any style object associated w/ that.
   # Third, do the same w/ ID.
+  # Finally, if the rope itself has a specified style, it takes
+  # precedence.
   var
     styleChange = false
     newStyle    = state.curStyle
@@ -253,7 +255,7 @@ proc getNewStartStyle(state: FmtState, r: Rope,
   if r != nil and r.kind == RopeFgColor:
     styleChange = true
     newStyle = newStyle.mergeStyles(FmtStyle(textColor: some("")))
-  elif r!= nil and r.kind == RopeBgColor:
+  elif r != nil and r.kind == RopeBgColor:
     styleChange = true
     newStyle = newStyle.mergeStyles(FmtStyle(bgColor: some("")))
 

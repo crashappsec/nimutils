@@ -112,7 +112,6 @@ type
   Rope* = ref object
     next*:       Rope
     cycle*:      bool
-    style*:      FmtStyle  # Style options for this node
     tag*:        string
     id*:         string
     class*:      string
