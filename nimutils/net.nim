@@ -40,4 +40,3 @@ proc get_external_ipv4_address() : cstring {.cdecl, importc.}
 proc getMyIpV4Addr*(): string =
   var s  = get_external_ipv4_address()
   result = $(s)
-  dealloc(s)
