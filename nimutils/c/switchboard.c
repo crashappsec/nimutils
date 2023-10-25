@@ -1,0 +1,1296 @@
+/*
+ * Currently, we're using select() here, not epoll(), etc.
+ */
+
+#ifndef SWITCHBOARD_H__
+#include "switchboard.h"
+#ifdef SB_DEBUG
+#include <stdio.h>
+#endif
+#endif
+
+/* The way we use the below two IO functions assumes that, while they
+ * may be interrupted, they won't be blocked.
+ *
+ * Therefore, we need to be sure not to:
+ *
+ * 1) use select() to make sure an op can be ready.
+ * 2) We limit ourselves to PIPE_BUF per write.
+ *
+ * In the switchboard code, we will always select on any open fds that
+ * have open subscribers. For writers, we will only select on their
+ * fds if there are messages waiting to be written.
+ *
+ * We do this by having a message queue attached to readers. So in the
+ * first possible select cycle, (assuming there's no string being
+ * routed into a file descriptor), we will only select() for read
+ * fds.
+ *
+ * There's no write delay though, as when we re-enter the select loop,
+ * we'd expect the fds for write to all be ready for data, so that
+ * select() call will return immediately.
+ */
+ssize_t
+read_one(int fd, char *buf, size_t nbytes)
+{
+    ssize_t  n;
+
+    while (true) {
+	n = read(fd, buf, nbytes);
+
+	if (n == -1) {
+	    if (errno == EINTR || errno == EAGAIN) {
+		continue;
+	    }
+	}
+
+	return n;
+    }
+}
+
+bool
+write_data(int fd, char *buf, size_t nbytes)
+{
+    size_t  towrite, written = 0;
+    ssize_t result;
+
+    do {
+        if (nbytes - written > SSIZE_MAX) {
+            towrite = SSIZE_MAX;
+        } else {
+            towrite = nbytes - written;
+        }
+        if ((result = write(fd, buf + written, towrite)) >= 0) {
+            written += result;
+        } else if (errno != EINTR && errno != EAGAIN) {
+            return false;
+        }
+    } while (written < nbytes);
+
+    return true;
+}
+
+static inline void
+register_fd(switchboard_t *ctx, int fd)
+{
+    if (ctx->max_fd <= fd) {
+	ctx->max_fd = fd + 1;
+    }
+}
+
+int
+party_fd(party_t *party)
+{
+    if (party->party_type == PT_FD) {
+	return party->info.fdinfo.fd;
+    }
+    else {
+	return party->info.listenerinfo.fd;	
+    }
+}
+
+static inline str_src_party_t *
+get_sstr_obj(party_t *party)
+{
+    return &party->info.rstrinfo;
+}
+
+static inline str_dst_party_t *
+get_dstr_obj(party_t *party)
+{
+    return &party->info.wstrinfo;
+}
+
+static inline fd_party_t *
+get_fd_obj(party_t *party)
+{
+    return &party->info.fdinfo;
+}
+
+static inline listener_party_t *
+get_listener_obj(party_t *party)
+{
+    return &party->info.listenerinfo;
+}
+
+/* Here we link together readers so we can walk through them to build
+ * the read FD set, and to do memory management.
+ *
+ * Non-FD data structures are put on the 'loners' list.
+ */
+static inline void
+register_read_fd(switchboard_t *ctx, party_t *read_from)
+{
+    register_fd(ctx, party_fd(read_from));
+
+    read_from->next_reader   = ctx->parties_for_reading;
+    ctx->parties_for_reading = read_from;
+}
+
+static inline void
+register_writer_fd(switchboard_t *ctx, party_t *write_to)
+{
+    register_fd(ctx, party_fd(write_to));
+    write_to->next_writer    = ctx->parties_for_writing;
+    ctx->parties_for_writing = write_to;
+}
+
+/* 'Loner' is a horrible name for this; it's taking the party metaphor
+ * too far. This is just a list of party_t objects that will not
+ * appear on either the reader linked list or the writer linked list;
+ * generally we'll want this for cleanup after the fact.
+ */
+static inline void
+register_loner(switchboard_t *ctx, party_t *loner)
+{
+    loner->next_loner = ctx->party_loners;
+    ctx->party_loners = loner;
+}
+
+/*
+ * Here, we're handed a party_t and told it's a listener. You must
+ * pass in a sockfd that is already open, and has already had listen()
+ * called on it.
+ *
+ * We force this into non-blocking mode; when there's something ready
+ * to accept(), we'll get triggered that a read is available. We
+ * then accept() for you, and pass that to a callback.
+ *
+ * You can then register the fd connection in the same switchboard if
+ * you like. It's not done for you at this level, though.
+ *
+ * If `close_on_destroy` is true, we will call close() on the fd for
+ * you whenever the switchboard is torn down.
+ */
+void
+sb_init_party_listener(switchboard_t *ctx, party_t *party, int sockfd,
+		       accept_cb_t callback, bool stop_when_closed,
+		       bool close_on_destroy)
+{
+    /* Stop on close should really only be applied to stdin/out/err,
+     * and socket FDs. For subprocesses, add the flag when registering
+     * them.
+     */
+    party->party_type        = PT_LISTENER;
+    party->open              = true;
+    party->close_on_destroy  = close_on_destroy;
+    ctx->parties_for_reading = party;
+    party->can_read_from_it  = true;
+    party->can_write_to_it   = false;
+    
+    listener_party_t *lobj   = get_listener_obj(party);
+    lobj->fd                 = sockfd;
+    lobj->accept_cb          = (accept_cb_decl)callback;
+    lobj->saved_flags        = fcntl(sockfd, F_GETFL, 0);
+    
+    int flags                = lobj->saved_flags | O_NONBLOCK;
+
+    fcntl(sockfd, F_SETFL, flags);
+    register_read_fd(ctx, party);
+
+    if (stop_when_closed) {
+	party->stop_on_close = true;
+    }
+}
+
+// allocate and call sb_init_party_listener.
+party_t *
+sb_new_party_listener(switchboard_t *ctx, int sockfd, accept_cb_t callback,
+		   bool stop_when_closed, bool close_on_destroy)
+{
+    party_t *result = (party_t *)calloc(sizeof(party_t), 1);
+    sb_init_party_listener(ctx, result, sockfd, callback, stop_when_closed,
+			   close_on_destroy);
+    
+    return result;
+}
+
+/*
+ * Set up a party object for a non-listener file descriptor.  The file
+ * descriptor does NOT have to be non-blocking; it does not matter
+ * whether or not it is, actually.
+ *
+ * The `perms` field should be O_RDONLY, O_WRONLY or O_RDWR.
+ *
+ * The `stop_when_closed` field closes down the switchboard when I/O
+ * to this fd fails.
+ *
+ * If `close_on_destroy` is true, we will call close() on the fd for
+ * you whenever the switchboard is torn down.
+ */
+void
+sb_init_party_fd(switchboard_t *ctx, party_t *party, int fd, int perms,
+	      bool stop_when_closed, bool close_on_destroy)
+{
+    party->party_type            = PT_FD;
+    party->open                  = true;
+    party->close_on_destroy      = close_on_destroy;
+    party->can_read_from_it      = false;
+    party->can_write_to_it       = false;
+
+    fd_party_t *fd_obj           = get_fd_obj(party);
+    fd_obj->first_msg            = NULL;
+    fd_obj->last_msg             = NULL;
+    fd_obj->subscribers          = NULL;
+    fd_obj->fd                   = fd;
+
+    if (perms != O_WRONLY) {
+	party->can_read_from_it = true;
+	register_read_fd(ctx, party);
+    }
+    if (perms != O_RDONLY) {
+	party->can_write_to_it = true;
+	register_writer_fd(ctx, party);
+    }
+    if (stop_when_closed) {
+	party->stop_on_close = true;
+    }
+}
+
+party_t *
+sb_new_party_fd(switchboard_t *ctx, int fd, int perms,
+		   bool stop_when_closed, bool close_on_destroy)
+{
+    party_t *result = (party_t *)calloc(sizeof(party_t), 1);
+    sb_init_party_fd(ctx, result, fd, perms, stop_when_closed,
+		     close_on_destroy);
+
+    return result;
+}
+
+/*
+ * This is for sending strings to a fd. You can send the same input
+ * buffer to multiple processes, or reuse an object to rechange the
+ * string; the string gets processed at the time you call `route()`
+ * with one of these as the `read_from` parameter.
+ */
+void
+sb_init_party_input_buf(switchboard_t *ctx, party_t *party, char *input,
+		     size_t len, bool free, bool close_fd_when_done)
+{
+    party->open                 = true;    
+    party->can_read_from_it     = true;
+    party->can_write_to_it      = false;
+    party->party_type           = PT_STRING;
+    
+    str_src_party_t *sobj       = get_sstr_obj(party);
+    sobj->strbuf                = input;
+    sobj->len                   = len;
+    sobj->free_on_close         = free;
+    sobj->close_fd_when_done    = close_fd_when_done;
+
+    register_loner(ctx, party);
+}
+
+party_t *
+sb_new_party_input_buf(switchboard_t *ctx, char *input, size_t len, bool free,
+    bool close_fd_when_done)
+{
+    party_t *result = (party_t *)calloc(sizeof(party_t), 1);
+    sb_init_party_input_buf(ctx, result, input, len, free, close_fd_when_done);
+
+    return result;
+}
+
+/*
+ * When you want to capture process output, but don't need it until
+ * the process is closes, this is your huckleberry. You can use one of
+ * these per fd you want to capture, or you can combine them.
+ *
+ * So if you want to combine stdin / stdout into one stream, you can
+ * do it.
+ *
+ * The `tag` field is used to distinguish multiple output buffers when
+ * the switchboard is closed down.
+ */
+void
+sb_init_party_output_buf(switchboard_t *ctx, party_t *party, char *tag,
+		      size_t buflen)
+{
+    if (buflen < PIPE_BUF) {
+	buflen = PIPE_BUF;
+    }
+
+    size_t n = buflen / PIPE_BUF;
+
+    if (buflen % PIPE_BUF) {
+	n++;
+    }
+
+    party->can_read_from_it     = false;
+    party->can_write_to_it      = true;
+    party->open                 = true;
+    party->party_type           = PT_STRING;
+
+    str_dst_party_t *dobj       = get_dstr_obj(party);
+    dobj->strbuf                = (char *)calloc(PIPE_BUF, n);
+    dobj->len                   = n * PIPE_BUF;
+    dobj->step                  = party->info.wstrinfo.len;
+    dobj->tag                   = tag;
+
+    register_loner(ctx, party);
+ }
+
+party_t *
+sb_new_party_output_buf(switchboard_t *ctx, char *tag, size_t buflen)
+{
+    party_t *result = (party_t *)calloc(sizeof(party_t), 1);
+    sb_init_party_output_buf(ctx, result, tag, buflen);
+
+    return result;
+}
+
+/*
+ * This sets up a callback that can receive incremental data read from
+ * a file descriptor (NOT a listener though).
+ *
+ * Any state information you can carry via the `extra` state in
+ * either switchboard_t or party_t.
+ *
+ * see `sb_get_extra()`, `sb_set_extra()`,
+ *     `sb_get_party_extra()` and `sb_set_party_extra()`.
+ */
+void
+sb_init_party_callback(switchboard_t *ctx, party_t *party, switchboard_cb_t cb)
+{
+    party->open                 = true;    
+    party->can_read_from_it     = false;
+    party->can_write_to_it      = true;
+    party->party_type           = PT_CALLBACK;
+    party->info.cbinfo.callback = (switchboard_cb_decl)cb;
+
+    register_loner(ctx, party);
+}
+
+/*
+ * This is used to register a process and associate it with its read/write
+ * file descriptors (via party objects).
+ */
+void
+sb_monitor_pid(switchboard_t *ctx, pid_t pid, party_t *stdin_fd_party,
+	       party_t *stdout_fd_party, party_t *stderr_fd_party,
+	       party_t *tty_fd_party, bool shutdown)
+{
+    monitor_t *monitor = (monitor_t *)calloc(sizeof(monitor_t), 1);
+
+    monitor->pid                  = pid;
+    monitor->stdin_fd_party       = stdin_fd_party;
+    monitor->stdout_fd_party      = stdout_fd_party;
+    monitor->stderr_fd_party      = stderr_fd_party;    
+    monitor->tty_fd_party         = tty_fd_party;
+    monitor->next                 = ctx->pid_watch_list;
+    monitor->shutdown_when_closed = shutdown;
+    ctx->pid_watch_list           = monitor;
+}
+
+/*
+ * Retrieve any user-defined pointer for a switchboard object.
+ */
+void *
+sb_get_extra(switchboard_t *ctx)
+{
+    return ctx->extra;
+}
+
+/*
+ * Set the user-defined pointer for a switchboard object.
+ */
+void
+sb_set_extra(switchboard_t *ctx, void *ptr)
+{
+    ctx->extra = ptr;
+}
+
+/*
+ * Retrieve any user-defined pointer for a party object.
+ */
+void *
+sb_get_party_extra(party_t *party)
+{
+    return party->extra;
+}
+
+/*
+ * Set the user-defined pointer for a party object.
+ */
+void
+sb_set_party_extra(party_t *party, void *ptr)
+{
+    party->extra = ptr;
+}
+
+
+static inline void
+add_heap(switchboard_t *ctx)
+{
+    sb_heap_t *old = ctx->heap;
+    int        sz  = ctx->heap_elems * sizeof(sb_msg_t) + sizeof(sb_heap_t);
+    ctx->heap      = calloc(sz, 1);
+    ctx->heap->next = old;
+}
+
+static inline sb_msg_t *
+get_msg_slot(switchboard_t *ctx)
+{
+    sb_msg_t  *result;
+    sb_heap_t *heap;
+
+    if (ctx->heap || ctx->heap->cur_cell >= ctx->heap_elems) {
+	add_heap(ctx);
+    }
+
+    if (ctx->freelist != NULL) {
+        result        = ctx->freelist;
+        ctx->freelist = result->next;
+        return result;
+    }
+
+    heap   = ctx->heap;
+    result = &(heap->cells[heap->cur_cell++]);
+
+    memset(result, 0, sizeof(sb_msg_t));
+    return result;
+}
+
+/* Doesn't mean we call free(), just that we can hand it out again
+ * when get_msg_slot() is called.
+ *
+ * Being good citizens, we zero out the len and data fields.
+ */
+static inline void
+free_msg_slot(switchboard_t *ctx, sb_msg_t *slot)
+{
+    slot->next    = ctx->freelist;
+    slot->len     = 0;
+    ctx->freelist = slot;
+
+    memset(slot->data, 0, SB_MSG_LEN);
+}
+
+/*
+ * Internal function to enqueue any messages of size up to PIPE_BUF to
+ * writable file descriptors.
+ */
+static inline void
+publish(switchboard_t *ctx, char *buf, ssize_t len, party_t *party)
+{
+    if (!party->open) {
+	return;
+    }
+
+    fd_party_t *receiver = get_fd_obj(party);
+    sb_msg_t   *msg      = get_msg_slot(ctx);
+
+    if (len) {
+	memcpy(msg->data, buf, len);
+	msg->len       = len;
+    } else {
+	msg->len = 0;
+    }
+    
+    msg->next = NULL;
+    
+    if (receiver->first_msg == NULL) {
+	receiver->first_msg = msg;
+    } else {
+	receiver->last_msg->next = msg;
+    }
+    
+    receiver->last_msg = msg;
+}
+
+/*
+ * Route a party that we read from, to a party that we write to.
+ * If the mix is invalid, then this returns 'false'.
+ *
+ * Listeners cannot be routed; you supply a callback when you
+ * register them.
+ *
+ * Strings can be routed only to FD writers; the strings are totally
+ * enqueued at the time of the route() call, by calling publish()
+ * on chunks up to PIPE_BUF in size.
+ *
+ * FDs for read can be routed to FD writers, strings for output,
+ * or to callbacks.
+ *
+ * You can use the same FDs in multiple routings, no problem. That
+ * means you can send output from a single read fd to as many places
+ * as you like, and you may similarly send multiple input sources into
+ * a single output file descriptor.
+ */
+bool
+sb_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
+{
+    if (!read_from->open || !write_to->open) {
+        return false;
+    }
+    
+    if (read_from->party_type & (PT_LISTENER | PT_CALLBACK)) {
+	return false;
+    }
+    
+    if (write_to->party_type & PT_LISTENER) {
+	return false;
+    }
+    
+    if (read_from == NULL || !read_from->can_read_from_it) {
+	false;
+    }
+    if (write_to == NULL || !write_to->can_write_to_it) {
+	return false;
+    }
+
+    if (!read_from->can_read_from_it || !write_to->can_write_to_it) {
+	return false;
+    }
+
+    if (read_from->party_type == PT_STRING) {
+	if (write_to->party_type != PT_FD) {
+	    return false;
+	}
+	str_src_party_t *s         = get_sstr_obj(read_from);
+	size_t           remaining = s->len;
+	char            *p         = s->strbuf;
+	char            *end       = p + remaining;
+	int              total     = 0;
+	
+	while (p < (end - SB_MSG_LEN)) {
+	    publish(ctx, p, SB_MSG_LEN, write_to);
+	    p     += SB_MSG_LEN;
+	    total += SB_MSG_LEN;
+	}
+	if (p != end) {
+	    publish(ctx, p, end - p, write_to);
+	    total += end - p;
+	}
+
+	if (s->close_fd_when_done) {
+	    publish(ctx, NULL, 0, write_to);
+	}
+	
+	return true;
+    }
+    else {
+	// Will be PT_FD.
+	fd_party_t     *r_fd_obj = get_fd_obj(read_from);
+
+	subscription_t *subscription;
+	subscription = (subscription_t *)calloc(sizeof(subscription_t), 1);
+
+	if (write_to->party_type == PT_FD) {
+	    #ifdef SB_DEBUG
+	    printf("sub(src_fd=%d, dst_fd=%d)\n",
+		   party_fd(read_from), party_fd(write_to));
+	    #endif
+	}
+        else {
+	    str_dst_party_t *dob = get_dstr_obj(write_to);
+	    #ifdef SB_DEBUG	    
+	    printf("sub(src_=%d, tag=%s)\n", party_fd(read_from), dob->tag);
+	    #endif
+        }
+	   
+
+	subscription->subscriber = write_to;
+	subscription->next       = r_fd_obj->subscribers;
+	r_fd_obj->subscribers    = subscription;
+    }
+
+    return true;
+}
+
+/*
+ * Initializes a switchboard object, primarily zeroing out the
+ * contents, and setting up message buffering.
+ */
+void
+sb_init(switchboard_t *ctx, size_t heap_size)
+{
+    memset(ctx, 0, sizeof(switchboard_t));
+    add_heap(ctx);
+    ctx->heap_elems = heap_size;
+}
+
+/*
+ * This internal function walks a switchboard's parties_for_reading
+ * and parties_for_writing fields to figure out what to add to the
+ * fd_sets that we pass to select().
+ *
+ * The read fds are added as long as there are subscribers that are
+ * attached that isn't listed as closed.
+ *
+ * Write fds are added if there's explicitly something in their
+ * message queue; first_msg will be non-NULL.
+ *
+ * We also track to make sure that *some* party is open for either
+ * reading that has a valid subscriber, OR at least one party open for
+ * writing that has enqueued messages.
+ * 
+ * If neither of these conditions are met, we shut down.
+ * down.
+ */
+static inline void 
+set_fdinfo(switchboard_t *ctx)
+{
+    party_t      *cur;
+    bool          open = false;  // If this stays false, we give up.
+    
+    FD_ZERO(&ctx->readset);
+    FD_ZERO(&ctx->writeset);
+
+    cur = ctx->parties_for_reading;
+    while (cur != NULL) {
+	if (cur->open && cur->party_type == PT_FD) {
+	    bool            add_fd      = false;
+	    fd_party_t     *r_fd_obj    = get_fd_obj(cur);
+	    subscription_t *subscribers = r_fd_obj->subscribers;
+
+	    while (subscribers != NULL) {
+		party_t *onesub = subscribers->subscriber;
+		subscribers     = subscribers->next;
+
+		if (onesub && onesub->open) {
+		    add_fd = true;
+		    break;
+		}
+	    }
+	    if (add_fd) {
+		open = true;		
+		FD_SET(party_fd(cur), &ctx->readset);
+	    }
+	    else {
+		cur->open = false; // Might already be, but no subscribers.
+	    }
+	} else {
+	    if (cur->open && cur->party_type == PT_LISTENER) {
+		open = true;
+		FD_SET(party_fd(cur), &ctx->readset);
+	    }
+	    open = true;
+	}
+	cur = cur->next_reader;
+    }
+
+    cur = ctx->parties_for_writing;
+    while (cur != NULL) {
+	if (cur->party_type == PT_FD && cur->info.fdinfo.last_msg != NULL) {
+	    open = true;
+	    FD_SET(cur->info.fdinfo.fd, &ctx->writeset);
+	}
+	cur = cur->next_writer;
+    }
+
+    // If nothing w/ a file descriptor is left standing, then we will
+    // finish up.
+    if (!open) {
+	ctx->done = true;
+    }
+}
+
+/*
+ * Setting this timeout sets how long we will wait before timing out
+ * on a single select() call. Without setting it, select() will wait
+ * indefinitely long.
+ *
+ * When there's a timeout, if there's a progress_callback, we call it.
+ * But if there's no progress callback, the switchboard will exit.
+ */
+void
+sb_set_io_timeout(switchboard_t *ctx, struct timeval *timeout)
+{
+    if (timeout == NULL) {
+	ctx->io_timeout_ptr = NULL;
+    }
+    else {
+	ctx->io_timeout_ptr = &ctx->io_timeout;
+	memcpy(ctx->io_timeout_ptr, timeout, sizeof(struct timeval));
+    }
+}
+
+void
+sb_clear_io_timeout(switchboard_t *ctx)
+{
+    ctx->io_timeout_ptr = NULL;
+}
+
+// After select(), test an FD to see if it's ready for read.
+static inline bool
+reader_ready(switchboard_t *ctx, party_t *party)
+{
+    if (party->open && FD_ISSET(party_fd(party), &ctx->readset) != 0) {
+	return true;
+    }
+    return false;
+}
+
+// After select(), test an FD to see if it's ready for write.
+static inline bool
+writer_ready(switchboard_t *ctx, party_t *party)
+{
+    if (party->open && FD_ISSET(party_fd(party), &ctx->writeset) != 0) {
+	return true;
+    }
+    return false;
+}
+
+/*
+ * If a fd is reading data, and one of the places we want to send it
+ * is to a string that is returned once at the end, we don't bother to
+ * enqueue, we directly add to the sink at the time the source
+ * produces the data, using this function.
+ */
+static inline void
+add_data_to_string_out(str_dst_party_t *party, char *buf, ssize_t len) {
+    ssize_t alloc_len;
+
+    if (party->ix + len > party->len) {
+	while (true) {
+	    party->len += party->step;
+	    if (party->len > party->ix + len) {
+		break;
+	    }
+	}
+	party->strbuf = realloc(party->strbuf, alloc_len);
+	party->len = alloc_len;
+	memset(&party->strbuf[party->ix], 0, party->len - party->ix);
+    }
+
+    memcpy(&party->strbuf[party->ix], buf, len);
+    party->ix += len;
+
+}
+
+/*
+ * This handles reading from fd sources. String sources never call
+ * this, as they get processed in full when sinks subscribe to them.
+ *
+ * Listeners are handled by a different function (handle_one_accept
+ * below).
+ *
+ * When reading one chunk, we then loop through our subscribers, and
+ * take action based on the subscriber type.
+ *
+ * If the subscriber is a writable fd, we call publish(), which will
+ * enqueue for that fd, as long as it's open (it's ignored otherwise).
+ *
+ * If the subscriber is a string or callback, these things can never
+ * be closed, and we process the data right away.
+ *
+ * Note that this is only called in one of two cases:
+ *
+ * 1) select() told us there's something to read, in which case,
+ *    read_one() should never return a zero-length string (errors
+ *    would result in a -1)
+ *
+ * 2) We know a subprocess is done and we're draining the read side of
+ *    that file descriptor. In that case, we know when we're
+ *    returned a 0-length value, it's time to mark the read side
+ *    as done too.
+ */
+static inline void
+handle_one_read(switchboard_t *ctx, party_t *party)
+{
+    char    buf[SB_MSG_LEN + 1] = {0, };
+    ssize_t read_result = read_one(party_fd(party), buf, SB_MSG_LEN);
+    
+    #ifdef SB_DEBUG
+    printf("read: %d\n", read_result);
+    #endif
+
+    if (read_result <= 0) {
+	party->found_errno = errno;
+	party->open  = false;
+	if (party->stop_on_close) {
+	    ctx->done = true;
+	}
+    }    
+    else {
+	#ifdef SB_DEBUG
+	printf("Read %d bytes from fd: %d\n", read_result, party_fd(party));
+	#endif
+	
+	fd_party_t     *obj     = get_fd_obj(party);
+	subscription_t *sublist = obj->subscribers;
+	
+	while (sublist != NULL) {
+	    party_t *sub = sublist->subscriber;
+	    switch(sub->party_type) {
+	    case PT_FD:
+		#ifdef SB_DEBUG
+		printf("Publishing to fd %d\n", party_fd(sub));
+		#endif
+		publish(ctx, buf, read_result, sub);
+		break;
+	    case PT_STRING:
+		add_data_to_string_out(get_dstr_obj(sub), buf, read_result);
+		break;
+	    case PT_CALLBACK:
+		(*sub->info.cbinfo.callback)(ctx, sub, buf,
+					     (size_t)read_result);
+		break;
+	    default:
+		break;
+	    }
+	    sublist = sublist->next;
+	}
+    }
+}
+
+/*
+ * This just accepts a socket and calls the provided callback to
+ * decide what to do with it.
+ */
+static inline void
+handle_one_accept(switchboard_t *ctx, party_t *party)
+{
+    int               listener_fd  = party_fd(party);
+    listener_party_t *listener_obj = get_listener_obj(party);
+    struct sockaddr   address;
+    socklen_t         address_len;
+
+    while (true) {
+	int sockfd = accept(listener_fd, &address, &address_len);
+
+	if (sockfd >= 0) {
+	    (*listener_obj->accept_cb)(ctx, sockfd, &address, &address_len);
+	    break;
+	}
+	if (errno == EINTR || errno == EAGAIN) {
+	    continue;
+	}
+	if (errno == ECONNABORTED || errno == EWOULDBLOCK) {
+	    break;
+	}
+	party->found_errno = errno;
+	party->open        = false;
+	break;
+    }
+}
+
+/*
+ * This function handles writing to a writable file descriptor, where
+ * select() has told us it's ready to receive a write. We simply
+ * attempt to write one queued message to it, then remove that message
+ * from the queue.
+ *
+ * The only exception is if the message is a null length, which is an
+ * instruction to actually call close() on the fd.
+ */
+static inline void
+handle_one_write(switchboard_t *ctx, party_t *party)
+{
+    fd_party_t *fdobj = get_fd_obj(party);
+    sb_msg_t   *msg   = fdobj->first_msg;
+
+    if (msg == NULL) {
+	return;
+    }
+
+    if (msg->next == NULL || msg == fdobj->last_msg) {
+	fdobj->first_msg = NULL;
+	fdobj->last_msg = NULL;
+    }
+
+    if (!msg->len) {
+	/* Real messages should always have lengths. We get passed a
+	 * zero-length message only if a string was fed in for input,
+	 * with instructions for us to close after it's consumed.
+	 *
+	 * The close instruction is communicated by sending a null
+	 * message. So when we see it, we mark ourselves as closed.
+	 */
+	party->open = false;
+	close(party_fd(party));
+	free_msg_slot(ctx, msg);
+	return;
+    }
+
+    #ifdef SB_DEBUG
+    printf("Writing %d bytes to fd %d\n", msg->len, party_fd(party));
+    #endif
+    
+    if (!write_data(party_fd(party), msg->data, msg->len)) {
+	party->found_errno = errno;
+	party->open        = false;
+	if (party->stop_on_close) {
+	    ctx->done = true;
+	}
+	/* If the write failed, we'll never try to write again.
+	 * The message slot we tried to write gets freed below
+	 * no matter what, but let's free any other queued slots
+	 * here.
+	 */
+	sb_msg_t *to_free = fdobj->first_msg;
+
+	while (to_free) {
+	    sb_msg_t *next = to_free->next;
+	    
+	    free_msg_slot(ctx, to_free);
+	    to_free = next;
+	}
+	fdobj->first_msg = NULL;
+	fdobj->last_msg  = NULL;
+	return;
+    }
+
+    fdobj->first_msg = msg->next;
+    if (fdobj->first_msg == NULL) {
+	fdobj->last_msg = NULL;
+    }
+    
+    free_msg_slot(ctx, msg);
+}
+
+// Not much here, just identify fds ready for read and dispatch.
+static inline void
+handle_ready_reads(switchboard_t *ctx)
+{
+    party_t *reader = ctx->parties_for_reading;
+
+    while(reader != NULL) {
+	if (reader_ready(ctx, reader)) {
+	    FD_CLR(party_fd(reader), &ctx->readset);
+	    
+	    if (reader->party_type == PT_FD) {
+		handle_one_read(ctx, reader);
+	    } else {
+		handle_one_accept(ctx, reader);
+	    }
+	}
+	reader = reader->next_reader;
+    }
+}
+
+// Dispatch for any fds ready for writing.
+static inline void
+handle_ready_writes(switchboard_t *ctx)
+{
+    party_t *writer = ctx->parties_for_writing;
+
+    while (writer != NULL) {
+	if (writer_ready(ctx, writer)) {
+	    FD_CLR(party_fd(writer), &ctx->readset);
+	    
+	    handle_one_write(ctx, writer);
+	}
+	writer = writer->next_writer;
+    }
+}
+
+// If a subprocess shut down, clean up.
+static inline void
+subproc_mark_closed(switchboard_t *ctx, monitor_t *proc, bool error)
+{
+    proc->closed = true;
+
+    if (error) {
+	proc->found_errno = errno;
+    } 
+
+    // We can mark the write side of this as closed right away. But we
+    // can't do the same w/ the read side; we need to drain them
+    // first.
+    
+    if (proc->stdin_fd_party) {
+	proc->stdin_fd_party->open = false;
+    }
+}
+
+static inline void
+subproc_exit_check(switchboard_t *ctx, monitor_t *process)
+{
+    if (!process->shutdown_when_closed) {
+	return;
+    }
+
+    if (process->stdout_fd_party && process->stdout_fd_party->open) {
+	return;
+    }
+
+    if (process->stderr_fd_party && process->stderr_fd_party->open) {
+	return;
+    }
+
+    if (process->tty_fd_party && process->tty_fd_party->open) {
+	return;
+    }
+
+    ctx->done = true;
+}
+
+/*
+ * Every time we finish a select, check to see if we need to invoke
+ * the progress callback, and if we should exit.
+ *
+ * This involves testing exit conditions-- first, if the progress
+ * callback returns `true`, that indicates we should exit. Second, if
+ * no callback was set for progress monitoring, and the select()
+ * timeout fired, then we are done.
+ *
+ * Third, we look at each subprocess to see if it's fully exited (all
+ * its read fds are closed). If it has, and if we're supposed to shut
+ * down when it does, subproc_mark_closed() above will set the 'done'
+ * flag for us.
+ */
+static inline void
+handle_loop_end(switchboard_t *ctx)
+{
+    if (ctx->progress_callback) {
+	if (!ctx->fds_ready || !ctx->progress_on_timeout_only) {
+	    if ((*ctx->progress_callback)(ctx)) {
+		ctx->done = true;
+	    }
+	}
+    } else {
+	if (!ctx->fds_ready) {
+	    ctx->done = true;
+	}
+    }
+
+    monitor_t *subproc = ctx->pid_watch_list;
+    int        stat_info;
+
+    while (subproc != NULL) {
+	if (subproc->closed) {
+	    subproc_exit_check(ctx, subproc);
+	    subproc = subproc->next;
+	    continue;
+	}
+
+	switch (waitpid(subproc->pid, &stat_info, WNOHANG)) {
+	case 0:
+	    break;
+	case -1:
+	    if (errno == EINTR) {
+		break;
+	    }
+	    subproc_mark_closed(ctx, subproc, true);
+	    break;
+	default:
+	    subproc_mark_closed(ctx, subproc, false);
+	    if (WIFSIGNALED(stat_info)) {
+		subproc->term_signal = WTERMSIG(stat_info);
+	    }
+	    else {
+		subproc->exit_status = WEXITSTATUS(stat_info);
+	    }
+	}
+	subproc = subproc->next;
+    }
+}
+
+/*
+ * Used only to make sure we don't free registered readers when
+ * they're also registered writers; we wait until we process the
+ * registered writer list.
+ */
+static bool
+is_registered_writer(switchboard_t *ctx, party_t *target)
+{
+    party_t *cur = ctx->parties_for_writing;
+
+    while (cur) {
+	if (target == cur) {
+	    return true;
+	}
+	cur = cur->next_writer;
+    }
+    
+    return false;
+}
+
+/*
+ * Dealloc any memory we're responsible for.  Gets called
+ * automatically at the end of sb_operate_switchboard(), but
+ * must be invoked manually if you don't use that.
+ *
+ * Also note that this does NOT free the switchboard object,
+ * just any internal data structures.
+ */
+void
+sb_destroy(switchboard_t *ctx, bool free_parties)
+{
+    while (ctx->heap) {
+	sb_heap_t *to_free = ctx->heap;
+	ctx->heap          = ctx->heap->next;
+	free(to_free);
+    }
+
+    while (ctx->pid_watch_list) {
+	monitor_t *to_free  = ctx->pid_watch_list;
+	ctx->pid_watch_list = ctx->pid_watch_list->next;
+	free(to_free);
+    }
+
+    party_t *cur, *next;
+
+    cur = ctx->parties_for_reading;
+    
+    while (cur) {
+	if (cur->close_on_destroy) {
+	    if (cur->party_type & (PT_FD | PT_LISTENER) ) {
+		close(party_fd(cur));
+	    }
+	}
+
+	fd_party_t     *fdobj = get_fd_obj(cur);
+	subscription_t *sub   = fdobj->subscribers;
+	
+	while (sub->subscriber) {
+	    subscription_t *next_sub = sub->next;
+	    free(sub);
+	    sub = next_sub;
+	}
+
+	if (cur->party_type == PT_STRING) {
+	    str_src_party_t *sstr = get_sstr_obj(cur);
+	    
+	    if (sstr->strbuf != NULL) {
+		free(sstr->strbuf);
+	    }
+	}
+	next = cur->next_reader;
+	
+	if (free_parties) {
+	    if (!cur->can_write_to_it || !is_registered_writer(ctx, cur)) {
+		free(cur);
+	    }
+	}
+	cur = next;
+    }
+
+    cur = ctx->parties_for_writing;
+    while (cur) {
+	if (cur->close_on_destroy && cur->open && cur->party_type == PT_FD) {
+	    close(party_fd(cur));
+	}
+	next = cur->next_writer;
+	if (free_parties) {
+	    free(cur);
+	}
+	cur = next;
+    }
+    if (free_parties) {
+	cur = ctx->party_loners;
+
+	while (cur) {
+	    next = cur->next_loner;
+	    free(cur);
+	    cur = next;
+	}
+    }
+}
+
+/*
+ * Extract results from the switchbaord; does not do any cleanup itself;
+ * you will still need to free the switchboard if it's heap alloc'd.
+ */
+sb_result_t *
+sb_get_switchboard_results(switchboard_t *ctx)
+{
+    sb_result_t     *result = NULL;
+    sb_result_t     *cur;
+    str_dst_party_t *strobj;
+    party_t         *party  = ctx->party_loners;  // Look for string outputs.
+    monitor_t       *procs  = ctx->pid_watch_list;
+    
+    while (party) {	
+	if (party->party_type == PT_STRING && party->can_write_to_it) {
+	    strobj = get_dstr_obj(party);
+	    
+	    if (strobj->ix != 0) {
+		cur              = (sb_result_t *)malloc(sizeof(sb_result_t));
+		cur->next        = result;
+		cur->tag         = strobj->tag;
+		cur->contents    = strobj->strbuf;
+		cur->content_len = strobj->ix;
+		result           = cur;
+		strobj->strbuf   = NULL; // Take ownership of the string.
+	    }
+	}
+	
+	party = party->next_loner;
+    }
+
+    while (procs) {
+	cur              = (sb_result_t *)calloc(sizeof(sb_result_t), 1);
+	cur->next        = result;
+	cur->exited      = procs->closed;
+	cur->found_errno = procs->found_errno;
+	cur->term_signal = procs->term_signal;
+	cur->exit_status = procs->exit_status;
+	cur->pid         = procs->pid;
+	result           = cur;
+
+	if (!procs->closed || !ctx->ignore_running_procs_on_shutdown) {
+	    // No need to send a kill. Allow graceful shutdown or
+	    // ignoring.
+	    kill(procs->pid, SIGTERM);
+	}
+	
+	procs = procs->next;
+    }
+
+    return result;
+}
+
+/*
+ * Returns true if there are any open writers that have enqueued items.
+ */
+static bool
+waiting_writes(switchboard_t *ctx)
+{
+    party_t *writer = ctx->parties_for_writing;
+
+    while(writer) {
+	if (writer->open) {
+	    fd_party_t *fd_obj = get_fd_obj(writer);
+
+	    if (fd_obj->first_msg != NULL) {
+		return true;
+	    }
+	}
+	writer = writer->next_writer;
+    }
+
+    return false;
+}
+
+/*
+ * Runs a switchboard to completion, but doesn't post-process in
+ * any way. So it doesn't create a result object, nor does it clean
+ * up any memory.
+ */
+void
+sb_operate_switchboard(switchboard_t *ctx)
+{
+    int counter = 0;
+    while (true) {
+	set_fdinfo(ctx);
+	if (ctx->done && !waiting_writes(ctx)) {
+		break;
+	}
+	ctx->fds_ready = select(ctx->max_fd, &ctx->readset, &ctx->writeset,
+				NULL, ctx->io_timeout_ptr);
+	handle_ready_reads(ctx);
+	handle_ready_writes(ctx);
+	handle_loop_end(ctx);
+    }
+}
+
+/*
+ * Operates a setup switchboard, returning a result and dealing w/
+ * memory management on exit.
+ */
+sb_result_t *
+sb_automatic_switchboard(switchboard_t *ctx, bool free_party_objects)
+{
+
+    sb_operate_switchboard(ctx);
+    
+    sb_result_t *results = sb_get_switchboard_results(ctx);
+
+    sb_destroy(ctx, free_party_objects);
+
+    return results;
+}
