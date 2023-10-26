@@ -251,6 +251,7 @@ typedef struct sb_result_t {
 typedef sb_result_t sp_result_t;
 
 typedef struct {
+    sb_result_t   *result;
     switchboard_t  sb;
     bool           run;
     bool           use_pty;
@@ -276,7 +277,6 @@ typedef struct {
     party_t        capture_stderr;
     struct termios saved_termcap;
     struct dcb_t  *deferred_cbs;
-    sb_result_t   *result;
 } subprocess_t;
 
 #define SP_IO_STDIN     1
@@ -353,19 +353,7 @@ extern int sp_result_exit(sp_result_t *);
 extern int sp_result_errno(sp_result_t *);
 extern int sp_result_signal(sp_result_t *);
 
-// P0: Need an interface allow the subprocess to see a TTY over
-//     stdout, etc when it calls isatty(). This should probably be
-//     doable on a per-stream basis, instead of a one-shot. Maybe:
-//
-// subproc_tty_proxy(subprocess_t *, char);
-//
-// This would work whether or not the subprocess gets its own TTY.
-//
-// In particular, the subprocess code currently won't work properly w/
-// less() because less() will call isatty on stdout, which 
-
 // pty params.
-// NIM WRAPPER
 // ASCII Cinema.
 #endif
 

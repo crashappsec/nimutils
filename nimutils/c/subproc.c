@@ -92,8 +92,6 @@ subproc_pass_to_stdin(subprocess_t *ctx, char *str, size_t len, bool close_fd)
  * SP_IO_STDIN   (what you type goes to subproc stdin)
  * SP_IO_STDOUT  (subproc's stdout gets written to your stdout)
  * SP_IO_STDERR
- * SP_IO_TTYIN   (anything coming over the terminal writes to a pty if used)
- * SP_IO_TTYOUT  (anything written to the pty gets proxied to your tty)
  *
  * SP_IO_ALL proxies everything. It's fine to use this even if no pty is used.
  *
@@ -125,7 +123,6 @@ subproc_set_passthrough(subprocess_t *ctx, unsigned char which, bool combine)
  * SP_IO_STDIN   (what you type); reference for string is "stdin"
  * SP_IO_STDOUT  reference for string is "stdout"
  * SP_IO_STDERR  reference for string is "stderr"
- * SP_IO_TTYOUT  reference for string is "term"
  *
  * SP_IO_ALL captures everything. It's fine to use this even if no pty is used.
  *
@@ -481,11 +478,13 @@ subproc_poll(subprocess_t *ctx)
 sb_result_t *
 subproc_get_result(subprocess_t *ctx)
 {
-    ctx->result = sb_get_switchboard_results(&ctx->sb);    
+    if (ctx->result == NULL) {
+	ctx->result = sb_get_switchboard_results(&ctx->sb);    
 
-    // Post-run cleanup.
-    if (ctx->use_pty) {
-	tcsetattr(0, TCSANOW, &ctx->saved_termcap);
+	// Post-run cleanup.
+	if (ctx->use_pty) {
+	    tcsetattr(0, TCSANOW, &ctx->saved_termcap);
+	}
     }
 
     return ctx->result;
@@ -610,7 +609,7 @@ sp_result_errno(sp_result_t *ctx)
 {
     while(ctx) {
 	if (!ctx->tag) {
-	    return ctx->exit_status;
+	    return ctx->found_errno;
 	}
 	ctx = ctx->next;
     }
@@ -740,8 +739,6 @@ test4() {
     subproc_use_pty(&ctx);
     subproc_set_passthrough(&ctx, SP_IO_ALL, false);
     subproc_set_capture(&ctx, SP_IO_ALL, false);
-    // This would hang until we close stdout.
-    //subproc_pass_to_stdin(&ctx, test_txt, strlen(test_txt), true);
     subproc_set_timeout(&ctx, &timeout);
     subproc_set_io_callback(&ctx, SP_IO_STDOUT, capture_tty_data);
 
