@@ -4,8 +4,10 @@
 
 #ifndef SWITCHBOARD_H__
 #include "switchboard.h"
-#ifdef SB_DEBUG
+#if defined(SB_DEBUG) || defined(SB_TEST)
 #include <stdio.h>
+#include <assert.h>
+#include "hex.h"
 #endif
 #endif
 
@@ -172,7 +174,7 @@ sb_init_party_listener(switchboard_t *ctx, party_t *party, int sockfd,
      * them.
      */
     party->party_type        = PT_LISTENER;
-    party->open              = true;
+    party->open_for_read     = true;
     party->close_on_destroy  = close_on_destroy;
     ctx->parties_for_reading = party;
     party->can_read_from_it  = true;
@@ -222,8 +224,9 @@ void
 sb_init_party_fd(switchboard_t *ctx, party_t *party, int fd, int perms,
 	      bool stop_when_closed, bool close_on_destroy)
 {
+    memset(party, 0, sizeof(party_t));
+    
     party->party_type            = PT_FD;
-    party->open                  = true;
     party->close_on_destroy      = close_on_destroy;
     party->can_read_from_it      = false;
     party->can_write_to_it       = false;
@@ -235,10 +238,13 @@ sb_init_party_fd(switchboard_t *ctx, party_t *party, int fd, int perms,
     fd_obj->fd                   = fd;
 
     if (perms != O_WRONLY) {
+	party->open_for_read    = true;
 	party->can_read_from_it = true;
 	register_read_fd(ctx, party);
-    }
+	
+    } 
     if (perms != O_RDONLY) {
+	party->open_for_write  = true;	
 	party->can_write_to_it = true;
 	register_writer_fd(ctx, party);
     }
@@ -268,7 +274,8 @@ void
 sb_init_party_input_buf(switchboard_t *ctx, party_t *party, char *input,
 		     size_t len, bool free, bool close_fd_when_done)
 {
-    party->open                 = true;    
+    party->open_for_read        = true;
+    party->open_for_write       = false;        
     party->can_read_from_it     = true;
     party->can_write_to_it      = false;
     party->party_type           = PT_STRING;
@@ -319,7 +326,8 @@ sb_init_party_output_buf(switchboard_t *ctx, party_t *party, char *tag,
 
     party->can_read_from_it     = false;
     party->can_write_to_it      = true;
-    party->open                 = true;
+    party->open_for_read        = false;    
+    party->open_for_write       = true;
     party->party_type           = PT_STRING;
 
     str_dst_party_t *dobj       = get_dstr_obj(party);
@@ -353,7 +361,8 @@ sb_new_party_output_buf(switchboard_t *ctx, char *tag, size_t buflen)
 void
 sb_init_party_callback(switchboard_t *ctx, party_t *party, switchboard_cb_t cb)
 {
-    party->open                 = true;    
+    party->open_for_read        = false;        
+    party->open_for_write       = true;    
     party->can_read_from_it     = false;
     party->can_write_to_it      = true;
     party->party_type           = PT_CALLBACK;
@@ -369,7 +378,7 @@ sb_init_party_callback(switchboard_t *ctx, party_t *party, switchboard_cb_t cb)
 void
 sb_monitor_pid(switchboard_t *ctx, pid_t pid, party_t *stdin_fd_party,
 	       party_t *stdout_fd_party, party_t *stderr_fd_party,
-	       party_t *tty_fd_party, bool shutdown)
+	       bool shutdown)
 {
     monitor_t *monitor = (monitor_t *)calloc(sizeof(monitor_t), 1);
 
@@ -377,7 +386,6 @@ sb_monitor_pid(switchboard_t *ctx, pid_t pid, party_t *stdin_fd_party,
     monitor->stdin_fd_party       = stdin_fd_party;
     monitor->stdout_fd_party      = stdout_fd_party;
     monitor->stderr_fd_party      = stderr_fd_party;    
-    monitor->tty_fd_party         = tty_fd_party;
     monitor->next                 = ctx->pid_watch_list;
     monitor->shutdown_when_closed = shutdown;
     ctx->pid_watch_list           = monitor;
@@ -423,10 +431,12 @@ sb_set_party_extra(party_t *party, void *ptr)
 static inline void
 add_heap(switchboard_t *ctx)
 {
-    sb_heap_t *old = ctx->heap;
-    int        sz  = ctx->heap_elems * sizeof(sb_msg_t) + sizeof(sb_heap_t);
-    ctx->heap      = calloc(sz, 1);
-    ctx->heap->next = old;
+    sb_heap_t *old         = ctx->heap;
+    int        elem_space  = ctx->heap_elems * sizeof(sb_msg_t);
+
+    ctx->heap              = calloc(elem_space + sizeof(sb_heap_t), 1);
+    ctx->heap->next        = old;
+    ctx->heap->cur_cell    = 0;
 }
 
 static inline sb_msg_t *
@@ -435,13 +445,18 @@ get_msg_slot(switchboard_t *ctx)
     sb_msg_t  *result;
     sb_heap_t *heap;
 
-    if (ctx->heap || ctx->heap->cur_cell >= ctx->heap_elems) {
+    if (!ctx->heap || (ctx->heap->cur_cell >= ctx->heap_elems)) {
 	add_heap(ctx);
     }
 
     if (ctx->freelist != NULL) {
         result        = ctx->freelist;
         ctx->freelist = result->next;
+
+        #ifdef SB_DEBUG
+	printf("get_slot: freelist (%p). New freelist: %p\n",
+	       result, ctx->freelist);
+	#endif
         return result;
     }
 
@@ -460,6 +475,7 @@ get_msg_slot(switchboard_t *ctx)
 static inline void
 free_msg_slot(switchboard_t *ctx, sb_msg_t *slot)
 {
+
     slot->next    = ctx->freelist;
     slot->len     = 0;
     ctx->freelist = slot;
@@ -474,7 +490,7 @@ free_msg_slot(switchboard_t *ctx, sb_msg_t *slot)
 static inline void
 publish(switchboard_t *ctx, char *buf, ssize_t len, party_t *party)
 {
-    if (!party->open) {
+    if (!party->open_for_write) {
 	return;
     }
 
@@ -497,6 +513,11 @@ publish(switchboard_t *ctx, char *buf, ssize_t len, party_t *party)
     }
     
     receiver->last_msg = msg;
+
+    #ifdef SB_DEBUG
+    printf(">>Enqueued message for fd %d", party_fd(party));
+    print_hex(receiver->last_msg->data, receiver->last_msg->len, ":");
+    #endif
 }
 
 /*
@@ -521,7 +542,11 @@ publish(switchboard_t *ctx, char *buf, ssize_t len, party_t *party)
 bool
 sb_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 {
-    if (!read_from->open || !write_to->open) {
+    if (read_from == NULL || write_to == NULL) {
+	return false;
+    }
+    
+    if (!read_from->open_for_read || !write_to->open_for_write) {
         return false;
     }
     
@@ -532,18 +557,8 @@ sb_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
     if (write_to->party_type & PT_LISTENER) {
 	return false;
     }
+
     
-    if (read_from == NULL || !read_from->can_read_from_it) {
-	false;
-    }
-    if (write_to == NULL || !write_to->can_write_to_it) {
-	return false;
-    }
-
-    if (!read_from->can_read_from_it || !write_to->can_write_to_it) {
-	return false;
-    }
-
     if (read_from->party_type == PT_STRING) {
 	if (write_to->party_type != PT_FD) {
 	    return false;
@@ -578,24 +593,26 @@ sb_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 	subscription = (subscription_t *)calloc(sizeof(subscription_t), 1);
 
 	if (write_to->party_type == PT_FD) {
-	    #ifdef SB_DEBUG
+            #if defined(SB_DEBUG) || defined(SB_TEST)
 	    printf("sub(src_fd=%d, dst_fd=%d)\n",
 		   party_fd(read_from), party_fd(write_to));
 	    #endif
 	}
         else {
 	    str_dst_party_t *dob = get_dstr_obj(write_to);
-	    #ifdef SB_DEBUG	    
+	    if (!dob->tag) {
+		return false;
+	    }
+	    #if defined(SB_DEBUG) || defined(SB_TEST)
 	    printf("sub(src_=%d, tag=%s)\n", party_fd(read_from), dob->tag);
 	    #endif
         }
-	   
-
 	subscription->subscriber = write_to;
 	subscription->next       = r_fd_obj->subscribers;
 	r_fd_obj->subscribers    = subscription;
     }
 
+    
     return true;
 }
 
@@ -607,8 +624,8 @@ void
 sb_init(switchboard_t *ctx, size_t heap_size)
 {
     memset(ctx, 0, sizeof(switchboard_t));
-    add_heap(ctx);
     ctx->heap_elems = heap_size;
+    add_heap(ctx);
 }
 
 /*
@@ -639,43 +656,39 @@ set_fdinfo(switchboard_t *ctx)
     FD_ZERO(&ctx->writeset);
 
     cur = ctx->parties_for_reading;
+
     while (cur != NULL) {
-	if (cur->open && cur->party_type == PT_FD) {
-	    bool            add_fd      = false;
-	    fd_party_t     *r_fd_obj    = get_fd_obj(cur);
-	    subscription_t *subscribers = r_fd_obj->subscribers;
-
+	fd_party_t     *r_fd_obj    = get_fd_obj(cur);
+	subscription_t *subscribers = r_fd_obj->subscribers;
+	
+	if (cur->open_for_read) {
 	    while (subscribers != NULL) {
-		party_t *onesub = subscribers->subscriber;
-		subscribers     = subscribers->next;
+		if (cur->party_type == PT_FD) {
+		    party_t *onesub = subscribers->subscriber;
 
-		if (onesub && onesub->open) {
-		    add_fd = true;
+		    if (onesub && onesub->open_for_write) {
+			FD_SET(party_fd(cur), &ctx->readset);
+			open = true;
+			break;
+			
+		    }
+		} else {
+		    open = true;
+		    FD_SET(party_fd(cur), &ctx->readset);
 		    break;
 		}
+	       subscribers = subscribers->next;
 	    }
-	    if (add_fd) {
-		open = true;		
-		FD_SET(party_fd(cur), &ctx->readset);
-	    }
-	    else {
-		cur->open = false; // Might already be, but no subscribers.
-	    }
-	} else {
-	    if (cur->open && cur->party_type == PT_LISTENER) {
-		open = true;
-		FD_SET(party_fd(cur), &ctx->readset);
-	    }
-	    open = true;
 	}
 	cur = cur->next_reader;
     }
 
     cur = ctx->parties_for_writing;
     while (cur != NULL) {
-	if (cur->party_type == PT_FD && cur->info.fdinfo.last_msg != NULL) {
+	if (cur->party_type == PT_FD && cur->open_for_write &&
+	    cur->info.fdinfo.first_msg != NULL) {
 	    open = true;
-	    FD_SET(cur->info.fdinfo.fd, &ctx->writeset);
+	    FD_SET(party_fd(cur), &ctx->writeset);
 	}
 	cur = cur->next_writer;
     }
@@ -717,7 +730,8 @@ sb_clear_io_timeout(switchboard_t *ctx)
 static inline bool
 reader_ready(switchboard_t *ctx, party_t *party)
 {
-    if (party->open && FD_ISSET(party_fd(party), &ctx->readset) != 0) {
+    if (party->open_for_read && FD_ISSET(party_fd(party), &ctx->readset) != 0) {
+	FD_CLR(party_fd(party), &ctx->writeset);
 	return true;
     }
     return false;
@@ -727,7 +741,8 @@ reader_ready(switchboard_t *ctx, party_t *party)
 static inline bool
 writer_ready(switchboard_t *ctx, party_t *party)
 {
-    if (party->open && FD_ISSET(party_fd(party), &ctx->writeset) != 0) {
+    if (party->open_for_write &&
+	FD_ISSET(party_fd(party), &ctx->writeset) != 0) {
 	return true;
     }
     return false;
@@ -741,18 +756,25 @@ writer_ready(switchboard_t *ctx, party_t *party)
  */
 static inline void
 add_data_to_string_out(str_dst_party_t *party, char *buf, ssize_t len) {
-    ssize_t alloc_len;
 
-    if (party->ix + len > party->len) {
-	while (true) {
-	    party->len += party->step;
-	    if (party->len > party->ix + len) {
-		break;
-	    }
+    #ifdef SB_DEBUG
+    print_hex(buf, len, ">> add_data_to_string_out: ");
+    #endif
+    
+    if (party->ix + len >= party->len) {
+	int newlen = party->len + len + party->step;
+	int rem    = newlen % party->step;
+
+	newlen       -= rem;
+	party->strbuf = realloc(party->strbuf, newlen);
+
+	if (party->strbuf == 0) {
+	    printf("REALLOC FAILED.  Skipping capture.\n");
+	    return;
 	}
-	party->strbuf = realloc(party->strbuf, alloc_len);
-	party->len = alloc_len;
-	memset(&party->strbuf[party->ix], 0, party->len - party->ix);
+	
+	party->len = newlen;
+	memset(&party->strbuf[party->ix], 0, newlen - party->ix);
     }
 
     memcpy(&party->strbuf[party->ix], buf, len);
@@ -793,20 +815,20 @@ handle_one_read(switchboard_t *ctx, party_t *party)
     char    buf[SB_MSG_LEN + 1] = {0, };
     ssize_t read_result = read_one(party_fd(party), buf, SB_MSG_LEN);
     
-    #ifdef SB_DEBUG
-    printf("read: %d\n", read_result);
-    #endif
-
     if (read_result <= 0) {
 	party->found_errno = errno;
-	party->open  = false;
+	party->open_for_read  = false;
+	#ifdef SB_DEBUG
+	printf("Shut down reading on fd %d in h1r top\n", party_fd(party));
+	#endif
 	if (party->stop_on_close) {
 	    ctx->done = true;
 	}
-    }    
+    }
     else {
 	#ifdef SB_DEBUG
-	printf("Read %d bytes from fd: %d\n", read_result, party_fd(party));
+	printf(">>One read from fd %d", party_fd(party));
+	print_hex(buf, read_result, ": ");
 	#endif
 	
 	fd_party_t     *obj     = get_fd_obj(party);
@@ -816,9 +838,6 @@ handle_one_read(switchboard_t *ctx, party_t *party)
 	    party_t *sub = sublist->subscriber;
 	    switch(sub->party_type) {
 	    case PT_FD:
-		#ifdef SB_DEBUG
-		printf("Publishing to fd %d\n", party_fd(sub));
-		#endif
 		publish(ctx, buf, read_result, sub);
 		break;
 	    case PT_STRING:
@@ -861,8 +880,8 @@ handle_one_accept(switchboard_t *ctx, party_t *party)
 	if (errno == ECONNABORTED || errno == EWOULDBLOCK) {
 	    break;
 	}
-	party->found_errno = errno;
-	party->open        = false;
+	party->found_errno   = errno;
+	party->open_for_read = false;	
 	break;
     }
 }
@@ -882,15 +901,20 @@ handle_one_write(switchboard_t *ctx, party_t *party)
     fd_party_t *fdobj = get_fd_obj(party);
     sb_msg_t   *msg   = fdobj->first_msg;
 
-    if (msg == NULL) {
+
+    if (!msg) {
+	printf("No queue for fd %d (but selected to write?)\n",
+	       party_fd(party));
 	return;
     }
-
-    if (msg->next == NULL || msg == fdobj->last_msg) {
+    
+    if (msg && (msg->next == NULL || msg == fdobj->last_msg)) {
 	fdobj->first_msg = NULL;
 	fdobj->last_msg = NULL;
+    } else {
+	fdobj->first_msg = msg->next;
     }
-
+    
     if (!msg->len) {
 	/* Real messages should always have lengths. We get passed a
 	 * zero-length message only if a string was fed in for input,
@@ -899,19 +923,30 @@ handle_one_write(switchboard_t *ctx, party_t *party)
 	 * The close instruction is communicated by sending a null
 	 * message. So when we see it, we mark ourselves as closed.
 	 */
-	party->open = false;
-	close(party_fd(party));
+        #ifdef SB_DEBUG
+	printf("0-length write; shutting down write-side of fd.\n");
+	#endif
+	party->open_for_write = false;
+	if (!party->open_for_read) {
+	    close(party_fd(party));
+	}
 	free_msg_slot(ctx, msg);
 	return;
     }
 
     #ifdef SB_DEBUG
-    printf("Writing %d bytes to fd %d\n", msg->len, party_fd(party));
+    printf("Writing from queue to fd %d", party_fd(party));
+    print_hex(msg->data, msg->len, ": ");
     #endif
     
     if (!write_data(party_fd(party), msg->data, msg->len)) {
 	party->found_errno = errno;
-	party->open        = false;
+
+	party->open_for_write = false;
+	if (!party->open_for_read) {
+	    close(party_fd(party));
+	}
+	
 	if (party->stop_on_close) {
 	    ctx->done = true;
 	}
@@ -933,11 +968,6 @@ handle_one_write(switchboard_t *ctx, party_t *party)
 	return;
     }
 
-    fdobj->first_msg = msg->next;
-    if (fdobj->first_msg == NULL) {
-	fdobj->last_msg = NULL;
-    }
-    
     free_msg_slot(ctx, msg);
 }
 
@@ -992,30 +1022,72 @@ subproc_mark_closed(switchboard_t *ctx, monitor_t *proc, bool error)
     // first.
     
     if (proc->stdin_fd_party) {
-	proc->stdin_fd_party->open = false;
+	proc->stdin_fd_party->open_for_write = false;
     }
 }
 
-static inline void
-subproc_exit_check(switchboard_t *ctx, monitor_t *process)
+static bool
+sb_default_check_exit_conditions(switchboard_t *ctx)
 {
-    if (!process->shutdown_when_closed) {
-	return;
+    monitor_t *subproc          = ctx->pid_watch_list;
+    bool       close_if_drained = false;
+
+    while (subproc) {
+	if (subproc->closed && subproc->shutdown_when_closed) {
+	    close_if_drained = true;
+	    break;
+	}
+	subproc = subproc->next;
     }
 
-    if (process->stdout_fd_party && process->stdout_fd_party->open) {
-	return;
+    if (!close_if_drained) {
+	return false;
     }
 
-    if (process->stderr_fd_party && process->stderr_fd_party->open) {
-	return;
+    if (subproc->stdout_fd_party && subproc->stdout_fd_party->open_for_read) {
+	return false;
+    } else {
+        #if defined(SB_DEBUG) || defined(SB_TEST)	
+	printf("Subproc stdout is closed for business.\n");
+	#endif
     }
 
-    if (process->tty_fd_party && process->tty_fd_party->open) {
-	return;
+    if (subproc->stderr_fd_party && subproc->stderr_fd_party->open_for_read) {
+        #if defined(SB_DEBUG) || defined(SB_TEST)		
+	printf("Read side of stderr is still open.\n");
+	#endif
+	return false;
+    }
+    
+    party_t *writers = ctx->parties_for_writing;
+
+    while (writers) {
+	
+	if (writers->party_type == PT_FD) {
+	    fd_party_t *fd_writer = get_fd_obj(writers);
+
+            #if defined(SB_DEBUG) || defined(SB_TEST)
+	    printf("checking for pending writes to fd %d\n", fd_writer->fd);
+	    #endif
+	    if (writers->open_for_write && fd_writer->first_msg) {
+                #if defined(SB_DEBUG) || defined(SB_TEST)	
+		printf("Don't exit yet.\n");
+		#endif
+		return false;
+	    }
+            #if defined(SB_DEBUG) || defined(SB_TEST)	
+	    if (writers->open_for_write) {
+		printf("No queue.\n");
+	    }
+	    else {
+		printf("Already closed.\n");
+	    }
+	    #endif
+        }
+	writers = writers->next_writer;
     }
 
-    ctx->done = true;
+    return true;
 }
 
 /*
@@ -1035,24 +1107,11 @@ subproc_exit_check(switchboard_t *ctx, monitor_t *process)
 static inline void
 handle_loop_end(switchboard_t *ctx)
 {
-    if (ctx->progress_callback) {
-	if (!ctx->fds_ready || !ctx->progress_on_timeout_only) {
-	    if ((*ctx->progress_callback)(ctx)) {
-		ctx->done = true;
-	    }
-	}
-    } else {
-	if (!ctx->fds_ready) {
-	    ctx->done = true;
-	}
-    }
-
     monitor_t *subproc = ctx->pid_watch_list;
     int        stat_info;
 
     while (subproc != NULL) {
 	if (subproc->closed) {
-	    subproc_exit_check(ctx, subproc);
 	    subproc = subproc->next;
 	    continue;
 	}
@@ -1076,6 +1135,16 @@ handle_loop_end(switchboard_t *ctx)
 	    }
 	}
 	subproc = subproc->next;
+    }
+
+    if (!ctx->progress_callback) {
+	ctx->progress_callback = sb_default_check_exit_conditions;
+    }
+    
+    if (!ctx->progress_on_timeout_only) {
+	if ((*ctx->progress_callback)(ctx)) {
+	    ctx->done = true;
+	}
     }
 }
 
@@ -1161,7 +1230,7 @@ sb_destroy(switchboard_t *ctx, bool free_parties)
 
     cur = ctx->parties_for_writing;
     while (cur) {
-	if (cur->close_on_destroy && cur->open && cur->party_type == PT_FD) {
+	if (cur->close_on_destroy && cur->party_type == PT_FD) {
 	    close(party_fd(cur));
 	}
 	next = cur->next_writer;
@@ -1243,7 +1312,7 @@ waiting_writes(switchboard_t *ctx)
     party_t *writer = ctx->parties_for_writing;
 
     while(writer) {
-	if (writer->open) {
+	if (writer->open_for_write) {
 	    fd_party_t *fd_obj = get_fd_obj(writer);
 
 	    if (fd_obj->first_msg != NULL) {
@@ -1257,18 +1326,23 @@ waiting_writes(switchboard_t *ctx)
 }
 
 /*
- * Runs a switchboard to completion, but doesn't post-process in
- * any way. So it doesn't create a result object, nor does it clean
- * up any memory.
+ * Runs a switchboard; to completion if you pass `true` to the loop
+ * parameter, but doesn't post-process in any way. So it doesn't
+ * create a result object, nor does it clean up any memory.
  */
-void
-sb_operate_switchboard(switchboard_t *ctx)
+bool
+sb_operate_switchboard(switchboard_t *ctx, bool loop)
 {
-    int counter = 0;
-    while (true) {
+    if (ctx->done && !waiting_writes(ctx)) {
+	return true;
+    }
+    while (loop) {
 	set_fdinfo(ctx);
+	if (sb_default_check_exit_conditions(ctx)) {
+	    return true;
+	}
 	if (ctx->done && !waiting_writes(ctx)) {
-		break;
+		return true;
 	}
 	ctx->fds_ready = select(ctx->max_fd, &ctx->readset, &ctx->writeset,
 				NULL, ctx->io_timeout_ptr);
@@ -1276,6 +1350,7 @@ sb_operate_switchboard(switchboard_t *ctx)
 	handle_ready_writes(ctx);
 	handle_loop_end(ctx);
     }
+    return false;
 }
 
 /*
@@ -1286,7 +1361,7 @@ sb_result_t *
 sb_automatic_switchboard(switchboard_t *ctx, bool free_party_objects)
 {
 
-    sb_operate_switchboard(ctx);
+    sb_operate_switchboard(ctx, true);
     
     sb_result_t *results = sb_get_switchboard_results(ctx);
 

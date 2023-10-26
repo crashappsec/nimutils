@@ -4,9 +4,10 @@
 
 #ifndef SWITCHBOARD_H__
 #include "switchboard.h"
-#ifdef SB_DEBUG
+#if defined(SB_DEBUG) || defined(SB_TEST)
 #include <stdio.h>
 #include "test.c"
+#include "hex.h"
 #endif
 #endif
 
@@ -204,48 +205,32 @@ subproc_use_pty(subprocess_t *ctx)
 	return false;
     }
     ctx->use_pty = true;
-
     return true;
 }
 
 static void
-open_parent_tty(subprocess_t *ctx)
-{
-    int ttyfd = open("/dev/tty", O_RDWR);
-
-    sb_init_party_fd(&ctx->sb, &ctx->parent_tty, ttyfd, O_RDWR, true, false);
-}
-
-static void
-setup_subscriptions(subprocess_t *ctx)
+setup_subscriptions(subprocess_t *ctx, bool pty)
 {
     party_t *stderr_dst = &ctx->parent_stderr;
-    party_t *tty_dst    = &ctx->parent_tty;
 
     if (ctx->pt_all_to_stdout) {
 	stderr_dst = &ctx->parent_stdout;
-	tty_dst    = &ctx->parent_stdout;
     }
     
     if (ctx->passthrough) {
 	if (ctx->passthrough & SP_IO_STDIN) {
-	    sb_route(&ctx->sb, &ctx->parent_stdin, &ctx->subproc_stdin);
+	    if (pty) {
+		sb_route(&ctx->sb, &ctx->parent_stdin, &ctx->subproc_stdout);
+	    }
+	    else {
+		sb_route(&ctx->sb, &ctx->parent_stdin, &ctx->subproc_stdin);
+	    }
 	}
 	if (ctx->passthrough & SP_IO_STDOUT) {
 	    sb_route(&ctx->sb, &ctx->subproc_stdout, &ctx->parent_stdout);
 	}
 	if (ctx->passthrough & SP_IO_STDERR) {
 	    sb_route(&ctx->sb, &ctx->subproc_stderr, stderr_dst);
-	}
-	if (ctx->use_pty) {
-	    open_parent_tty(ctx);
-	    
-	    if (ctx->passthrough & SP_IO_TTYIN) {
-		sb_route(&ctx->sb, &ctx->parent_tty, &ctx->subproc_pty);
-	    }
-	    if (ctx->passthrough & SP_IO_TTYOUT) {
-		sb_route(&ctx->sb, &ctx->subproc_pty, tty_dst);
-	    }
 	}
     }
 
@@ -262,7 +247,7 @@ setup_subscriptions(subprocess_t *ctx)
 	if (ctx->combine_captures) {
 
 	    if (!(ctx->capture & SP_IO_STDOUT) &&
-		ctx->capture & (SP_IO_STDERR|SP_IO_TTYOUT)) {
+		ctx->capture & SP_IO_STDERR) {
 		if (ctx->capture & SP_IO_STDOUT) {
 		    sb_init_party_output_buf(&ctx->sb, &ctx->capture_stdout,
 					  "stdout", CAP_ALLOC);
@@ -270,20 +255,14 @@ setup_subscriptions(subprocess_t *ctx)
       	    }
       	    
 	    stderr_dst = &ctx->capture_stdout;
-	    tty_dst    = &ctx->capture_stdout;
 	}
 	else {
 	    if (ctx->capture & SP_IO_STDERR) {
 		sb_init_party_output_buf(&ctx->sb, &ctx->capture_stderr,
 				      "stderr", CAP_ALLOC);
 	    }
-	    if (ctx->capture & SP_IO_TTYOUT) {
-		sb_init_party_output_buf(&ctx->sb, &ctx->capture_termout,
-				      "term",   CAP_ALLOC);
-	    }
 	    
 	    stderr_dst = &ctx->capture_stderr;
-	    tty_dst    = &ctx->capture_termout;
 	}
 	
 	if (ctx->capture & SP_IO_STDIN) {
@@ -295,13 +274,14 @@ setup_subscriptions(subprocess_t *ctx)
 	if (ctx->capture & SP_IO_STDERR) {
 	    sb_route(&ctx->sb, &ctx->subproc_stderr, stderr_dst);
 	}
-	if (ctx->capture & SP_IO_TTYOUT && ctx->use_pty) {
-	    sb_route(&ctx->sb, &ctx->subproc_pty, tty_dst);
-	}
     }
     
     if (ctx->str_waiting) {
-	sb_route(&ctx->sb, &ctx->str_stdin, &ctx->subproc_stdin);
+	if (pty) {
+	    sb_route(&ctx->sb, &ctx->str_stdin, &ctx->subproc_stdout);
+	} else {
+	    sb_route(&ctx->sb, &ctx->str_stdin, &ctx->subproc_stdin);
+	}
 	ctx->str_waiting = false;
     }
     
@@ -349,9 +329,6 @@ subproc_install_callbacks(subprocess_t *ctx)
 	if (entry->which & SP_IO_STDERR) {
 	    sb_route(&ctx->sb, &ctx->subproc_stderr, entry->to_free);
 	}
-	if (entry->which & SP_IO_TTYOUT) {
-	    sb_route(&ctx->sb, &ctx->subproc_pty, entry->to_free);
-	}
 	entry = entry->next;
     }
 }
@@ -383,8 +360,9 @@ subproc_spawn_fork(subprocess_t *ctx)
 			 O_RDONLY, false, true);
 
 	sb_monitor_pid(&ctx->sb, pid, &ctx->subproc_stdin, &ctx->subproc_stdout,
-		    &ctx->subproc_stderr, NULL, true);
+		    &ctx->subproc_stderr, true);
 	subproc_install_callbacks(ctx);
+	setup_subscriptions(ctx, false);	
     } else {
 	fflush(stdout);
 	close(stdin_pipe[1]);
@@ -406,15 +384,18 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     struct termios *term_ptr = &termcap;
     struct winsize *win_ptr  = &wininfo;
     pid_t           pid;
-    int             stdin_pipe[2];
-    int             stdout_pipe[2];
     int             stderr_pipe[2];
     int             pty_fd;
-    
-    // Set up pipes to be the stdin / stdout / stderr of
-    // the child process.
-    pipe(stdin_pipe);
-    pipe(stdout_pipe);
+
+    // We're going to use a pipe for stderr to get a separate
+    // stream. The tty FD will be stdin and stdout for the child
+    // process.
+    //
+    // Also, if we want to close the subproc's stdin after an initial
+    // write, we will dup2.
+    //
+    // Note that this means the child process will see isatty() return
+    // true for stdin and stdout, but not stderr.
     pipe(stderr_pipe);
 
     if(!isatty(0)) {
@@ -427,44 +408,87 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     pid = forkpty(&pty_fd, NULL, term_ptr, win_ptr);
 
     if (pid != 0) {
-	close(stdin_pipe[0]);
-	close(stdout_pipe[1]);
 	close(stderr_pipe[1]);
 
-	sb_init_party_fd(&ctx->sb, &ctx->subproc_pty, pty_fd, O_RDWR, true,
-			 true);	
-	sb_init_party_fd(&ctx->sb, &ctx->subproc_stdin, stdin_pipe[1],
-			 O_WRONLY, false, true);
-	sb_init_party_fd(&ctx->sb, &ctx->subproc_stdout, stdout_pipe[0],
-			 O_RDONLY, false, true);
+	sb_init_party_fd(&ctx->sb, &ctx->subproc_stdout, pty_fd, O_RDWR, true,
+			 true);
 	sb_init_party_fd(&ctx->sb, &ctx->subproc_stderr, stderr_pipe[0],
-			 O_RDONLY, false, true);
-
-	sb_monitor_pid(&ctx->sb, pid, &ctx->subproc_stdin, &ctx->subproc_stdout,
-		    &ctx->subproc_stderr, &ctx->subproc_pty, true);	
+			 O_RDONLY, true, true);
+	
+	sb_monitor_pid(&ctx->sb, pid, &ctx->subproc_stdout,
+		       &ctx->subproc_stdout, &ctx->subproc_stderr, true);	
 	subproc_install_callbacks(ctx);
+	setup_subscriptions(ctx, true);
 	
 	tcgetattr(0, &ctx->saved_termcap);
 	termcap.c_lflag &= ~(ICANON | ECHO);
 	termcap.c_cc[VMIN]  = 1;
 	termcap.c_cc[VTIME] = 0;
 	tcsetattr(0, TCSANOW, term_ptr);
+	int flags = fcntl(pty_fd, F_GETFL, 0) | O_NONBLOCK;
+	fcntl(pty_fd, F_SETFL, flags);
 	
     } else {
-	close(stdin_pipe[1]);
-	close(stdout_pipe[0]);		
 	close(stderr_pipe[0]);
-	dup2(stdin_pipe[0],  fileno(stdin));
-	dup2(stdout_pipe[1], fileno(stdout));
-	dup2(stderr_pipe[1], fileno(stderr));
+
+	dup2(stderr_pipe[1], 2);
 	termcap.c_lflag &= ~(ICANON | ISIG | IEXTEN | ECHO);
 	termcap.c_oflag &= ~OPOST;
 	termcap.c_cc[VMIN] = 1;
 	termcap.c_cc[VTIME] = 0;
 
+	//setvbuf(stdout, NULL, _IONBF, (size_t) 0);
+	//setvbuf(stdin, NULL, _IONBF, (size_t) 0);	
+
 	tcsetattr(pty_fd, TCSANOW, term_ptr);
 	subproc_do_exec(ctx);
     }
+}
+
+/*
+ * Start a subprocess if you want to be responsible for making
+ * sufficient calls to poll for IP, instead of having it run to
+ * completion.
+ *
+ * If you use this, call subproc_poll() until it returns false,
+ * at which point, call subproc_get_result().
+ */
+void
+subproc_start(subprocess_t *ctx)
+{
+    if (ctx->use_pty) {
+	subproc_spawn_forkpty(ctx);
+    }
+    else {
+	subproc_spawn_fork(ctx);
+    }
+}
+
+/*
+ * Handle IO on the subprocess a single time. This is meant to be
+ * called only when manually runnng the subprocess; if you call
+ * subproc_run, don't use this interface!
+ */
+bool
+subproc_poll(subprocess_t *ctx)
+{
+    return sb_operate_switchboard(&ctx->sb, false);
+}
+
+/*
+ * For getting the result object back when you manually run a process.
+ */
+sb_result_t *
+subproc_get_result(subprocess_t *ctx)
+{
+    ctx->result = sb_get_switchboard_results(&ctx->sb);    
+
+    // Post-run cleanup.
+    if (ctx->use_pty) {
+	tcsetattr(0, TCSANOW, &ctx->saved_termcap);
+    }
+
+    return ctx->result;
 }
 
 /*
@@ -477,25 +501,11 @@ subproc_spawn_forkpty(subprocess_t *ctx)
  */
 sb_result_t *
 subproc_run(subprocess_t *ctx)
-{    
-    if (ctx->use_pty) {
-	subproc_spawn_forkpty(ctx);
-    }
-    else {
-	subproc_spawn_fork(ctx);
-    }
-    
-    setup_subscriptions(ctx);
-    sb_operate_switchboard(&ctx->sb);
-    
-    ctx->result = sb_get_switchboard_results(&ctx->sb);    
+{
+    subproc_start(ctx);
+    sb_operate_switchboard(&ctx->sb, true);
 
-    // Post-run cleanup.
-    if (ctx->use_pty) {
-	tcsetattr(0, TCSANOW, &ctx->saved_termcap);
-    }
-
-    return ctx->result;
+    return subproc_get_result(ctx);
 }
 
 /*
@@ -570,7 +580,7 @@ sp_result_capture(sp_result_t *ctx, char *tag, size_t *outlen)
 {
     while(ctx) {
 	if (ctx->tag && !strcmp(tag, ctx->tag)) {
-	    char *result = ctx->contents;
+	    char *result      = ctx->contents;
 	    *outlen           = ctx->content_len;
 	    ctx->contents     = NULL;
 	    ctx->content_len = 0;
@@ -619,7 +629,7 @@ sp_result_signal(sp_result_t *ctx)
     abort();    
 }
 
-#ifdef SB_DEBUG
+#ifdef SB_TEST
 void
 capture_tty_data(switchboard_t *sb, party_t *party, char *data, size_t len)
 {
@@ -627,9 +637,9 @@ capture_tty_data(switchboard_t *sb, party_t *party, char *data, size_t len)
 }
 
 int
-main(int argc, char *argv[]) {
+test1() {
     char        *cmd    = "/bin/cat";
-    char        *args[] = { "/bin/cat", "../colortable.nim", 0 };
+    char        *args[] = { "/bin/cat", "../aes.nim", 0 };
     subprocess_t ctx;
     sb_result_t *result;
     struct timeval timeout = {.tv_sec = 0, .tv_usec = 1000 };
@@ -638,17 +648,14 @@ main(int argc, char *argv[]) {
     subproc_use_pty(&ctx);
     subproc_set_passthrough(&ctx, SP_IO_ALL, false);
     subproc_set_capture(&ctx, SP_IO_ALL, false);
-    subproc_pass_to_stdin(&ctx, test_txt, strlen(test_txt), true);
     subproc_set_timeout(&ctx, &timeout);
-    subproc_set_io_callback(&ctx, SP_IO_ALL, capture_tty_data);
+    subproc_set_io_callback(&ctx, SP_IO_STDOUT, capture_tty_data);
 
     result = subproc_run(&ctx);
     
     while(result) {
 	if (result->tag) {
-	    printf("Captured %d bytes on %s:\n %s",
-		   (int)result->content_len, result->tag,
-		result->contents);
+	    print_hex(result->contents, result->content_len, result->tag);
 	}
 	else {
 	    printf("PID: %d\n", result->pid);
@@ -656,5 +663,108 @@ main(int argc, char *argv[]) {
 	}
 	result = result->next;
     }
+    return 0;
+}
+
+int
+test2() {
+    char        *cmd    = "/bin/cat";
+    char        *args[] = { "/bin/cat", "-", 0 };    
+    
+    subprocess_t ctx;
+    sb_result_t *result;
+    struct timeval timeout = {.tv_sec = 0, .tv_usec = 1000 };
+
+    subproc_init(&ctx, cmd, args);
+    subproc_set_passthrough(&ctx, SP_IO_ALL, false);
+    subproc_set_capture(&ctx, SP_IO_ALL, false);
+    subproc_pass_to_stdin(&ctx, test_txt, strlen(test_txt), true);
+    subproc_set_timeout(&ctx, &timeout);
+    subproc_set_io_callback(&ctx, SP_IO_STDOUT, capture_tty_data);
+
+    result = subproc_run(&ctx);
+    
+    while(result) {
+	if (result->tag) {
+	    print_hex(result->contents, result->content_len, result->tag);
+	}
+	else {
+	    printf("PID: %d\n", result->pid);
+	    printf("Exit status: %d\n", result->exit_status);
+	}
+	result = result->next;
+    }
+    return 0;
+}
+
+int
+test3() {
+    char        *cmd    = "/usr/bin/less";
+    char        *args[] = { "/usr/bin/less", "../aes.nim", 0 };
+    subprocess_t ctx;
+    sb_result_t *result;
+    struct timeval timeout = {.tv_sec = 0, .tv_usec = 1000 };
+
+    subproc_init(&ctx, cmd, args);
+    subproc_use_pty(&ctx);
+    subproc_set_passthrough(&ctx, SP_IO_ALL, false);
+    subproc_set_capture(&ctx, SP_IO_ALL, false);
+    subproc_set_timeout(&ctx, &timeout);
+    subproc_set_io_callback(&ctx, SP_IO_STDOUT, capture_tty_data);
+
+    result = subproc_run(&ctx);
+    
+    while(result) {
+	if (result->tag) {
+	    print_hex(result->contents, result->content_len, result->tag);
+	}
+	else {
+	    printf("PID: %d\n", result->pid);
+	    printf("Exit status: %d\n", result->exit_status);
+	}
+	result = result->next;
+    }
+    return 0;
+}
+
+int
+test4() {
+    char        *cmd    = "/bin/cat";
+    char        *args[] = { "/bin/cat", "-", 0 };    
+    
+    subprocess_t ctx;
+    sb_result_t *result;
+    struct timeval timeout = {.tv_sec = 0, .tv_usec = 1000 };
+
+    subproc_init(&ctx, cmd, args);
+    subproc_use_pty(&ctx);
+    subproc_set_passthrough(&ctx, SP_IO_ALL, false);
+    subproc_set_capture(&ctx, SP_IO_ALL, false);
+    // This would hang until we close stdout.
+    //subproc_pass_to_stdin(&ctx, test_txt, strlen(test_txt), true);
+    subproc_set_timeout(&ctx, &timeout);
+    subproc_set_io_callback(&ctx, SP_IO_STDOUT, capture_tty_data);
+
+    result = subproc_run(&ctx);
+    
+    while(result) {
+	if (result->tag) {
+	    print_hex(result->contents, result->content_len, result->tag);
+	}
+	else {
+	    printf("PID: %d\n", result->pid);
+	    printf("Exit status: %d\n", result->exit_status);
+	}
+	result = result->next;
+    }
+    return 0;
+}
+
+
+int main() {
+    test1();
+    test2();
+    test3();
+    test4();
 }
 #endif

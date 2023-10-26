@@ -180,7 +180,8 @@ typedef struct party_t {
     party_e         party_type;
     party_info_t    info;
     int             found_errno;
-    bool            open;
+    bool            open_for_write;
+    bool            open_for_read;
     bool            can_read_from_it;
     bool            can_write_to_it;
     bool            close_on_destroy;
@@ -203,7 +204,6 @@ typedef struct monitor_t {
     party_t          *stdin_fd_party; 
     party_t          *stdout_fd_party;
     party_t          *stderr_fd_party;
-    party_t          *tty_fd_party;   
     bool              shutdown_when_closed;
     bool              closed;
     int               found_errno;
@@ -254,6 +254,7 @@ typedef struct {
     switchboard_t  sb;
     bool           run;
     bool           use_pty;
+    bool           pty_stdin_pipe;
     bool           str_waiting;
     char          *cmd;
     char         **argv;
@@ -267,15 +268,12 @@ typedef struct {
     party_t        parent_stdin;
     party_t        parent_stdout;
     party_t        parent_stderr;
-    party_t        parent_tty;
     party_t        subproc_stdin;
     party_t        subproc_stdout;
     party_t        subproc_stderr;
-    party_t        subproc_pty;
     party_t        capture_stdin;
     party_t        capture_stdout;
     party_t        capture_stderr;
-    party_t        capture_termout;
     struct termios saved_termcap;
     struct dcb_t  *deferred_cbs;
     sb_result_t   *result;
@@ -284,9 +282,7 @@ typedef struct {
 #define SP_IO_STDIN     1
 #define SP_IO_STDOUT    2
 #define SP_IO_STDERR    4
-#define SP_IO_TTYIN     8
-#define SP_IO_TTYOUT    16
-#define SP_IO_ALL       31
+#define SP_IO_ALL       7
 #define CAP_ALLOC       16 // In # of PIPE_BUF sized chunks
 
 // These are the real signatures.
@@ -323,7 +319,7 @@ extern void sb_init_party_callback(switchboard_t *, party_t *,
 				   switchboard_cb_t);
 extern party_t *sb_new_party_callback(switchboard_t *, switchboard_cb_t);
 extern void sb_monitor_pid(switchboard_t *, pid_t, party_t *, party_t *,
-			   party_t *, party_t *, bool);
+			   party_t *, bool);
 extern void *sb_get_extra(switchboard_t *);
 extern void sb_set_extra(switchboard_t *, void *);
 extern void *sb_get_party_extra(party_t *);
@@ -333,7 +329,7 @@ extern void sb_init(switchboard_t *, size_t);
 extern void sb_set_io_timeout(switchboard_t *, struct timeval *);
 extern void sb_clear_io_timeout(switchboard_t *);
 extern void sb_destroy(switchboard_t *, bool);
-extern void sb_operate_switchboard(switchboard_t *);
+extern bool sb_operate_switchboard(switchboard_t *, bool);
 extern sb_result_t *sb_automatic_switchboard(switchboard_t *, bool);
 extern void subproc_init(subprocess_t *, char *, char *[]);
 extern bool subproc_set_envp(subprocess_t *, char *[]);
@@ -345,7 +341,10 @@ extern bool subproc_set_io_callback(subprocess_t *, unsigned char,
 extern void subproc_set_timeout(subprocess_t *, struct timeval *);
 extern void subproc_clear_timeout(subprocess_t *);
 extern bool subproc_use_pty(subprocess_t *);
-extern sp_result_t * subproc_run(subprocess_t *);
+extern void subproc_start(subprocess_t *);
+extern bool subproc_poll(subprocess_t *);
+extern sb_result_t *subproc_get_result(subprocess_t *);
+extern sp_result_t *subproc_run(subprocess_t *);
 extern void subproc_close(subprocess_t *);
 extern pid_t subproc_get_pid(subprocess_t *);
 extern void sp_result_delete(sp_result_t *);
@@ -353,6 +352,17 @@ extern char *sp_result_capture(sp_result_t *, char *, size_t *);
 extern int sp_result_exit(sp_result_t *);
 extern int sp_result_errno(sp_result_t *);
 extern int sp_result_signal(sp_result_t *);
+
+// P0: Need an interface allow the subprocess to see a TTY over
+//     stdout, etc when it calls isatty(). This should probably be
+//     doable on a per-stream basis, instead of a one-shot. Maybe:
+//
+// subproc_tty_proxy(subprocess_t *, char);
+//
+// This would work whether or not the subprocess gets its own TTY.
+//
+// In particular, the subprocess code currently won't work properly w/
+// less() because less() will call isatty on stdout, which 
 
 // pty params.
 // NIM WRAPPER

@@ -8,7 +8,6 @@
 import strutils, os, system/nimscript
 
 static:
-
   {.compile: joinPath(splitPath(currentSourcePath()).head, "c/hex.c").}
 
 proc hex*(s: string): string =

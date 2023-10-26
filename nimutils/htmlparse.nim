@@ -36,7 +36,6 @@ proc stringize(n: HtmlNode, indent = 0): string =
 proc `$`*(n: HtmlNode): string =
   return n.stringize()
 
-
 proc make_gumbo(html: cstring, userdata: pointer): void {.cdecl, importc.}
 
 proc enter_callback(ctx: var Walker, kind: HtmlNodeType, contents: cstring)
