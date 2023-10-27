@@ -1,102 +1,9 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import os, posix, misc, strutils, posix_utils
+import os, posix, strutils, posix_utils
 
 proc getMyAppPath(): string {.importc.}
-
-{.emit: """
-// I already had this stuff sitting around, and haven't taken the time to
-// push it down to nim (I started to w/ `readAll()` but decided it wasn't
-// a good use of time.
-
-#include <sys/types.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdbool.h>
-
-bool
-read_data(int fd, void *buf, size_t nbytes) {
-    size_t  toread, nread = 0;
-    ssize_t result;
-
-    do {
-         if (nbytes - nread > SSIZE_MAX) {
-             toread = SSIZE_MAX;
-         }
-         else {
-             toread = nbytes - nread;
-         }
-         if ((result = read(fd, (char *)buf + nread, toread)) >= 0) {
-           nread += result;
-         }
-         else if (errno != EINTR) {
-           return false;
-         }
-       }
-    while (nread < nbytes);
-
-    return true;
-}
-
-bool
-write_data(int fd, NCSTRING buf, NI nbytes) {
-    size_t  towrite, written = 0;
-    ssize_t result;
-
-    do {
-        if (nbytes - written > SSIZE_MAX) {
-            towrite = SSIZE_MAX;
-        }
-        else {
-            towrite = nbytes - written;
-        }
-        if ((result = write(fd, buf + written, towrite)) >= 0) {
-            written += result;
-        }
-        else if (errno != EINTR) {
-            return false;
-        }
-    }
-    while (written < nbytes);
-
-    return true;
- }
-""".}
-
-proc oneReadFromFd*(fd: cint): string =
-  var
-    buf: array[0 .. 4096, byte]
-
-  while true:
-    let n = read(fd, addr buf, 4096)
-    if n > 0:
-      return bytesToString(buf[0 ..< n])
-    elif n == 0:
-      return ""
-    elif errno != EINTR:
-      raise newException(IoError, $(strerror(errno)))
-
-proc readAllFromFd*(fd: cint): string =
-
-  while true:
-    let val = fd.oneReadFromFd()
-
-    if val == "":
-      return result
-
-    result &= val
-
-proc fReadData*(fd: cint, buf: openarray[char]): bool {.importc: "read_data."}
-proc fWriteData*(fd: cint, buf: openarray[char]): bool {.importc: "write_data".}
-proc fWriteData*(fd: cint, s: string): bool =
-  # toOpenArray does not convert the null terminator.
-  return fWriteData(fd, s.toOpenArray(0, s.len() - 1))
 
 proc tildeExpand(s: string): string {.inline.} =
   var homedir = getHomeDir()
@@ -259,21 +166,6 @@ proc findAllExePaths*(cmdName:    string,
 
 {.emit: """
 #include <unistd.h>
-
-int c_replace_stdin_with_pipe() {
-  int filedes[2];
-
-  pipe(filedes);
-  dup2(filedes[0], 0);
-  return filedes[1];
-}
-
-""".}
-
-proc cReplaceStdinWithPipe*(): cint {.importc: "c_replace_stdin_with_pipe".}
-
-{.emit: """
-#include <unistd.h>
 #include <stdio.h>
 
 static int
@@ -289,7 +181,7 @@ do_read_link(const char *filename, char *buf) {
 """.}
 
 proc do_read_link(s: cstring, p: pointer): void {.cdecl,importc,nodecl.}
-proc get_path_max(): cint {.cdecl,importc,nodecl.}
+proc get_path_max*(): cint {.cdecl,importc,nodecl.}
 
 proc readLink*(s: string): string =
   var v = newStringOfCap(int(get_path_max()));

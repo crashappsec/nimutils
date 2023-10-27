@@ -581,10 +581,8 @@ sp_result_capture(sp_result_t *ctx, char *tag, size_t *outlen)
 	if (ctx->tag && !strcmp(tag, ctx->tag)) {
 	    char *result      = ctx->contents;
 	    *outlen           = ctx->content_len;
-	    ctx->contents     = NULL;
-	    ctx->content_len = 0;
 
-	    return result;
+	    return strdup(result);
 	}
 	ctx = ctx->next;
     }
@@ -626,6 +624,30 @@ sp_result_signal(sp_result_t *ctx)
 	ctx = ctx->next;
     }
     abort();    
+}
+
+char *
+subproc_get_capture(subprocess_t *ctx, char *tag, size_t *outlen)
+{
+    return sp_result_capture(ctx->result, tag, outlen);
+}
+
+int
+subproc_get_exit(subprocess_t *ctx)
+{
+    return sp_result_exit(ctx->result);
+}
+
+int
+subproc_get_errno(subprocess_t *ctx)
+{
+    return sp_result_exit(ctx->result);
+}
+
+int
+subproc_get_signal(subprocess_t *ctx)
+{
+    return sp_result_exit(ctx->result);
 }
 
 #ifdef SB_TEST

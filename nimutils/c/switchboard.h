@@ -251,7 +251,7 @@ typedef struct sb_result_t {
 typedef sb_result_t sp_result_t;
 
 typedef struct {
-    sb_result_t   *result;
+    sb_result_t    *result;
     switchboard_t  sb;
     bool           run;
     bool           use_pty;
@@ -352,6 +352,10 @@ extern char *sp_result_capture(sp_result_t *, char *, size_t *);
 extern int sp_result_exit(sp_result_t *);
 extern int sp_result_errno(sp_result_t *);
 extern int sp_result_signal(sp_result_t *);
+extern char *subproc_get_capture(subprocess_t *, char *, size_t *);
+extern int subproc_get_exit(subprocess_t *);
+extern int subproc_get_errno(subprocess_t *);
+extern int subproc_get_signal(subprocess_t *);
 
 // pty params.
 // ASCII Cinema.

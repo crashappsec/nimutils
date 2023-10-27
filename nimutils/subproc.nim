@@ -1,4 +1,4 @@
-import switchboard, posix, random, os
+import switchboard, posix, random, os, file
 
 {.compile: joinPath(splitPath(currentSourcePath()).head, "c/subproc.c").}
 {.pragma: sproc, cdecl, importc, nodecl.}
@@ -7,7 +7,6 @@ type
   SPResultObj* {. importc: "sb_result_t", header: "c/switchboard.h" .} = object
   SPResult* = ptr SPResultObj
   SubProcess*  {. importc: "subprocess_t" .} = object
-    result*: SpResult
 
   SPIoKind* = enum SPIoNone = 0, SpIoStdin = 1, SpIoStdout = 2,
               SpIoInOut = 3, SpIoStderr = 4, SpIoInErr = 5,
@@ -19,11 +18,11 @@ proc subproc_set_envp(ctx: var SubProcess, args: cStringArray)
     {.sproc.}
 proc subproc_pass_to_stdin(ctx: var SubProcess, s: cstring, l: csize_t,
                            close_fd: bool): bool {.sproc.}
-proc sp_result_capture(res: SpResult, tag: cstring, ln: ptr cint): cstring
-    {.sproc.}
-proc sp_result_exit(res: SpResult): cint {.sproc.}
-proc sp_result_errno(res: SPResult): cint {.sproc.}
-proc sp_result_signal(res: SpResult): cint {.sproc.}
+proc subproc_get_capture(ctx: var SubProcess, tag: cstring, ln: ptr cint):
+                        cstring {.sproc.}
+proc subproc_get_exit(ctx: var SubProcess): cint {.sproc.}
+proc subproc_get_errno(ctx: var SubProcess): cint {.sproc.}
+proc subproc_get_signal(ctx: var SubProcess): cint {.sproc.}
 
 # Not wrapped.
 # extern bool subproc_set_io_callback(subprocess_t *, unsigned char,
@@ -76,61 +75,133 @@ template getTaggedValue*(ctx: var SubProcess, tag: static[cstring]): string =
     outlen: cint
     s:      cstring
 
-  s = sp_result_capture(ctx.result, tag, addr outlen)
+  s = subproc_get_capture(ctx, tag, addr outlen)
   if outlen == 0:
     ""
   else:
     bytesToString(cast[ptr UncheckedArray[char]](s), int(outlen))
 
 proc getStdin*(ctx: var SubProcess): string =
-  if ctx.result == SPResult(nil):
-    raise newException(IoError, "Process hasn't exited")
-
-  return getTaggedValue(ctx, cstring("stdin"))
+  ctx.getTaggedValue("stdin")
 
 proc getStdout*(ctx: var SubProcess): string =
-  if ctx.result == nil:
-    raise newException(IoError, "Process hasn't exited")
+  ctx.getTaggedValue("stdout")
 
-  return getTaggedValue(ctx, cstring("stdout"))
 proc getStderr*(ctx: var SubProcess): string =
-  if ctx.result == nil:
-    raise newException(IoError, "Process hasn't exited")
-
-  return getTaggedValue(ctx, cstring("stderr"))
+  ctx.getTaggedValue("stderr")
 
 proc getExitCode*(ctx: var SubProcess): int =
-  if ctx.result == nil:
-    raise newException(IoError, "Process hasn't exited")
-
-  return int(sp_result_exit(ctx.result))
+  return int(subproc_get_exit(ctx))
 
 proc getErrno*(ctx: var SubProcess): int =
-  if ctx.result == nil:
-    raise newException(IoError, "Process hasn't exited")
-
-  return int(sp_result_errno(ctx.result))
+  return int(subproc_get_errno(ctx))
 
 proc getSignal*(ctx: var SubProcess): int =
-  if ctx.result == nil:
-    raise newException(IoError, "Process hasn't exited")
+  return int(subproc_get_signal(ctx))
 
-  return int(sp_result_signal(ctx.result))
+type ExecOutput* = object
+    stdin*:    string
+    stdout*:   string
+    stderr*:   string
+    exitCode*: int
+    pid*:      Pid
 
-
-when isMainModule:
+proc runCommand*(exe:  string,
+                 args: seq[string],
+                 env:  openarray[string] = [],
+                 newStdin                = "",
+                 closeStdIn              = false,
+                 pty                     = false,
+                 passthrough             = SpIoNone,
+                 passStderrToStdin       = false,
+                 capture                 = SpIoOutErr,
+                 combineCapture          = false,
+                 timeoutUsec             = 1000): ExecOutput =
+  ## One-shot interface
   var subproc: SubProcess
   var timeout: Timeval
 
-  timeout.tv_sec  = Time(0)
-  timeout.tv_usec = 1000
+  timeout.tv_sec  = Time(timeoutUsec / 1000000)
+  timeout.tv_usec = Suseconds(timeoutUsec mod 1000000)
 
-  subproc.initSubProcess("/bin/cat", ["/bin/cat", "aes.nim"])
+  subproc.initSubprocess(exe, @[exe] & args)
   subproc.setTimeout(timeout)
-  subproc.usePty()
-  subproc.setPassthrough()
-  subproc.setCapture()
+
+  if len(env) != 0:
+    subproc.setEnv(env)
+  if pty:
+    subproc.usePty()
+  if passthrough != SpIoNone:
+    subproc.setPassthrough(passthrough, passStderrToStdin)
+  if capture != SpIoNone:
+    subproc.setCapture(capture, combineCapture)
+
   subproc.run()
 
-  echo subproc.getPid()
-  echo subproc.getStdout()
+  result.pid      = subproc.getPid()
+  result.exitCode = subproc.getExitCode()
+  result.stdout   = subproc.getStdout()
+  result.stdin    = subproc.getStdin()
+  result.stderr   = subproc.getStderr()
+
+
+template getStdout*(o: ExecOutput): string = o.stdout
+template getStderr*(o: ExecOutput): string = o.stderr
+template getExit*(o: ExecOutput): int      = o.exitCode
+
+
+template runInteractiveCmd*(path: string,
+                            args: seq[string],
+                            passToChild = "") =
+  let closeIt = if passToChild == "": false else: true
+  discard runCommand(path, args, passthrough = SpIoAll, capture = SpIoNone,
+                     newStdin = passToChild, closeStdin = closeIt, pty = true)
+
+template runCmdGetEverything*(exe:  string,
+                              args: seq[string],
+                              newStdIn    = "",
+                              closeStdIn  = false,
+                              passthrough = false,
+                              timeoutUsec = 1000000): ExecOutput =
+  discard runCommand(exe, args, newStdin, closeStdin, pty = false,
+                     passthrough = if passthrough: SpIoAll else: SpIoNone,
+                     timeoutUSec = timeoutUsec, capture = SpIoOutErr)
+
+
+proc runPager*(s: string) =
+  var
+    exe:   string
+    flags: seq[string]
+
+  if s == "":
+    return
+
+  if isatty(1) == 0:
+    echo s
+    return
+
+  let less = findAllExePaths("less")
+  if len(less) > 0:
+    exe   = less[0]
+    flags = @["-r", "-F"]
+  else:
+    let more = findAllExePaths("more")
+    if len(more) > 0:
+      exe = more[0]
+    else:
+      raise newException(ValueError, "Could not find 'more' or 'less' in your path.")
+
+  runInteractiveCmd(exe, flags, s)
+
+
+template runCmdGetOutput*(exe: string, args: seq[string]): string =
+  execProcess(exe, args = args, options = {})
+
+when isMainModule:
+  var res = runCommand("/bin/cat", @["aes.nim"], pty = true, capture = SpIoAll,
+                                                       passthrough = SpIoNone)
+
+  echo "pid = ", res.pid
+
+  sleep(2000)
+  echo res.stdout
