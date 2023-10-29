@@ -226,7 +226,7 @@ setup_subscriptions(subprocess_t *ctx, bool pty)
 	if (ctx->passthrough & SP_IO_STDOUT) {
 	    sb_route(&ctx->sb, &ctx->subproc_stdout, &ctx->parent_stdout);
 	}
-	if (ctx->passthrough & SP_IO_STDERR) {
+	if (!pty && ctx->passthrough & SP_IO_STDERR) {
 	    sb_route(&ctx->sb, &ctx->subproc_stderr, stderr_dst);
 	}
     }
@@ -254,7 +254,7 @@ setup_subscriptions(subprocess_t *ctx, bool pty)
 	    stderr_dst = &ctx->capture_stdout;
 	}
 	else {
-	    if (ctx->capture & SP_IO_STDERR) {
+	    if (!pty && ctx->capture & SP_IO_STDERR) {
 		sb_init_party_output_buf(&ctx->sb, &ctx->capture_stderr,
 				      "stderr", CAP_ALLOC);
 	    }
@@ -268,7 +268,7 @@ setup_subscriptions(subprocess_t *ctx, bool pty)
 	if (ctx->capture & SP_IO_STDOUT) {
 	    sb_route(&ctx->sb, &ctx->subproc_stdout, &ctx->capture_stdout);
 	}
-	if (ctx->capture & SP_IO_STDERR) {
+	if (!pty && ctx->capture & SP_IO_STDERR) {
 	    sb_route(&ctx->sb, &ctx->subproc_stderr, stderr_dst);
 	}
     }
@@ -381,7 +381,6 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     struct termios *term_ptr = &termcap;
     struct winsize *win_ptr  = &wininfo;
     pid_t           pid;
-    int             stderr_pipe[2];
     int             pty_fd;
 
     // We're going to use a pipe for stderr to get a separate
@@ -396,8 +395,6 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     setvbuf(stdout, NULL, _IONBF, (size_t) 0);
     setvbuf(stdin, NULL, _IONBF, (size_t) 0);	
     
-    pipe(stderr_pipe);
-
     if(!isatty(0)) {
 	term_ptr = NULL;
 	win_ptr  = NULL;
@@ -408,20 +405,17 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     pid = forkpty(&pty_fd, NULL, term_ptr, win_ptr);
 
     if (pid != 0) {
-	close(stderr_pipe[1]);
 
 	sb_init_party_fd(&ctx->sb, &ctx->subproc_stdout, pty_fd, O_RDWR, true,
 			 true);
-	sb_init_party_fd(&ctx->sb, &ctx->subproc_stderr, stderr_pipe[0],
-			 O_RDONLY, true, true);
 	
 	sb_monitor_pid(&ctx->sb, pid, &ctx->subproc_stdout,
-		       &ctx->subproc_stdout, &ctx->subproc_stderr, true);	
+		       &ctx->subproc_stdout, NULL, true);	
 	subproc_install_callbacks(ctx);
 	setup_subscriptions(ctx, true);
 	
 	tcgetattr(0, &ctx->saved_termcap);
-	termcap.c_lflag &= ~(ICANON | ECHO);
+	termcap.c_lflag &= ~(ECHO|ICANON);
 	termcap.c_cc[VMIN]  = 0;
 	termcap.c_cc[VTIME] = 0;
 	tcsetattr(0, TCSANOW, term_ptr);
@@ -429,9 +423,6 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	fcntl(pty_fd, F_SETFL, flags);
 	
     } else {
-	close(stderr_pipe[0]);
-
-	dup2(stderr_pipe[1], 2);
 	termcap.c_lflag &= ~(ICANON | ISIG | IEXTEN);
 	termcap.c_oflag &= ~OPOST;
 	termcap.c_cc[VMIN] = 0;
