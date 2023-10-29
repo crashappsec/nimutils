@@ -290,10 +290,10 @@ static void
 subproc_do_exec(subprocess_t *ctx)
 {
     if (ctx->envp) {
-	execve(ctx->cmd, ctx->argv, ctx->envp);
+	execvP(ctx->cmd, ctx->argv, ctx->envp);
     }
     else {
-	execv(ctx->cmd, ctx->argv);
+	execvp(ctx->cmd, ctx->argv);
     }
     // If we get past the exec, kill the subproc, which will
     // tear down the switchboard.
@@ -393,6 +393,9 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     //
     // Note that this means the child process will see isatty() return
     // true for stdin and stdout, but not stderr.
+    setvbuf(stdout, NULL, _IONBF, (size_t) 0);
+    setvbuf(stdin, NULL, _IONBF, (size_t) 0);	
+    
     pipe(stderr_pipe);
 
     if(!isatty(0)) {
@@ -419,7 +422,7 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	
 	tcgetattr(0, &ctx->saved_termcap);
 	termcap.c_lflag &= ~(ICANON | ECHO);
-	termcap.c_cc[VMIN]  = 1;
+	termcap.c_cc[VMIN]  = 0;
 	termcap.c_cc[VTIME] = 0;
 	tcsetattr(0, TCSANOW, term_ptr);
 	int flags = fcntl(pty_fd, F_GETFL, 0) | O_NONBLOCK;
@@ -433,9 +436,6 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	termcap.c_oflag &= ~OPOST;
 	termcap.c_cc[VMIN] = 1;
 	termcap.c_cc[VTIME] = 0;
-
-	//setvbuf(stdout, NULL, _IONBF, (size_t) 0);
-	//setvbuf(stdin, NULL, _IONBF, (size_t) 0);	
 
 	tcsetattr(pty_fd, TCSANOW, term_ptr);
 	subproc_do_exec(ctx);
@@ -648,6 +648,18 @@ int
 subproc_get_signal(subprocess_t *ctx)
 {
     return sp_result_exit(ctx->result);
+}
+
+void
+subproc_set_extra(subprocess_t *ctx, void *extra)
+{
+    sb_set_extra(&ctx->sb, extra);
+}
+
+void *
+subproc_get_extra(subprocess_t *ctx)
+{
+    return sb_get_extra(&ctx->sb);
 }
 
 #ifdef SB_TEST

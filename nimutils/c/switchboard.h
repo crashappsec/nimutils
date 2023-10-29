@@ -25,7 +25,7 @@ typedef enum
 { PT_STRING = 1, PT_FD = 2, PT_LISTENER = 4, PT_CALLBACK = 8} party_e;
 
 
-typedef void (*switchboard_cb_decl)(void *, void *, char *, size_t);
+typedef void (*switchboard_cb_t)(void *, void *, char *, size_t);
 typedef void (*accept_cb_decl)(void *, int fd, struct sockaddr *, socklen_t *);
 typedef bool (*progress_cb_decl)(void *);
 
@@ -128,7 +128,7 @@ typedef struct {
  * 'extra' field; these are there for you to be able to keep state.
  */
 typedef struct {
-    switchboard_cb_decl callback;
+    switchboard_cb_t callback;
 } callback_party_t;
 
 /*
@@ -286,8 +286,6 @@ typedef struct {
 #define CAP_ALLOC       16 // In # of PIPE_BUF sized chunks
 
 // These are the real signatures.
-typedef void (*switchboard_cb_t)(struct switchboard_t *, struct party_t *,
- 			         char *, size_t);
 typedef void (*accept_cb_t)(struct switchboard_t *, int fd,
 			    struct sockaddr *, socklen_t *);
 typedef bool (*progress_cb_t)(struct switchboard_t *);
@@ -356,6 +354,8 @@ extern char *subproc_get_capture(subprocess_t *, char *, size_t *);
 extern int subproc_get_exit(subprocess_t *);
 extern int subproc_get_errno(subprocess_t *);
 extern int subproc_get_signal(subprocess_t *);
+extern void subproc_set_extra(subprocess_t *, void *);
+extern void *subproc_get_extra(subprocess_t *);
 
 // pty params.
 // ASCII Cinema.

@@ -1,9 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import os, unicode, unicodedb, unicodedb/widths, unicodeid, sugar, markdown,
-       htmlparse, tables, std/terminal, parseutils, options, colortable,
-       rope_base, rope_styles
+import  unicode, markdown, htmlparse, tables, parseutils, colortable, rope_base
 
 from strutils import startswith, replace
 

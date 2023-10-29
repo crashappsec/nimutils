@@ -4,7 +4,7 @@
 ## :Copyright: 2022 - 2023, Crash Override, Inc.
 
 include "headers/md4c.nim"
-import random, strutils
+import random
 
 type MdOpts* = enum
   MdCommonMark              = 0x00000000,

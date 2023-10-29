@@ -26,8 +26,8 @@
 # single-threaded assumption until I bring in my lock-free hash
 # tables.
 
-import tables, options, unicodedb/properties, std/terminal,
-       rope_base, rope_styles, unicodeid, unicode, misc
+import tables, options, unicodedb/properties, std/terminal, rope_base,
+       rope_styles, unicodeid, unicode, misc
 
 type
   RenderBoxKind* = enum RbText, RbBoxes
@@ -56,7 +56,7 @@ proc `$`*(box: RenderBox): string =
 template styleRunes(state: FmtState, runes: seq[uint32]): seq[uint32] =
   @[state.curStyle.getStyleId()] & runes & @[StylePop]
 
-proc applyCurrentStyleToPlane(state: FmtState, p: TextPlane) =
+proc applyCurrentStyleToPlane*(state: FmtState, p: TextPlane) =
   for i in 0 ..< p.lines.len():
     p.lines[i] = state.styleRunes(p.lines[i])
 
@@ -100,9 +100,6 @@ proc noBoxRequired*(r: Rope): bool =
   return true
 
 proc unboxedRunelength*(r: Rope): int =
-  # Used in rope_ansi.nim
-  var subItem: Rope
-
   if r == Rope(nil):
     return 0
   case r.kind
@@ -338,7 +335,6 @@ proc preRenderUnorderedList(state: var FmtState, r: Rope): seq[RenderBox] =
       bulletLen  = bullet.u32LineLength()
       hangPrefix = state.styleRunes(state.pad(bulletLen))
     var
-      bullets: seq[RenderBox]
       subedWidth = true
 
     if bullet.u32LineLength() < state.totalWidth:
@@ -382,7 +378,6 @@ proc preRenderOrderedList(state: var FmtState, r: Rope): seq[RenderBox] =
       maxDigits  = 0
       n          = len(r.items)
       subedWidth = true
-      listItems: seq[RenderBox]
 
     while true:
       maxDigits += 1
@@ -629,7 +624,6 @@ proc preRenderRow(state: var FmtState, r: Rope): seq[RenderBox] =
   taggedBox(tag):
     var
       widths = state.colStack[^1]
-      cell: seq[RenderBox]
 
     # Step 1, make sure col widths are right
     if widths.len() == 0:

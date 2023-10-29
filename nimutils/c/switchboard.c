@@ -366,7 +366,7 @@ sb_init_party_callback(switchboard_t *ctx, party_t *party, switchboard_cb_t cb)
     party->can_read_from_it     = false;
     party->can_write_to_it      = true;
     party->party_type           = PT_CALLBACK;
-    party->info.cbinfo.callback = (switchboard_cb_decl)cb;
+    party->info.cbinfo.callback = (switchboard_cb_t)cb;
 
     register_loner(ctx, party);
 }
@@ -598,6 +598,12 @@ sb_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 		   party_fd(read_from), party_fd(write_to));
 	    #endif
 	}
+	else if (write_to->party_type == PT_CALLBACK) {
+            #if defined(SB_DEBUG) || defined(SB_TEST)
+	    printf("sub(src_fd=%d, dst = callback)\n",
+		   party_fd(read_from));
+	    #endif
+	}
         else {
 	    str_dst_party_t *dob = get_dstr_obj(write_to);
 	    if (!dob->tag) {
@@ -769,7 +775,9 @@ add_data_to_string_out(str_dst_party_t *party, char *buf, ssize_t len) {
 	party->strbuf = realloc(party->strbuf, newlen);
 
 	if (party->strbuf == 0) {
+	    #ifdef SB_DEBUG
 	    printf("REALLOC FAILED.  Skipping capture.\n");
+	    #endif
 	    return;
 	}
 	
@@ -844,7 +852,7 @@ handle_one_read(switchboard_t *ctx, party_t *party)
 		add_data_to_string_out(get_dstr_obj(sub), buf, read_result);
 		break;
 	    case PT_CALLBACK:
-		(*sub->info.cbinfo.callback)(ctx, sub, buf,
+		(*sub->info.cbinfo.callback)(ctx->extra, sub->extra, buf,
 					     (size_t)read_result);
 		break;
 	    default:
@@ -903,8 +911,6 @@ handle_one_write(switchboard_t *ctx, party_t *party)
 
 
     if (!msg) {
-	printf("No queue for fd %d (but selected to write?)\n",
-	       party_fd(party));
 	return;
     }
     

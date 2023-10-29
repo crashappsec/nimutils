@@ -1,8 +1,8 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import tables, options, unicode, misc, colortable, rope_construct,
-       rope_base, rope_prerender, rope_styles
+import options, unicode, misc, colortable, rope_construct, rope_base,
+       rope_prerender, rope_styles
 
 from strutils import join, endswith
 
@@ -76,7 +76,6 @@ proc preRenderBoxToAnsiString*(b: TextPlane, ensureNl = true): string =
   var
     styleInfo:  AnsiStyleInfo
     shouldTitle = false
-    stack: seq[AnsiStyleInfo]
 
   for line in b.lines:
     for ch in line:

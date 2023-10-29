@@ -1,12 +1,18 @@
 import switchboard, posix, random, os, file
 
+{.warning[UnusedImport]: off.}
 {.compile: joinPath(splitPath(currentSourcePath()).head, "c/subproc.c").}
 {.pragma: sproc, cdecl, importc, nodecl.}
 
 type
+  SubProcCallback* =
+    proc (i0: pointer, i1: pointer, i2: cstring, i3: int) {. cdecl, gcsafe .}
+
+type
   SPResultObj* {. importc: "sb_result_t", header: "c/switchboard.h" .} = object
   SPResult* = ptr SPResultObj
-  SubProcess*  {. importc: "subprocess_t" .} = object
+  SubProcess*  {.importc: "subprocess_t", header: "c/switchboard.h" .} = object
+
 
   SPIoKind* = enum SPIoNone = 0, SpIoStdin = 1, SpIoStdout = 2,
               SpIoInOut = 3, SpIoStderr = 4, SpIoInErr = 5,
@@ -24,19 +30,14 @@ proc subproc_get_exit(ctx: var SubProcess): cint {.sproc.}
 proc subproc_get_errno(ctx: var SubProcess): cint {.sproc.}
 proc subproc_get_signal(ctx: var SubProcess): cint {.sproc.}
 
-# Not wrapped.
-# extern bool subproc_set_io_callback(subprocess_t *, unsigned char,
-#                                    switchboard_cb_t);
 # Functions we can call directly w/o a nim proxy.
 proc setPassthroughRaw*(ctx: var SubProcess, which: SPIoKind, combine: bool)
     {.cdecl, importc: "subproc_set_passthrough", nodecl.}
-
 template setPassthrough*(ctx: var SubProcess, which = SPIoAll, merge = false) =
   ctx.setPassthroughRaw(which, merge)
 
 proc setCaptureRaw*(ctx: var SubProcess, which: SPIoKind, combine: bool)
     {.cdecl, importc: "subproc_set_capture", nodecl.}
-
 template setCapture*(ctx: var SubProcess, which = SPIoOutErr, merge = false) =
   ctx.setCaptureRaw(which, merge)
 
@@ -54,6 +55,16 @@ proc run*(ctx: var SubProcess): SpResult
 proc close*(ctx: var SubProcess) {.cdecl, importc: "subproc_close", nodecl.}
 proc getPid*(ctx: var SubProcess): Pid
     {.cdecl, importc: "subproc_get_pid", nodecl.}
+proc setExtra*(ctx: var SubProcess, p: pointer)
+    {.cdecl, importc: "subproc_set_extra", nodecl.}
+proc getExtra*(ctx: var SubProcess): pointer
+    {.cdecl, importc: "subproc_get_extra", nodecl.}
+proc setIoCallback*(ctx: var SubProcess, which: SpIoKind,
+                           callback: SubProcCallback): bool
+    {.cdecl, importc: "subproc_set_io_callback", nodecl, discardable.}
+proc rawFdWrite*(fd: cint, buf: pointer, l: csize_t)
+    {.cdecl, importc: "write_data", nodecl.}
+
 
 # Nim proxies. Note that the allocCStringArray() calls are going to leak
 # for the time being. We should clean them up in a destructor.
@@ -118,8 +129,9 @@ proc runCommand*(exe:  string,
                  combineCapture          = false,
                  timeoutUsec             = 1000): ExecOutput =
   ## One-shot interface
-  var subproc: SubProcess
-  var timeout: Timeval
+  var
+    subproc: SubProcess
+    timeout: Timeval
 
   timeout.tv_sec  = Time(timeoutUsec / 1000000)
   timeout.tv_usec = Suseconds(timeoutUsec mod 1000000)
@@ -189,7 +201,8 @@ proc runPager*(s: string) =
     if len(more) > 0:
       exe = more[0]
     else:
-      raise newException(ValueError, "Could not find 'more' or 'less' in your path.")
+      raise newException(ValueError,
+                         "Could not find 'more' or 'less' in your path.")
 
   runInteractiveCmd(exe, flags, s)
 

@@ -3,7 +3,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022 - 2023, Crash Override, Inc.
 
-import tables, strutils, os, unicode
+import tables, strutils, unicode
 
 type
   HtmlNodeType* = enum
