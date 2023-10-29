@@ -9,9 +9,9 @@ type
     proc (i0: pointer, i1: pointer, i2: cstring, i3: int) {. cdecl, gcsafe .}
 
 type
-  SPResultObj* {. importc: "sb_result_t", header: "switchboard.h" .} = object
+  SPResultObj* {. importc: "sb_result_t", header: joinPath(splitPath(currentSourcePath()).head, "switchboard.h") .} = object
   SPResult* = ptr SPResultObj
-  SubProcess*  {.importc: "subprocess_t", header: "switchboard.h" .} = object
+  SubProcess*  {.importc: "subprocess_t", header: joinPath(splitPath(currentSourcePath()).head, "switchboard.h") .} = object
 
 
   SPIoKind* = enum SPIoNone = 0, SpIoStdin = 1, SpIoStdout = 2,
