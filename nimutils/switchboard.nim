@@ -1,4 +1,4 @@
 import os
 
 static:
-  {.compile: joinPath(splitPath(currentSourcePath()).head, "c/switchboard.c").}
+  {.compile: joinPath(splitPath(currentSourcePath()).head, "switchboard.c").}
