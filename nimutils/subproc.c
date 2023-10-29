@@ -432,9 +432,9 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	close(stderr_pipe[0]);
 
 	dup2(stderr_pipe[1], 2);
-	termcap.c_lflag &= ~(ICANON | ISIG | IEXTEN | ECHO);
+	termcap.c_lflag &= ~(ICANON | ISIG | IEXTEN);
 	termcap.c_oflag &= ~OPOST;
-	termcap.c_cc[VMIN] = 1;
+	termcap.c_cc[VMIN] = 0;
 	termcap.c_cc[VTIME] = 0;
 
 	tcsetattr(pty_fd, TCSANOW, term_ptr);
