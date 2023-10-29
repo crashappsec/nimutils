@@ -1,7 +1,7 @@
 import switchboard, posix, random, os, file
 
 {.warning[UnusedImport]: off.}
-{.compile: joinPath(splitPath(currentSourcePath()).head, "c/subproc.c").}
+{.compile: joinPath(splitPath(currentSourcePath()).head, "subproc.c").}
 {.pragma: sproc, cdecl, importc, nodecl.}
 
 type
@@ -9,9 +9,9 @@ type
     proc (i0: pointer, i1: pointer, i2: cstring, i3: int) {. cdecl, gcsafe .}
 
 type
-  SPResultObj* {. importc: "sb_result_t", header: "c/switchboard.h" .} = object
+  SPResultObj* {. importc: "sb_result_t", header: "switchboard.h" .} = object
   SPResult* = ptr SPResultObj
-  SubProcess*  {.importc: "subprocess_t", header: "c/switchboard.h" .} = object
+  SubProcess*  {.importc: "subprocess_t", header: "switchboard.h" .} = object
 
 
   SPIoKind* = enum SPIoNone = 0, SpIoStdin = 1, SpIoStdout = 2,
