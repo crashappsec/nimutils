@@ -1,7 +1,6 @@
 /*
  * Currently, we're using select() here, not epoll(), etc.
  */
-
 #ifndef SWITCHBOARD_H__
 #include "switchboard.h"
 #if defined(SB_DEBUG) || defined(SB_TEST)
@@ -425,13 +424,36 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     } else {
 	termcap.c_lflag &= ~(ICANON | ISIG | IEXTEN);
 	termcap.c_oflag &= ~OPOST;
-	termcap.c_cc[VMIN] = 0;
+	termcap.c_cc[VMIN]  = 0;
 	termcap.c_cc[VTIME] = 0;
 
 	tcsetattr(pty_fd, TCSANOW, term_ptr);
 	subproc_do_exec(ctx);
     }
 }
+
+void
+termcap_get(struct termios *termcap) {
+    tcgetattr(0, termcap);
+}
+
+void
+termcap_set(struct termios *termcap) {
+    tcsetattr(0, TCSANOW, termcap);
+}
+
+void
+termcap_set_typical_parent() {
+    struct termios cap;
+
+    tcgetattr(0, &cap);
+    
+    cap.c_lflag &= ~(ECHO|ICANON);
+    cap.c_cc[VMIN]  = 0;
+    cap.c_cc[VTIME] = 0;
+    tcsetattr(0, TCSANOW, &cap);
+}
+
 
 /*
  * Start a subprocess if you want to be responsible for making

@@ -1,7 +1,6 @@
 /*
  * Currently, we're using select() here, not epoll(), etc.
  */
-
 #ifndef SWITCHBOARD_H__
 #include "switchboard.h"
 #if defined(SB_DEBUG) || defined(SB_TEST)
@@ -1342,7 +1341,7 @@ sb_operate_switchboard(switchboard_t *ctx, bool loop)
     if (ctx->done && !waiting_writes(ctx)) {
 	return true;
     }
-    while (loop) {
+    do {
 	set_fdinfo(ctx);
 	if (sb_default_check_exit_conditions(ctx)) {
 	    return true;
@@ -1355,7 +1354,7 @@ sb_operate_switchboard(switchboard_t *ctx, bool loop)
 	handle_ready_reads(ctx);
 	handle_ready_writes(ctx);
 	handle_loop_end(ctx);
-    }
+    } while(loop);
     return false;
 }
 

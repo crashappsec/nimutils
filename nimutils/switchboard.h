@@ -356,7 +356,9 @@ extern int subproc_get_errno(subprocess_t *);
 extern int subproc_get_signal(subprocess_t *);
 extern void subproc_set_extra(subprocess_t *, void *);
 extern void *subproc_get_extra(subprocess_t *);
-
+extern void termcap_get(struct termios *);
+extern void termcap_set(struct termios *);
+extern void termcap_set_typical_parent();
 // pty params.
 // ASCII Cinema.
 #endif

@@ -5,18 +5,20 @@ import switchboard, posix, random, os, file
 {.pragma: sproc, cdecl, importc, nodecl.}
 
 type
+  Termcap* {. importc: "struct termios", header: "<termios.h>" .} = object
   SubProcCallback* =
     proc (i0: pointer, i1: pointer, i2: cstring, i3: int) {. cdecl, gcsafe .}
-
-type
+  SPIoKind* = enum
+    SPIoNone = 0, SpIoStdin = 1, SpIoStdout = 2,
+    SpIoInOut = 3, SpIoStderr = 4, SpIoInErr = 5,
+    SpIoOutErr = 6, SpIoAll = 7
   SPResultObj* {. importc: "sb_result_t", header: joinPath(splitPath(currentSourcePath()).head, "switchboard.h") .} = object
   SPResult* = ptr SPResultObj
   SubProcess*  {.importc: "subprocess_t", header: joinPath(splitPath(currentSourcePath()).head, "switchboard.h") .} = object
 
-
-  SPIoKind* = enum SPIoNone = 0, SpIoStdin = 1, SpIoStdout = 2,
-              SpIoInOut = 3, SpIoStderr = 4, SpIoInErr = 5,
-              SpIoOutErr = 6, SpIoAll = 7
+proc termcap_get*(termcap: var Termcap) {.sproc.}
+proc termcap_set*(termcap: var Termcap) {.sproc.}
+proc termcap_set_typical_parent*() {.sproc.}
 
 proc subproc_init(ctx: var SubProcess, cmd: cstring, args: cStringArray)
     {.sproc.}
