@@ -113,11 +113,11 @@ proc preRenderBoxToAnsiString*(b: TextPlane, ensureNl = true): string =
     if getShowColor():
       result &= ansiReset()
 
-  if ensureNl and not result.endswith("\n"):
-    if styleInfo.ansiStart.len() > 0 and getShowColor():
-      result &= ansiReset() & styleInfo.ansiStart & "\n" & ansiReset()
-    else:
-      result = "\n"
+  # if ensureNl and not result.endswith("\n"):
+  #   if styleInfo.ansiStart.len() > 0 and getShowColor():
+  #     result &= ansiReset() & styleInfo.ansiStart & "\n" & ansiReset()
+  #   else:
+  #     result = "\n"
 
 template stylizeMd*(s: string, width = -1, showLinks = false,
                     ensureNl = true, style = defaultStyle): string =
