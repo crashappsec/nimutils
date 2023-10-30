@@ -134,11 +134,18 @@ proc runCommand*(exe:  string,
   var
     subproc: SubProcess
     timeout: Timeval
+    binloc:  string
+    binlocs = exe.findAllExePaths()
+
+  if binlocs.len() == 0:
+    binloc = exe
+  else:
+    binloc = binlocs[0]
 
   timeout.tv_sec  = Time(timeoutUsec / 1000000)
   timeout.tv_usec = Suseconds(timeoutUsec mod 1000000)
 
-  subproc.initSubprocess(exe, @[exe] & args)
+  subproc.initSubprocess(binloc, @[exe] & args)
   subproc.setTimeout(timeout)
 
   if len(env) != 0:

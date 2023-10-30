@@ -297,10 +297,10 @@ static void
 subproc_do_exec(subprocess_t *ctx)
 {
     if (ctx->envp) {
-	execvP(ctx->cmd, ctx->argv, ctx->envp);
+	execve(ctx->cmd, ctx->argv, ctx->envp);
     }
     else {
-	execvp(ctx->cmd, ctx->argv);
+	execv(ctx->cmd, ctx->argv);
     }
     // If we get past the exec, kill the subproc, which will
     // tear down the switchboard.
