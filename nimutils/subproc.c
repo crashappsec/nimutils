@@ -1,10 +1,18 @@
 /*
  * Currently, we're using select() here, not epoll(), etc.
  */
+
+#if defined(__linux__)
+#include <pty.h>
+#elif defined(__APPLE__)
+#include <util.h>
+#else
+#error "Platform not supported"
+#endif
+#include <stdio.h>
 #ifndef SWITCHBOARD_H__
 #include "switchboard.h"
 #if defined(SB_DEBUG) || defined(SB_TEST)
-#include <stdio.h>
 #include "test.c"
 #include "hex.h"
 #endif

@@ -121,7 +121,6 @@ type ExecOutput* = object
 
 proc runCommand*(exe:  string,
                  args: seq[string],
-                 env:  openarray[string] = [],
                  newStdin                = "",
                  closeStdIn              = false,
                  pty                     = false,
@@ -129,7 +128,8 @@ proc runCommand*(exe:  string,
                  passStderrToStdin       = false,
                  capture                 = SpIoOutErr,
                  combineCapture          = false,
-                 timeoutUsec             = 1000): ExecOutput =
+                 timeoutUsec             = 1000,
+                 env:  openarray[string] = []): ExecOutput =
   ## One-shot interface
   var
     subproc: SubProcess
@@ -171,15 +171,15 @@ template runInteractiveCmd*(path: string,
   discard runCommand(path, args, passthrough = SpIoAll, capture = SpIoNone,
                      newStdin = passToChild, closeStdin = closeIt, pty = true)
 
-template runCmdGetEverything*(exe:  string,
+proc runCmdGetEverything*(exe:  string,
                               args: seq[string],
                               newStdIn    = "",
                               closeStdIn  = false,
                               passthrough = false,
                               timeoutUsec = 1000000): ExecOutput =
-  discard runCommand(exe, args, newStdin, closeStdin, pty = false,
-                     passthrough = if passthrough: SpIoAll else: SpIoNone,
-                     timeoutUSec = timeoutUsec, capture = SpIoOutErr)
+  return runCommand(exe, args, newStdin, closeStdin, pty = false,
+                    passthrough = if passthrough: SpIoAll else: SpIoNone,
+                    timeoutUSec = timeoutUsec, capture = SpIoOutErr)
 
 
 proc runPager*(s: string) =

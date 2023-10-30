@@ -11,7 +11,6 @@
 #include <limits.h>
 #include <signal.h>
 #include <termios.h>
-#include <util.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/types.h>
