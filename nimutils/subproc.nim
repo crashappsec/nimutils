@@ -185,7 +185,7 @@ template runInteractiveCmd*(path: string,
 proc runCmdGetEverything*(exe:  string,
                               args: seq[string],
                               newStdIn    = "",
-                              closeStdIn  = false,
+                              closeStdIn  = true,
                               passthrough = false,
                               timeoutUsec = 1000000): ExecOutput =
   return runCommand(exe, args, newStdin, closeStdin, pty = false,
