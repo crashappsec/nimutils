@@ -48,8 +48,10 @@ proc setTimeout*(ctx: var SubProcess, value: var Timeval)
 proc clearTimeout*(ctx: var SubProcess)
     {.cdecl, importc: "subproc_clear_timeout", nodecl.}
 proc usePty*(ctx: var SubProcess) {.cdecl, importc: "subproc_use_pty", nodecl.}
+proc getPtyFd*(ctx: var SubProcess): cint
+    {.cdecl, importc: "subproc_get_pty_fd", nodecl.}
 proc start*(ctx: var SubProcess) {.cdecl, importc: "subproc_start", nodecl.}
-proc poll*(ctx: var SubProcess) {.cdecl, importc: "subproc_poll", nodecl.}
+proc poll*(ctx: var SubProcess): bool {.cdecl, importc: "subproc_poll", nodecl.}
 proc getResult*(ctx: var SubProcess): SPResult
     {.cdecl, importc: "subproc_get_result", nodecl.}
 proc run*(ctx: var SubProcess): SpResult

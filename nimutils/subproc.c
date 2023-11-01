@@ -412,7 +412,8 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     pid = forkpty(&pty_fd, NULL, term_ptr, win_ptr);
 
     if (pid != 0) {
-
+	ctx->pty_fd = pty_fd;
+	
 	sb_init_party_fd(&ctx->sb, &ctx->subproc_stdout, pty_fd, O_RDWR, true,
 			 true);
 	
@@ -681,6 +682,12 @@ void *
 subproc_get_extra(subprocess_t *ctx)
 {
     return sb_get_extra(&ctx->sb);
+}
+
+int
+subproc_get_pty_fd(subprocess_t *ctx)
+{
+    return ctx->pty_fd;
 }
 
 #ifdef SB_TEST

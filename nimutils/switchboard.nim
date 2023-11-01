@@ -51,7 +51,6 @@ template run*(ctx: var Switchboard, toCompletion = false) =
 
 proc close*(ctx: var Switchboard) = ctx.sb_destroy(false)
 
-
 # Not yet wrapped:
 ## extern void sb_init_party_listener(switchboard_t *, party_t *, int,
 ## 	 		        accept_cb_t, bool, bool);
