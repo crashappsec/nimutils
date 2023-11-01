@@ -159,6 +159,8 @@ proc runCommand*(exe:  string,
   if capture != SpIoNone:
     subproc.setCapture(capture, combineCapture)
 
+  if newStdIn != "":
+    discard subproc.pipeToStdin(newStdin, closeStdin)
   subproc.run()
 
   result.pid      = subproc.getPid()
@@ -172,13 +174,13 @@ template getStdout*(o: ExecOutput): string = o.stdout
 template getStderr*(o: ExecOutput): string = o.stderr
 template getExit*(o: ExecOutput): int      = o.exitCode
 
-
 template runInteractiveCmd*(path: string,
                             args: seq[string],
-                            passToChild = "") =
-  let closeIt = if passToChild == "": false else: true
+                            passToChild = "",
+                            closeFdAfterPass = true) =
   discard runCommand(path, args, passthrough = SpIoAll, capture = SpIoNone,
-                     newStdin = passToChild, closeStdin = closeIt, pty = true)
+                     newStdin = passToChild, closeStdin = closeFdAfterPass,
+                     pty = true)
 
 proc runCmdGetEverything*(exe:  string,
                               args: seq[string],

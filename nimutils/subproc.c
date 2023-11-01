@@ -76,8 +76,13 @@ bool
 subproc_pass_to_stdin(subprocess_t *ctx, char *str, size_t len, bool close_fd)
 {
     if (ctx->str_waiting || ctx->sb.done) {
+	return false;	
+    }
+
+    if (ctx->run && close_fd) {
 	return false;
     }
+
     sb_init_party_input_buf(&ctx->sb, &ctx->str_stdin, str, len, false,
 			    close_fd);
     
@@ -85,6 +90,11 @@ subproc_pass_to_stdin(subprocess_t *ctx, char *str, size_t len, bool close_fd)
 	return sb_route(&ctx->sb, &ctx->str_stdin, &ctx->subproc_stdin);
     } else {
 	ctx->str_waiting = true;
+
+	if (close_fd) {
+	    ctx->pty_stdin_pipe = true;
+	}
+	
 	return true;
     }
 }
@@ -281,11 +291,7 @@ setup_subscriptions(subprocess_t *ctx, bool pty)
     }
     
     if (ctx->str_waiting) {
-	if (pty) {
-	    sb_route(&ctx->sb, &ctx->str_stdin, &ctx->subproc_stdout);
-	} else {
-	    sb_route(&ctx->sb, &ctx->str_stdin, &ctx->subproc_stdin);
-	}
+	sb_route(&ctx->sb, &ctx->str_stdin, &ctx->subproc_stdin);
 	ctx->str_waiting = false;
     }
     
@@ -368,7 +374,6 @@ subproc_spawn_fork(subprocess_t *ctx)
 	subproc_install_callbacks(ctx);
 	setup_subscriptions(ctx, false);	
     } else {
-	fflush(stdout);
 	close(stdin_pipe[1]);
 	close(stdout_pipe[0]);		
 	close(stderr_pipe[0]);
@@ -389,7 +394,13 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     struct winsize *win_ptr  = &wininfo;
     pid_t           pid;
     int             pty_fd;
+    int             stdin_pipe[2];
 
+
+    if (ctx->pty_stdin_pipe) {
+	pipe(stdin_pipe);
+    }
+    
     // We're going to use a pipe for stderr to get a separate
     // stream. The tty FD will be stdin and stdout for the child
     // process.
@@ -412,6 +423,13 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     pid = forkpty(&pty_fd, NULL, term_ptr, win_ptr);
 
     if (pid != 0) {
+
+	if (ctx->pty_stdin_pipe) {
+	    close(stdin_pipe[0]);
+	    sb_init_party_fd(&ctx->sb, &ctx->subproc_stdin, stdin_pipe[1],
+			     O_WRONLY, false, false);
+	}
+	
 	ctx->pty_fd = pty_fd;
 	
 	sb_init_party_fd(&ctx->sb, &ctx->subproc_stdout, pty_fd, O_RDWR, true,
@@ -431,6 +449,11 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	fcntl(pty_fd, F_SETFL, flags);
 	
     } else {
+	if (ctx->pty_stdin_pipe) {
+	    close(stdin_pipe[1]);
+	    dup2(stdin_pipe[0], 0);
+	}
+	
 	termcap.c_lflag &= ~(ICANON | ISIG | IEXTEN);
 	termcap.c_oflag &= ~OPOST;
 	termcap.c_cc[VMIN]  = 0;
