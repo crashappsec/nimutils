@@ -607,11 +607,6 @@ sp_result_capture(sp_result_t *ctx, char *tag, size_t *outlen)
     return NULL;
 }
 
-int
-sp_result_signal(sp_result_t *ctx)
-{
-}
-
 char *
 subproc_get_capture(subprocess_t *ctx, char *tag, size_t *outlen)
 {
