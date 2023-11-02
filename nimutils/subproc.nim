@@ -190,10 +190,9 @@ proc runCmdGetEverything*(exe:  string,
                               closeStdIn  = true,
                               passthrough = false,
                               timeoutUsec = 1000000): ExecOutput =
-  return runCommand(exe, args, newStdin, closeStdin, pty = false,
-                    passthrough = if passthrough: SpIoAll else: SpIoNone,
-                    timeoutUSec = timeoutUsec, capture = SpIoOutErr)
-
+  result = runCommand(exe, args, newStdin, closeStdin, pty = false,
+                      passthrough = if passthrough: SpIoAll else: SpIoNone,
+                      timeoutUSec = timeoutUsec, capture = SpIoOutErr)
 
 proc runPager*(s: string) =
   var

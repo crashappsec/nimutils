@@ -1312,6 +1312,28 @@ sb_prepare_results(switchboard_t *ctx)
     procs = ctx->pid_watch_list;
 
     for (ix = 0; ix < proccount; ix++) {
+
+	if (!procs->closed) {
+	    int stat_info;
+	    switch (waitpid(procs->pid, &stat_info, WNOHANG)) {
+	    case 0:
+		break;
+	    case -1:
+		// Not handling EINTR here.
+		subproc_mark_closed(ctx, procs, true);
+		break;
+	    default:
+		subproc_mark_closed(ctx, procs, false);
+		if (WIFSIGNALED(stat_info)) {
+		    procs->term_signal = WTERMSIG(stat_info);
+		}
+		else {
+		    procs->exit_status = WEXITSTATUS(stat_info);
+		}
+		break;
+	    }
+	}
+	
 	ctx->result.process_info[ix].pid = procs->pid;
 	ctx->result.process_info[ix].found_errno = procs->found_errno;
 	ctx->result.process_info[ix].term_signal = procs->term_signal;
