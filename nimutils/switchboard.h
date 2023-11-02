@@ -217,13 +217,13 @@ typedef struct {
 } capture_result_t;
 
 typedef struct {
-    char dummy[1024];
-    int  exit_status;
+    //char dummy[1024];
     int  pid;
     int  found_errno;
     int  term_signal;
     bool exited;
-    char dummy2[1024];    
+    int  exit_status;
+    //char dummy2[1024];    
 } process_result_t;
 
 typedef struct {

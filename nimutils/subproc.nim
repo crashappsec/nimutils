@@ -172,6 +172,8 @@ proc runCommand*(exe:  string,
   result.stdin    = subproc.getStdin()
   result.stderr   = subproc.getStderr()
 
+  echo result.exitCode
+
 template getStdout*(o: ExecOutput): string = o.stdout
 template getStderr*(o: ExecOutput): string = o.stderr
 template getExit*(o: ExecOutput): int      = o.exitCode
