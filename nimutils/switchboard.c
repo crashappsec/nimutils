@@ -1286,7 +1286,7 @@ sb_prepare_results(switchboard_t *ctx)
     ctx->result.num_captures = capcount;
     ctx->result.num_procs    = proccount;
     ctx->result.captures     = calloc(sizeof(capture_result_t), capcount+1);
-    ctx->result.process_info = calloc(sizeof(process_result_t), proccount+1);  
+    ctx->result.process_info = calloc(sizeof(process_result_t), proccount+1);
 
     party = ctx->party_loners; 
     
