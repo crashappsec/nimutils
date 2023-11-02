@@ -1266,9 +1266,7 @@ sb_prepare_results(switchboard_t *ctx)
     sb_result_t     *cur;
     str_dst_party_t *strobj;
     party_t         *party     = ctx->party_loners;  // Look for string outputs.
-    monitor_t       *procs     = ctx->pid_watch_list;
     int              capcount  = 0;
-    int              proccount = 0;
     int              ix        = 0;
 
     while (party) {
@@ -1278,16 +1276,9 @@ sb_prepare_results(switchboard_t *ctx)
 	party = party->next_loner;
     }
 
-    while (procs) {
-	proccount++;
-	procs = procs->next;
-    }
-
-    ctx->result.num_captures = capcount;
-    ctx->result.num_procs    = proccount;
-    ctx->result.captures     = calloc(sizeof(capture_result_t), capcount+1);
-    ctx->result.process_info = calloc(sizeof(process_result_t), proccount+1);
-
+    ctx->result.num_captures    = capcount;
+    ctx->result.captures        = calloc(sizeof(capture_result_t), capcount+1);
+    
     party = ctx->party_loners; 
     
     while (party) {	
@@ -1309,47 +1300,6 @@ sb_prepare_results(switchboard_t *ctx)
 	    ix += 1;
 	}
 	party = party->next_loner;
-    }
-
-    procs = ctx->pid_watch_list;
-
-    for (ix = 0; ix < proccount; ix++) {
-
-	if (!procs->closed) {
-	    int stat_info;
-	    switch (waitpid(procs->pid, &stat_info, WNOHANG)) {
-	    case 0:
-		break;
-	    case -1:
-		// Not handling EINTR here.
-		subproc_mark_closed(ctx, procs, true);
-		break;
-	    default:
-		subproc_mark_closed(ctx, procs, false);
-		if (WIFSIGNALED(stat_info)) {
-		    procs->term_signal = WTERMSIG(stat_info);
-		}
-		else {
-		    procs->exit_status = WEXITSTATUS(stat_info);
-		}
-		break;
-	    }
-	}
-
-	process_result_t *r = ctx->result.process_info + ix;
-	r->pid         = procs->pid;
-	r->found_errno = procs->found_errno;
-	r->term_signal = procs->term_signal;
-	r->exit_status = procs->exit_status;
-	r->exited      = procs->closed;
-
-	if (!procs->closed || !ctx->ignore_running_procs_on_shutdown) {
-	    // No need to send a kill. Allow graceful shutdown or
-	    // ignoring.
-	    kill(procs->pid, SIGTERM);
-	}
-	
-	procs = procs->next;
     }
 }
 

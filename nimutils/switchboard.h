@@ -199,6 +199,7 @@ typedef struct party_t {
  */
 typedef struct monitor_t {
     struct monitor_t *next;
+    int               exit_status;
     pid_t             pid;
     party_t          *stdin_fd_party; 
     party_t          *stdout_fd_party;
@@ -207,7 +208,6 @@ typedef struct monitor_t {
     bool              closed;
     int               found_errno;
     int               term_signal;
-    int               exit_status;
 } monitor_t;    
 
 typedef struct {
@@ -217,18 +217,8 @@ typedef struct {
 } capture_result_t;
 
 typedef struct {
-    int  pid;
-    int  found_errno;
-    int  term_signal;
-    bool exited;
-    int  exit_status;
-} process_result_t;
-
-typedef struct {
     int               num_captures;
     capture_result_t *captures;
-    int               num_procs;
-    process_result_t *process_info;
 } sb_result_t;
 
 /*
@@ -357,9 +347,6 @@ extern void subproc_run(subprocess_t *);
 extern void subproc_close(subprocess_t *);
 extern pid_t subproc_get_pid(subprocess_t *);
 extern char *sp_result_capture(sp_result_t *, char *, size_t *);
-extern int sp_result_exit(sp_result_t *);
-extern int sp_result_errno(sp_result_t *);
-extern int sp_result_signal(sp_result_t *);
 extern char *subproc_get_capture(subprocess_t *, char *, size_t *);
 extern int subproc_get_exit(subprocess_t *);
 extern int subproc_get_errno(subprocess_t *);

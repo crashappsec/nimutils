@@ -608,21 +608,8 @@ sp_result_capture(sp_result_t *ctx, char *tag, size_t *outlen)
 }
 
 int
-sp_result_exit(sp_result_t *ctx)
-{
-    return ctx->process_info[0].exit_status;
-}
-
-int
-sp_result_errno(sp_result_t *ctx)
-{
-    return ctx->process_info[0].found_errno;    
-}
-
-int
 sp_result_signal(sp_result_t *ctx)
 {
-    return ctx->process_info[0].term_signal;
 }
 
 char *
@@ -634,19 +621,34 @@ subproc_get_capture(subprocess_t *ctx, char *tag, size_t *outlen)
 int
 subproc_get_exit(subprocess_t *ctx)
 {
-    return sp_result_exit(&ctx->sb.result);
+    monitor_t *subproc = ctx->sb.pid_watch_list;
+
+    if (!subproc) {
+	return -1;
+    }
+    return subproc->exit_status;
 }
 
 int
 subproc_get_errno(subprocess_t *ctx)
 {
-    return sp_result_exit(&ctx->sb.result);
+    monitor_t *subproc = ctx->sb.pid_watch_list;
+
+    if (!subproc) {
+	return -1;
+    }
+    return subproc->found_errno;
 }
 
 int
 subproc_get_signal(subprocess_t *ctx)
 {
-    return sp_result_exit(&ctx->sb.result);
+    monitor_t *subproc = ctx->sb.pid_watch_list;
+
+    if (!subproc) {
+	return -1;
+    }
+    return subproc->term_signal;
 }
 
 void
