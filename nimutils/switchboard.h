@@ -218,11 +218,11 @@ typedef struct {
 
 typedef struct {
     //char dummy[1024];
+    int  exit_status;
     int  pid;
     int  found_errno;
     int  term_signal;
     bool exited;
-    int  exit_status;
     //char dummy2[1024];    
 } process_result_t;
 
