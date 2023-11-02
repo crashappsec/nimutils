@@ -116,7 +116,7 @@ proc getErrno*(ctx: var SubProcess): int =
 proc getSignal*(ctx: var SubProcess): int =
   return int(subproc_get_signal(ctx))
 
-type ExecOutput* = object
+type ExecOutput* = ref object
     stdin*:    string
     stdout*:   string
     stderr*:   string
