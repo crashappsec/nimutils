@@ -626,6 +626,8 @@ subproc_get_exit(subprocess_t *ctx)
     if (!subproc) {
 	return -1;
     }
+
+    process_status_check(subproc);    
     return subproc->exit_status;
 }
 
@@ -637,6 +639,8 @@ subproc_get_errno(subprocess_t *ctx)
     if (!subproc) {
 	return -1;
     }
+    
+    process_status_check(subproc);
     return subproc->found_errno;
 }
 
@@ -648,6 +652,8 @@ subproc_get_signal(subprocess_t *ctx)
     if (!subproc) {
 	return -1;
     }
+
+    process_status_check(subproc);    
     return subproc->term_signal;
 }
 

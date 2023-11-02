@@ -1015,7 +1015,7 @@ handle_ready_writes(switchboard_t *ctx)
 
 // If a subprocess shut down, clean up.
 static inline void
-subproc_mark_closed(switchboard_t *ctx, monitor_t *proc, bool error)
+subproc_mark_closed(monitor_t *proc, bool error)
 {
     proc->closed = true;
 
@@ -1096,6 +1096,38 @@ sb_default_check_exit_conditions(switchboard_t *ctx)
     return true;
 }
 
+void
+process_status_check(monitor_t *subproc)
+{
+    int stat_info;
+    
+    if (subproc->closed) {
+	return;
+    }
+
+    while (true) {
+	switch (waitpid(subproc->pid, &stat_info, WNOHANG)) {
+	case 0:
+	    return; // Process is sill running.
+	case -1:
+	    if (errno == EINTR) {
+		continue;
+	    }
+	    subproc->closed      = true;
+	    subproc->found_errno = errno;
+	    return;
+	default:
+	    subproc->closed      = true;
+	    subproc->exit_status = WEXITSTATUS(stat_info);
+	    
+	    if (WIFSIGNALED(stat_info)) {
+		subproc->term_signal = WTERMSIG(stat_info);
+	    }
+	    return;
+	}
+    }
+}
+
 /*
  * Every time we finish a select, check to see if we need to invoke
  * the progress callback, and if we should exit.
@@ -1114,32 +1146,9 @@ static inline void
 handle_loop_end(switchboard_t *ctx)
 {
     monitor_t *subproc = ctx->pid_watch_list;
-    int        stat_info;
 
     while (subproc != NULL) {
-	if (subproc->closed) {
-	    subproc = subproc->next;
-	    continue;
-	}
-
-	switch (waitpid(subproc->pid, &stat_info, WNOHANG)) {
-	case 0:
-	    break;
-	case -1:
-	    if (errno == EINTR) {
-		break;
-	    }
-	    subproc_mark_closed(ctx, subproc, true);
-	    break;
-	default:
-	    subproc_mark_closed(ctx, subproc, false);
-	    if (WIFSIGNALED(stat_info)) {
-		subproc->term_signal = WTERMSIG(stat_info);
-	    }
-	    else {
-		subproc->exit_status = WEXITSTATUS(stat_info);
-	    }
-	}
+	process_status_check(subproc);
 	subproc = subproc->next;
     }
 
