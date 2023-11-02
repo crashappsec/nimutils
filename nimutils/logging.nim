@@ -29,7 +29,7 @@ const
 
   pre        = "<bg-default>"
   post       = "</bg-default>"
-  errPrefix  = pre & "<red>error:  </red>" & post
+  errPrefix  = pre & "<red>error: </red>" & post
   warnPrefix = pre & "<yellow>warn:  </yellow>" & post
   infoPrefix = pre & "<atomiclime>info:  </atomiclime>" & post
   trPrefix   = pre & "<jazzberry>trace: </jazzberry>" & post
@@ -37,10 +37,10 @@ const
 
 var logLevelPrefixes = {
   llNone:  "",
-  llError: errPrefix.stylize(),
-  llWarn:  warnPrefix.stylize(),
-  llInfo:  infoPrefix.stylize(),
-  llTrace: trPrefix.stylize(),
+  llError: errPrefix,
+  llWarn:  warnPrefix,
+  llInfo:  infoPrefix,
+  llTrace: trPrefix,
 }.toTable()
 
 const keyLogLevel*  = "loglevel"
@@ -69,7 +69,7 @@ proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
     if llStr in toLogLevelMap:
       let
         msgLevel = toLogLevelMap[llStr]
-        prefix   = logLevelPrefixes[msgLevel]
+        prefix   = logLevelPrefixes[msgLevel].stylizeHtml(ensureNl = false)
 
       return (prefix & msg, true)
   else:

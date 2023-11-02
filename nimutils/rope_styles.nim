@@ -72,6 +72,13 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
     if len(borders) != 0:
       for item in borders:
         case item
+        of BorderNone:
+          result.useTopBorder    = some(false)
+          result.useBottomBorder = some(false)
+          result.useLeftBorder   = some(false)
+          result.useRightBorder  = some(false)
+          result.useVerticalSeparator = some(false)
+          result.useHorizontalSeparator = some(false)
         of BorderTop:
           result.useTopBorder = some(true)
         of BorderBottom:
@@ -90,6 +97,7 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
           result.useLeftBorder = some(true)
           result.useRightBorder = some(true)
           result.useVerticalSeparator = some(true)
+          result.useHorizontalSeparator = some(false)
         of BorderAll:
           result.useTopBorder = some(true)
           result.useBottomBorder = some(true)

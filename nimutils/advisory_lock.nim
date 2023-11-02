@@ -17,7 +17,7 @@ import os, streams, misc, posix, file
 #include <signal.h>
 #include <stdbool.h>
 
-extern bool read_data(int fd, void *buf, size_t nbytes);
+extern bool read_one(int fd, void *buf, size_t nbytes);
 extern bool write_data(int fd, NCSTRING buf, NI nbytes);
 
 bool
@@ -35,7 +35,7 @@ lock_file(char *lfpath, int max_attempts) {
                 return false;
             }
 
-            result = read_data(fd, &pid, sizeof(pid));
+            result = read_one(fd, &pid, sizeof(pid));
             close(fd);
             if (result) {
                 if (pid == getpid()) {

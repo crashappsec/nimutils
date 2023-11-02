@@ -58,7 +58,7 @@ proc tmpfile_on_exit*() {.destructor.} =
   if onExitCopyDir != "":
     try:
       createDir(onExitCopyDir)
-      for item in managedTmpDirs & managedTmpFiles:
+      for item in managedTmpFiles & managedTmpDirs:
         let baseName = splitPath(item).tail
         if fileExists(item):
           try:

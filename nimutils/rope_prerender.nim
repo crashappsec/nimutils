@@ -26,8 +26,8 @@
 # single-threaded assumption until I bring in my lock-free hash
 # tables.
 
-import tables, options, unicodedb/properties, std/terminal,
-       rope_base, rope_styles, unicodeid, unicode, misc
+import tables, options, unicodedb/properties, std/terminal, rope_base,
+       rope_styles, unicodeid, unicode, misc
 
 type
   RenderBoxKind* = enum RbText, RbBoxes
@@ -56,7 +56,7 @@ proc `$`*(box: RenderBox): string =
 template styleRunes(state: FmtState, runes: seq[uint32]): seq[uint32] =
   @[state.curStyle.getStyleId()] & runes & @[StylePop]
 
-proc applyCurrentStyleToPlane(state: FmtState, p: TextPlane) =
+proc applyCurrentStyleToPlane*(state: FmtState, p: TextPlane) =
   for i in 0 ..< p.lines.len():
     p.lines[i] = state.styleRunes(p.lines[i])
 
@@ -100,9 +100,6 @@ proc noBoxRequired*(r: Rope): bool =
   return true
 
 proc unboxedRunelength*(r: Rope): int =
-  # Used in rope_ansi.nim
-  var subItem: Rope
-
   if r == Rope(nil):
     return 0
   case r.kind
@@ -233,6 +230,8 @@ proc getNewStartStyle(state: FmtState, r: Rope,
   # First, apply any style object associated with the rope's html tag.
   # Second, if the rope has a class, apply any style object associated w/ that.
   # Third, do the same w/ ID.
+  # Finally, if the rope itself has a specified style, it takes
+  # precedence.
   var
     styleChange = false
     newStyle    = state.curStyle
@@ -253,7 +252,7 @@ proc getNewStartStyle(state: FmtState, r: Rope,
   if r != nil and r.kind == RopeFgColor:
     styleChange = true
     newStyle = newStyle.mergeStyles(FmtStyle(textColor: some("")))
-  elif r!= nil and r.kind == RopeBgColor:
+  elif r != nil and r.kind == RopeBgColor:
     styleChange = true
     newStyle = newStyle.mergeStyles(FmtStyle(bgColor: some("")))
 
@@ -336,7 +335,6 @@ proc preRenderUnorderedList(state: var FmtState, r: Rope): seq[RenderBox] =
       bulletLen  = bullet.u32LineLength()
       hangPrefix = state.styleRunes(state.pad(bulletLen))
     var
-      bullets: seq[RenderBox]
       subedWidth = true
 
     if bullet.u32LineLength() < state.totalWidth:
@@ -380,7 +378,6 @@ proc preRenderOrderedList(state: var FmtState, r: Rope): seq[RenderBox] =
       maxDigits  = 0
       n          = len(r.items)
       subedWidth = true
-      listItems: seq[RenderBox]
 
     while true:
       maxDigits += 1
@@ -627,7 +624,6 @@ proc preRenderRow(state: var FmtState, r: Rope): seq[RenderBox] =
   taggedBox(tag):
     var
       widths = state.colStack[^1]
-      cell: seq[RenderBox]
 
     # Step 1, make sure col widths are right
     if widths.len() == 0:
@@ -851,7 +847,8 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
 
   planesToBox()
 
-proc preRender*(r: Rope, width = -1, showLinkTargets = false): TextPlane =
+proc preRender*(r: Rope, width = -1, showLinkTargets = false,
+                defaultStyle = defaultStyle): TextPlane =
   ## Denoted in the stream of characters to output, what styles
   ## should be applied, when. We do this by dropping in unique
   ## values into the uint32 stream that cannot be codepoints.  This

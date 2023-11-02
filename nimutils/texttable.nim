@@ -143,11 +143,11 @@ proc instantTable*(cells: seq[string], html = false): string =
   result = rows.formatCellsAsHtmlTable()
 
   if not html:
-    result = result.stylize()
+    result = result.stylizeHtml()
 
 proc instantTableWithHeaders*(cells: seq[seq[string]]): string =
   let
     headers = cells[0]
     rest    = cells[1 .. ^1]
 
-  return rest.formatCellsAsHtmlTable(headers).stylize()
+  return rest.formatCellsAsHtmlTable(headers).stylizeHtml()

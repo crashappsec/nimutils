@@ -43,6 +43,7 @@ type
 
 
   BorderOpts* = enum
+    BorderNone         = 0,
     BorderTop          = 1,
     BorderBottom       = 2,
     BorderLeft         = 3,
@@ -111,7 +112,6 @@ type
   Rope* = ref object
     next*:       Rope
     cycle*:      bool
-    style*:      FmtStyle  # Style options for this node
     tag*:        string
     id*:         string
     class*:      string
@@ -299,8 +299,10 @@ proc getBreakOpps(s: seq[uint32]): seq[int] =
     breakThereIfNotNumeric = false
 
   for i, rune in s[0 ..< ^1]:
+    if rune > 0x10ffff:
+      continue
     if not canGenerateBreakpoint:
-      if rune > 0x10ffff or Rune(rune).isWhiteSpace():
+      if Rune(rune).isWhiteSpace():
         continue
       if Rune(rune).isPostBreakingChar():
         result.add(i + 1)

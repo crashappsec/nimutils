@@ -260,6 +260,6 @@ proc addTopic*(msg: string, extra: StringTable): (string, bool) =
     body    = newLines.join("\n") & "\n"
     prefix  = "<h4>" & "[[start " & topic & "]]\n" & "</h4>"
     postfix = "<h4>" & "[[end " & topic & "]]\n" & "</h4>"
-    newstr  = prefix.stylize() & body & postfix.stylize()
+    newstr  = prefix.stylizeHtml() & body & postfix.stylizeHtml()
 
   return (newstr, true)

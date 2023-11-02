@@ -10,24 +10,17 @@
 ## written by "Gooseus" and made available under an MIT license.  My
 ## few fixes have all been for compatability and are made under the
 ## same license. I also migrated the crypto to openssl.
-##
-## formatstr is currently a copy of formatstr by G. Bareigts. It's not
-## abandoned. Also MIT licensed, and not modified.
-##
-## I am currently pulling in Glob, since the code seems 2.0 compat,
-## but the nimble file denies it.  I think I should remove this from
-## chalk, there are easy options if I wrap something in C.
 
 import nimutils/[box, random, unicodeid, pubsub, sinks, misc, texttable],
-       nimutils/[file, process, filetable, encodings, advisory_lock, formatstr]
-import nimutils/[sha, aes, prp, hexdump, markdown, htmlparse]
+       nimutils/[file, process, filetable, encodings, advisory_lock]
+import nimutils/[sha, aes, prp, hexdump, markdown, htmlparse, net]
 import nimutils/[colortable, rope_base, rope_styles, rope_construct,
-                 rope_prerender, rope_ansirender]
+                 rope_prerender, rope_ansirender, switchboard, subproc]
 export box, random, unicodeid, pubsub, sinks, misc, random, texttable,
-       file, process, filetable, encodings, advisory_lock, formatstr,
-       sha, aes, prp, hexdump, markdown, htmlparse
+       file, process, filetable, encodings, advisory_lock, sha, aes, prp,
+       hexdump, markdown, htmlparse, net
 export colortable, rope_base, rope_styles, rope_construct, rope_prerender,
-       rope_ansirender
+       rope_ansirender, switchboard, subproc
 
 ## Things we don't want to force people to consume need to be imported
 ## manually. Currently, that's:

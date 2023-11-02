@@ -25,7 +25,7 @@ template unreachable*() =
   finally:
     discard
 
-template unixTimeInMS*(): uint64 =
+proc unixTimeInMS*(): uint64 =
   ## Return the current Unix epoch in miliseconds.  That is, this
   ## function will return the number of miliseconds since Jan 1, 1970
   ## (GMT).
@@ -34,7 +34,8 @@ template unixTimeInMS*(): uint64 =
   # it a float, I *have* to put a trailing zero. That in and of itself
   # is fine, but the error message when I don't sucks: 'Error: Invalid
   # indentation'
-  const toMS = 1000.0
+  const
+    toMS = 1000.0
   uint64(epochTime() * toMS)
 
 proc clzll*(argc: uint): cint {.cdecl, importc: "__builtin_clzll".}
