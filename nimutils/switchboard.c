@@ -1285,24 +1285,26 @@ sb_prepare_results(switchboard_t *ctx)
 
     ctx->result.num_captures = capcount;
     ctx->result.num_procs    = proccount;
-    ctx->result.captures     = calloc(sizeof(capture_result_t), capcount);
-    ctx->result.process_info = calloc(sizeof(process_result_t), proccount);    
+    ctx->result.captures     = calloc(sizeof(capture_result_t), capcount+1);
+    ctx->result.process_info = calloc(sizeof(process_result_t), proccount+1);  
 
     party = ctx->party_loners; 
     
     while (party) {	
 	if (party->party_type == PT_STRING && party->can_write_to_it) {
-	    strobj                       = get_dstr_obj(party);
-	    ctx->result.captures[ix].tag = strobj->tag;
-	    ctx->result.captures[ix].len = strobj->ix;
+	    capture_result_t *r = &(ctx->result.captures[ix]);
+
+	    strobj = get_dstr_obj(party);
+	    r.tag  = strobj->tag;
+	    r.len  = strobj->ix;
 	    
 	    if (strobj->ix) {
 		char *s = (char *)calloc(strobj->len, 1);
 		memcpy(s, strobj->strbuf, strobj->ix);
-		ctx->result.captures[ix].contents = s;
+		r.contents = s;
 
 	    } else {
-		ctx->result.captures[ix].contents = NULL;
+		r.contents = NULL;
 	    }
 	    ix += 1;
 	}
@@ -1333,12 +1335,13 @@ sb_prepare_results(switchboard_t *ctx)
 		break;
 	    }
 	}
-	
-	ctx->result.process_info[ix].pid = procs->pid;
-	ctx->result.process_info[ix].found_errno = procs->found_errno;
-	ctx->result.process_info[ix].term_signal = procs->term_signal;
-	ctx->result.process_info[ix].exit_status = procs->exit_status;
-	ctx->result.process_info[ix].exited      = procs->closed;
+
+	process_result_t *r = &(ctx->result.process_info[ix]);
+	r.pid         = procs->pid;
+	r.found_errno = procs->found_errno;
+	r.term_signal = procs->term_signal;
+	r.exit_status = procs->exit_status;
+	r.exited      = procs->closed;
 
 	if (!procs->closed || !ctx->ignore_running_procs_on_shutdown) {
 	    // No need to send a kill. Allow graceful shutdown or
