@@ -1295,16 +1295,16 @@ sb_prepare_results(switchboard_t *ctx)
 	    capture_result_t *r = &(ctx->result.captures[ix]);
 
 	    strobj = get_dstr_obj(party);
-	    r.tag  = strobj->tag;
-	    r.len  = strobj->ix;
+	    r->tag = strobj->tag;
+	    r->len = strobj->ix;
 	    
 	    if (strobj->ix) {
 		char *s = (char *)calloc(strobj->len, 1);
 		memcpy(s, strobj->strbuf, strobj->ix);
-		r.contents = s;
+		r->contents = s;
 
 	    } else {
-		r.contents = NULL;
+		r->contents = NULL;
 	    }
 	    ix += 1;
 	}
@@ -1337,11 +1337,11 @@ sb_prepare_results(switchboard_t *ctx)
 	}
 
 	process_result_t *r = &(ctx->result.process_info[ix]);
-	r.pid         = procs->pid;
-	r.found_errno = procs->found_errno;
-	r.term_signal = procs->term_signal;
-	r.exit_status = procs->exit_status;
-	r.exited      = procs->closed;
+	r->pid         = procs->pid;
+	r->found_errno = procs->found_errno;
+	r->term_signal = procs->term_signal;
+	r->exit_status = procs->exit_status;
+	r->exited      = procs->closed;
 
 	if (!procs->closed || !ctx->ignore_running_procs_on_shutdown) {
 	    // No need to send a kill. Allow graceful shutdown or
