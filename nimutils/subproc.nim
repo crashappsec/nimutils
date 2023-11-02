@@ -165,6 +165,7 @@ proc runCommand*(exe:  string,
     discard subproc.pipeToStdin(newStdin, closeStdin)
   subproc.run()
 
+  result          = ExecOutput()
   result.pid      = subproc.getPid()
   result.exitCode = subproc.getExitCode()
   result.stdout   = subproc.getStdout()
