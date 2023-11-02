@@ -116,7 +116,7 @@ proc getErrno*(ctx: var SubProcess): int =
 proc getSignal*(ctx: var SubProcess): int =
   return int(subproc_get_signal(ctx))
 
-type ExecOutput* = ref object
+type ExecOutput* = object
     stdin*:    string
     stdout*:   string
     stderr*:   string
@@ -165,7 +165,6 @@ proc runCommand*(exe:  string,
     discard subproc.pipeToStdin(newStdin, closeStdin)
   subproc.run()
 
-  result          = ExecOutput()
   result.pid      = subproc.getPid()
   result.exitCode = subproc.getExitCode()
   result.stdout   = subproc.getStdout()
@@ -173,9 +172,9 @@ proc runCommand*(exe:  string,
   result.stderr   = subproc.getStderr()
 
 
-template getStdout*(o: var ExecOutput): string = o.stdout
-template getStderr*(o: var ExecOutput): string = o.stderr
-template getExit*(o: var ExecOutput): int      = o.exitCode
+template getStdout*(o: ExecOutput): string = o.stdout
+template getStderr*(o: ExecOutput): string = o.stderr
+template getExit*(o: ExecOutput): int      = o.exitCode
 
 template runInteractiveCmd*(path: string,
                             args: seq[string],
@@ -191,11 +190,9 @@ proc runCmdGetEverything*(exe:  string,
                               closeStdIn  = true,
                               passthrough = false,
                               timeoutUsec = 1000000): ExecOutput =
-  result = runCommand(exe, args, newStdin, closeStdin, pty = false,
-                      passthrough = if passthrough: SpIoAll else: SpIoNone,
-                      timeoutUSec = timeoutUsec, capture = SpIoOutErr)
-  var f = open("/dev/null", fmAppend)
-  f.write($(result.exitCode))
+  return runCommand(exe, args, newStdin, closeStdin, pty = false,
+                    passthrough = if passthrough: SpIoAll else: SpIoNone,
+                    timeoutUSec = timeoutUsec, capture = SpIoOutErr)
 
 proc runPager*(s: string) =
   var
