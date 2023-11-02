@@ -116,7 +116,7 @@ proc getErrno*(ctx: var SubProcess): int =
 proc getSignal*(ctx: var SubProcess): int =
   return int(subproc_get_signal(ctx))
 
-type ExecOutput* = object
+type ExecOutput* = ref object
     stdin*:    string
     stdout*:   string
     stderr*:   string
@@ -165,12 +165,12 @@ proc runCommand*(exe:  string,
     discard subproc.pipeToStdin(newStdin, closeStdin)
   subproc.run()
 
+  result          = ExecOutput()
   result.pid      = subproc.getPid()
   result.exitCode = subproc.getExitCode()
   result.stdout   = subproc.getStdout()
   result.stdin    = subproc.getStdin()
   result.stderr   = subproc.getStderr()
-
 
 template getStdout*(o: ExecOutput): string = o.stdout
 template getStderr*(o: ExecOutput): string = o.stderr
