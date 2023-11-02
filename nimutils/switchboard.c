@@ -1097,16 +1097,24 @@ sb_default_check_exit_conditions(switchboard_t *ctx)
 }
 
 void
-process_status_check(monitor_t *subproc)
+process_status_check(monitor_t *subproc, bool wait_on_exit)
 {
     int stat_info;
+    int flag;
+
+
+    if (wait_on_exit) {
+	flag = 0;
+    } else {
+	flag = WNOHANG;
+    }
     
     if (subproc->closed) {
 	return;
     }
 
     while (true) {
-	switch (waitpid(subproc->pid, &stat_info, WNOHANG)) {
+	switch (waitpid(subproc->pid, &stat_info, flag)) {
 	case 0:
 	    return; // Process is sill running.
 	case -1:
@@ -1148,7 +1156,7 @@ handle_loop_end(switchboard_t *ctx)
     monitor_t *subproc = ctx->pid_watch_list;
 
     while (subproc != NULL) {
-	process_status_check(subproc);
+	process_status_check(subproc, false);
 	subproc = subproc->next;
     }
 

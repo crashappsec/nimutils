@@ -28,9 +28,9 @@ proc subproc_pass_to_stdin(ctx: var SubProcess, s: cstring, l: csize_t,
                            close_fd: bool): bool {.sproc.}
 proc subproc_get_capture(ctx: var SubProcess, tag: cstring, ln: ptr cint):
                         cstring {.sproc.}
-proc subproc_get_exit(ctx: var SubProcess): cint {.sproc.}
-proc subproc_get_errno(ctx: var SubProcess): cint {.sproc.}
-proc subproc_get_signal(ctx: var SubProcess): cint {.sproc.}
+proc subproc_get_exit(ctx: var SubProcess, wait: bool): cint {.sproc.}
+proc subproc_get_errno(ctx: var SubProcess, wait: bool): cint {.sproc.}
+proc subproc_get_signal(ctx: var SubProcess, wait: bool): cint {.sproc.}
 
 # Functions we can call directly w/o a nim proxy.
 proc setPassthroughRaw*(ctx: var SubProcess, which: SPIoKind, combine: bool)
@@ -107,14 +107,14 @@ proc getStdout*(ctx: var SubProcess): string =
 proc getStderr*(ctx: var SubProcess): string =
   ctx.getTaggedValue("stderr")
 
-proc getExitCode*(ctx: var SubProcess): int =
-  return int(subproc_get_exit(ctx))
+proc getExitCode*(ctx: var SubProcess, waitForExit = true): int =
+  return int(subproc_get_exit(ctx, waitForExit))
 
-proc getErrno*(ctx: var SubProcess): int =
-  return int(subproc_get_errno(ctx))
+proc getErrno*(ctx: var SubProcess, waitForExit = true): int =
+  return int(subproc_get_errno(ctx, waitForExit))
 
-proc getSignal*(ctx: var SubProcess): int =
-  return int(subproc_get_signal(ctx))
+proc getSignal*(ctx: var SubProcess, waitForExit = true): int =
+  return int(subproc_get_signal(ctx, waitForExit))
 
 type ExecOutput* = ref object
     stdin*:    string
@@ -133,7 +133,8 @@ proc runCommand*(exe:  string,
                  capture                 = SpIoOutErr,
                  combineCapture          = false,
                  timeoutUsec             = 1000,
-                 env:  openarray[string] = []): ExecOutput =
+                 env:  openarray[string] = [],
+                 waitForExit             = true): ExecOutput =
   ## One-shot interface
   var
     subproc: SubProcess
@@ -167,7 +168,7 @@ proc runCommand*(exe:  string,
 
   result          = ExecOutput()
   result.pid      = subproc.getPid()
-  result.exitCode = subproc.getExitCode()
+  result.exitCode = subproc.getExitCode(waitForExit)
   result.stdout   = subproc.getStdout()
   result.stdin    = subproc.getStdin()
   result.stderr   = subproc.getStderr()
@@ -179,20 +180,22 @@ template getExit*(o: ExecOutput): int      = o.exitCode
 template runInteractiveCmd*(path: string,
                             args: seq[string],
                             passToChild = "",
-                            closeFdAfterPass = true) =
+                            closeFdAfterPass = true,
+                            ensureExit = true) =
   discard runCommand(path, args, passthrough = SpIoAll, capture = SpIoNone,
                      newStdin = passToChild, closeStdin = closeFdAfterPass,
-                     pty = true)
+                                pty = true, waitForExit = ensureExit)
 
 proc runCmdGetEverything*(exe:  string,
                               args: seq[string],
                               newStdIn    = "",
                               closeStdIn  = true,
                               passthrough = false,
-                              timeoutUsec = 1000000): ExecOutput =
+                              timeoutUsec = 1000000,
+                              ensureExit  = true): ExecOutput =
   return runCommand(exe, args, newStdin, closeStdin, pty = false,
                     passthrough = if passthrough: SpIoAll else: SpIoNone,
-                    timeoutUSec = timeoutUsec, capture = SpIoOutErr)
+                    timeoutUSec = timeoutUsec, capture = SpIoOutErr, waitForExit = ensureExit)
 
 proc runPager*(s: string) =
   var

@@ -348,16 +348,16 @@ extern void subproc_close(subprocess_t *);
 extern pid_t subproc_get_pid(subprocess_t *);
 extern char *sp_result_capture(sp_result_t *, char *, size_t *);
 extern char *subproc_get_capture(subprocess_t *, char *, size_t *);
-extern int subproc_get_exit(subprocess_t *);
-extern int subproc_get_errno(subprocess_t *);
-extern int subproc_get_signal(subprocess_t *);
+extern int subproc_get_exit(subprocess_t *, bool);
+extern int subproc_get_errno(subprocess_t *, bool);
+extern int subproc_get_signal(subprocess_t *, bool);
 extern void subproc_set_extra(subprocess_t *, void *);
 extern void *subproc_get_extra(subprocess_t *);
 extern int subproc_get_pty_fd(subprocess_t *); 
 extern void termcap_get(struct termios *);
 extern void termcap_set(struct termios *);
 extern void termcap_set_typical_parent();
-extern void process_status_check(monitor_t *);
+extern void process_status_check(monitor_t *, bool);
 // pty params.
 // ASCII Cinema.
 #endif

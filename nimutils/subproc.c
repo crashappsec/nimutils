@@ -614,7 +614,7 @@ subproc_get_capture(subprocess_t *ctx, char *tag, size_t *outlen)
 }
 
 int
-subproc_get_exit(subprocess_t *ctx)
+subproc_get_exit(subprocess_t *ctx, bool wait_for_exit)
 {
     monitor_t *subproc = ctx->sb.pid_watch_list;
 
@@ -622,12 +622,12 @@ subproc_get_exit(subprocess_t *ctx)
 	return -1;
     }
 
-    process_status_check(subproc);    
+    process_status_check(subproc, wait_for_exit);    
     return subproc->exit_status;
 }
 
 int
-subproc_get_errno(subprocess_t *ctx)
+subproc_get_errno(subprocess_t *ctx, bool wait_for_exit)
 {
     monitor_t *subproc = ctx->sb.pid_watch_list;
 
@@ -635,12 +635,12 @@ subproc_get_errno(subprocess_t *ctx)
 	return -1;
     }
     
-    process_status_check(subproc);
+    process_status_check(subproc, wait_for_exit);
     return subproc->found_errno;
 }
 
 int
-subproc_get_signal(subprocess_t *ctx)
+subproc_get_signal(subprocess_t *ctx, bool wait_for_exit)
 {
     monitor_t *subproc = ctx->sb.pid_watch_list;
 
@@ -648,7 +648,7 @@ subproc_get_signal(subprocess_t *ctx)
 	return -1;
     }
 
-    process_status_check(subproc);    
+    process_status_check(subproc, wait_for_exit);    
     return subproc->term_signal;
 }
 
