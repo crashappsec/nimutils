@@ -1,7 +1,6 @@
 /*
  * Currently, we're using select() here, not epoll(), etc.
  */
-
 #if defined(__linux__)
 #include <pty.h>
 #elif defined(__APPLE__)
@@ -19,7 +18,6 @@
 #endif
 
 extern int party_fd(party_t *party);
-extern sb_result_t *sb_get_switchboard_results(switchboard_t *ctx);
 /*
  * Initializes a `subprocess` context, setting the process to spawn.
  * By default, it will *not* be run on a pty; call `subproc_use_pty()`
@@ -154,7 +152,7 @@ subproc_set_capture(subprocess_t *ctx, unsigned char which, bool combine)
 	return false;
     }
     
-    ctx->capture      = which;
+    ctx->capture          = which;
     ctx->pt_all_to_stdout = combine;
 
     return true;
@@ -259,7 +257,6 @@ setup_subscriptions(subprocess_t *ctx, bool pty)
 	}
 	
 	if (ctx->combine_captures) {
-
 	    if (!(ctx->capture & SP_IO_STDOUT) &&
 		ctx->capture & SP_IO_STDERR) {
 		if (ctx->capture & SP_IO_STDOUT) {
@@ -493,7 +490,7 @@ termcap_set_typical_parent() {
  * completion.
  *
  * If you use this, call subproc_poll() until it returns false,
- * at which point, call subproc_get_result().
+ * at which point, call subproc_prepare_results().
  */
 void
 subproc_start(subprocess_t *ctx)
@@ -518,21 +515,17 @@ subproc_poll(subprocess_t *ctx)
 }
 
 /*
- * For getting the result object back when you manually run a process.
+ * Call this before querying any results.
  */
-sb_result_t *
-subproc_get_result(subprocess_t *ctx)
+void
+subproc_prepare_results(subprocess_t *ctx)
 {
-    if (ctx->result == NULL) {
-	ctx->result = sb_get_switchboard_results(&ctx->sb);    
+    sb_prepare_results(&ctx->sb);    
 
-	// Post-run cleanup.
-	if (ctx->use_pty) {
-	    tcsetattr(0, TCSANOW, &ctx->saved_termcap);
-	}
+    // Post-run cleanup.
+    if (ctx->use_pty) {
+	tcsetattr(0, TCSANOW, &ctx->saved_termcap);
     }
-
-    return ctx->result;
 }
 
 /*
@@ -540,16 +533,15 @@ subproc_get_result(subprocess_t *ctx)
  * process must first be set up with `subproc_init()` and you may
  * configure it with other `subproc_*()` calls before running.
  *
- * The return value can be queried via the `sp_result_*()` API, and
- * will be automatically freed when you call `subproc_close()`
+ * The results can be queried via the `subproc_get_*()` API.
  */
-sb_result_t *
+void
 subproc_run(subprocess_t *ctx)
 {
     subproc_start(ctx);
     sb_operate_switchboard(&ctx->sb, true);
 
-    return subproc_get_result(ctx);
+    subproc_prepare_results(ctx);
 }
 
 /*
@@ -566,7 +558,6 @@ void
 subproc_close(subprocess_t *ctx)
 {
     sb_destroy(&ctx->sb, false);
-    sp_result_delete(ctx->result);
 
     deferred_cb_t *cbs = ctx->deferred_cbs;
     deferred_cb_t *next;
@@ -594,43 +585,24 @@ subproc_get_pid(subprocess_t *ctx)
     return subproc->pid;
 }
 
-void
-sp_result_delete(sp_result_t *ctx)
-{
-    sp_result_t *next;
-    
-    while(ctx) {
-	if (ctx->tag) {
-	    if (ctx->contents != NULL) {
-		free(ctx->contents);
-	    }
-	}
-	next = ctx->next;
-	free(ctx);
-	ctx = next;
-    }
-}
-
 /*
  * If you've got captures under the given tag name, then this will
  * return whatever was captured. If nothing was captured, it will
  * return a NULL pointer.
  *
  * But if a capture is returned, it will have been allocated via
- * `malloc()` and you will be responsible for calling `free()`
+ * `malloc()` and you will be responsible for calling `free()`.
  */
 char *
 sp_result_capture(sp_result_t *ctx, char *tag, size_t *outlen)
 {
-    while(ctx) {
-	if (ctx->tag && !strcmp(tag, ctx->tag)) {
-	    char *result      = ctx->contents;
-	    *outlen           = ctx->content_len;
-
-	    return strdup(result);
+    for (int i = 0; i < ctx->num_captures; i++) {
+	if (!strcmp(tag, ctx->captures[i].tag)) {
+	    *outlen = ctx->captures[i].len;
+	    return ctx->captures[i].contents;
 	}
-	ctx = ctx->next;
     }
+
     *outlen = 0;
     return NULL;
 }
@@ -638,61 +610,43 @@ sp_result_capture(sp_result_t *ctx, char *tag, size_t *outlen)
 int
 sp_result_exit(sp_result_t *ctx)
 {
-    while(ctx) {
-	if (!ctx->tag) {
-	    return ctx->exit_status;
-	}
-	ctx = ctx->next;
-    }
-    abort();
+    return ctx->process_info[0].exit_status;
 }
 
 int
 sp_result_errno(sp_result_t *ctx)
 {
-    while(ctx) {
-	if (!ctx->tag) {
-	    return ctx->found_errno;
-	}
-	ctx = ctx->next;
-    }
-    abort();    
+    return ctx->process_info[0].found_errno;    
 }
 
 int
 sp_result_signal(sp_result_t *ctx)
 {
-    while(ctx) {
-	if (!ctx->tag) {
-	    return ctx->term_signal;
-	}
-	ctx = ctx->next;
-    }
-    abort();    
+    return ctx->process_info[0].term_signal;
 }
 
 char *
 subproc_get_capture(subprocess_t *ctx, char *tag, size_t *outlen)
 {
-    return sp_result_capture(ctx->result, tag, outlen);
+    return sp_result_capture(&ctx->sb.result, tag, outlen);
 }
 
 int
 subproc_get_exit(subprocess_t *ctx)
 {
-    return sp_result_exit(ctx->result);
+    return sp_result_exit(&ctx->sb.result);
 }
 
 int
 subproc_get_errno(subprocess_t *ctx)
 {
-    return sp_result_exit(ctx->result);
+    return sp_result_exit(&ctx->sb.result);
 }
 
 int
 subproc_get_signal(subprocess_t *ctx)
 {
-    return sp_result_exit(ctx->result);
+    return sp_result_exit(&ctx->sb.result);
 }
 
 void

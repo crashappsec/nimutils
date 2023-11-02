@@ -334,6 +334,7 @@ sb_init_party_output_buf(switchboard_t *ctx, party_t *party, char *tag,
     dobj->len                   = n * PIPE_BUF;
     dobj->step                  = party->info.wstrinfo.len;
     dobj->tag                   = tag;
+    dobj->ix                    = 0;
 
     register_loner(ctx, party);
  }
@@ -609,7 +610,7 @@ sb_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 		return false;
 	    }
 	    #if defined(SB_DEBUG) || defined(SB_TEST)
-	    printf("sub(src_=%d, tag=%s)\n", party_fd(read_from), dob->tag);
+	    printf("sub(src=%d, tag=%s)\n", party_fd(read_from), dob->tag);
 	    #endif
         }
 	subscription->subscriber = write_to;
@@ -763,6 +764,7 @@ static inline void
 add_data_to_string_out(str_dst_party_t *party, char *buf, ssize_t len) {
 
     #ifdef SB_DEBUG
+    printf("tag = %s, buf = %s, len = %d\n", party->tag, buf, len);
     print_hex(buf, len, ">> add_data_to_string_out: ");
     #endif
     
@@ -781,12 +783,11 @@ add_data_to_string_out(str_dst_party_t *party, char *buf, ssize_t len) {
 	}
 	
 	party->len = newlen;
-	memset(&party->strbuf[party->ix], 0, newlen - party->ix);
+	memset(party->strbuf + party->ix, 0, newlen - party->ix);
     }
 
     memcpy(&party->strbuf[party->ix], buf, len);
     party->ix += len;
-
 }
 
 /*
@@ -1259,42 +1260,63 @@ sb_destroy(switchboard_t *ctx, bool free_parties)
  * Extract results from the switchbaord; does not do any cleanup itself;
  * you will still need to free the switchboard if it's heap alloc'd.
  */
-sb_result_t *
-sb_get_switchboard_results(switchboard_t *ctx)
+void
+sb_prepare_results(switchboard_t *ctx)
 {
-    sb_result_t     *result = NULL;
     sb_result_t     *cur;
     str_dst_party_t *strobj;
-    party_t         *party  = ctx->party_loners;  // Look for string outputs.
-    monitor_t       *procs  = ctx->pid_watch_list;
-    
-    while (party) {	
+    party_t         *party     = ctx->party_loners;  // Look for string outputs.
+    monitor_t       *procs     = ctx->pid_watch_list;
+    int              capcount  = 0;
+    int              proccount = 0;
+    int              ix        = 0;
+
+    while (party) {
 	if (party->party_type == PT_STRING && party->can_write_to_it) {
-	    strobj = get_dstr_obj(party);
-	    
-	    if (strobj->ix != 0) {
-		cur              = (sb_result_t *)malloc(sizeof(sb_result_t));
-		cur->next        = result;
-		cur->tag         = strobj->tag;
-		cur->contents    = strobj->strbuf;
-		cur->content_len = strobj->ix;
-		result           = cur;
-		strobj->strbuf   = NULL; // Take ownership of the string.
-	    }
+	    capcount++;
 	}
-	
 	party = party->next_loner;
     }
 
     while (procs) {
-	cur              = (sb_result_t *)calloc(sizeof(sb_result_t), 1);
-	cur->next        = result;
-	cur->exited      = procs->closed;
-	cur->found_errno = procs->found_errno;
-	cur->term_signal = procs->term_signal;
-	cur->exit_status = procs->exit_status;
-	cur->pid         = procs->pid;
-	result           = cur;
+	proccount++;
+	procs = procs->next;
+    }
+
+    ctx->result.num_captures = capcount;
+    ctx->result.num_procs    = proccount;
+    ctx->result.captures     = calloc(sizeof(capture_result_t), capcount);
+    ctx->result.process_info = calloc(sizeof(capture_result_t), capcount);    
+
+    party = ctx->party_loners; 
+    
+    while (party) {	
+	if (party->party_type == PT_STRING && party->can_write_to_it) {
+	    strobj                       = get_dstr_obj(party);
+	    ctx->result.captures[ix].tag = strobj->tag;
+	    ctx->result.captures[ix].len = strobj->ix;
+	    
+	    if (strobj->ix) {
+		char *s = (char *)calloc(strobj->len, 1);
+		memcpy(s, strobj->strbuf, strobj->ix);
+		ctx->result.captures[ix].contents = s;
+
+	    } else {
+		ctx->result.captures[ix].contents = NULL;
+	    }
+	    ix += 1;
+	}
+	party = party->next_loner;
+    }
+
+    procs = ctx->pid_watch_list;
+
+    for (ix = 0; ix < proccount; ix++) {
+	ctx->result.process_info[ix].pid = procs->pid;
+	ctx->result.process_info[ix].found_errno = procs->found_errno;
+	ctx->result.process_info[ix].term_signal = procs->term_signal;
+	ctx->result.process_info[ix].exit_status = procs->exit_status;
+	ctx->result.process_info[ix].exited      = procs->closed;
 
 	if (!procs->closed || !ctx->ignore_running_procs_on_shutdown) {
 	    // No need to send a kill. Allow graceful shutdown or
@@ -1304,8 +1326,6 @@ sb_get_switchboard_results(switchboard_t *ctx)
 	
 	procs = procs->next;
     }
-
-    return result;
 }
 
 /*
@@ -1366,11 +1386,12 @@ sb_result_t *
 sb_automatic_switchboard(switchboard_t *ctx, bool free_party_objects)
 {
 
-    sb_operate_switchboard(ctx, true);
-    
-    sb_result_t *results = sb_get_switchboard_results(ctx);
+    sb_result_t *result = (sb_result_t *)malloc(sizeof(sb_result_t));
 
+    sb_operate_switchboard(ctx, true);
+    sb_prepare_results(ctx);
+    memcpy(result, &ctx->result, sizeof(sb_result_t));
     sb_destroy(ctx, free_party_objects);
 
-    return results;
+    return result;
 }

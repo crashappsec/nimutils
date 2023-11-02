@@ -210,6 +210,27 @@ typedef struct monitor_t {
     int               exit_status;
 } monitor_t;    
 
+typedef struct {
+    char *tag;
+    char *contents;
+    int   len;
+} capture_result_t;
+
+typedef struct {
+    int  pid;
+    int  found_errno;
+    int  term_signal;
+    int  exit_status;
+    bool exited;
+} process_result_t;
+
+typedef struct {
+    int               num_captures;
+    capture_result_t *captures;
+    int               num_procs;
+    process_result_t *process_info;
+} sb_result_t;
+
 /*
  * The main switchboard object. Generally, the fields here can be
  * transparent to the user; everything should be dealt with via API.
@@ -233,24 +254,13 @@ typedef struct switchboard_t {
     size_t            heap_elems;
     void             *extra;
     bool              ignore_running_procs_on_shutdown;
+    sb_result_t       result;
 } switchboard_t;
 
-typedef struct sb_result_t {
-    struct sb_result_t *next;
-    char               *tag; // only for string outputs.
-    char               *contents;
-    size_t              content_len;
-    bool                exited;
-    int                 found_errno;
-    int                 term_signal;
-    int                 exit_status;
-    pid_t               pid;
-} sb_result_t;
 
 typedef sb_result_t sp_result_t;
 
 typedef struct {
-    sb_result_t    *result;
     switchboard_t  sb;
     bool           run;
     bool           use_pty;
@@ -327,6 +337,7 @@ extern void sb_init(switchboard_t *, size_t);
 extern void sb_set_io_timeout(switchboard_t *, struct timeval *);
 extern void sb_clear_io_timeout(switchboard_t *);
 extern void sb_destroy(switchboard_t *, bool);
+extern void sb_prepare_results(switchboard_t *);
 extern bool sb_operate_switchboard(switchboard_t *, bool);
 extern sb_result_t *sb_automatic_switchboard(switchboard_t *, bool);
 extern void subproc_init(subprocess_t *, char *, char *[]);
@@ -341,11 +352,10 @@ extern void subproc_clear_timeout(subprocess_t *);
 extern bool subproc_use_pty(subprocess_t *);
 extern void subproc_start(subprocess_t *);
 extern bool subproc_poll(subprocess_t *);
-extern sb_result_t *subproc_get_result(subprocess_t *);
-extern sp_result_t *subproc_run(subprocess_t *);
+extern void subproc_prepare_results(subprocess_t *);
+extern void subproc_run(subprocess_t *);
 extern void subproc_close(subprocess_t *);
 extern pid_t subproc_get_pid(subprocess_t *);
-extern void sp_result_delete(sp_result_t *);
 extern char *sp_result_capture(sp_result_t *, char *, size_t *);
 extern int sp_result_exit(sp_result_t *);
 extern int sp_result_errno(sp_result_t *);

@@ -52,10 +52,8 @@ proc getPtyFd*(ctx: var SubProcess): cint
     {.cdecl, importc: "subproc_get_pty_fd", nodecl.}
 proc start*(ctx: var SubProcess) {.cdecl, importc: "subproc_start", nodecl.}
 proc poll*(ctx: var SubProcess): bool {.cdecl, importc: "subproc_poll", nodecl.}
-proc getResult*(ctx: var SubProcess): SPResult
-    {.cdecl, importc: "subproc_get_result", nodecl.}
-proc run*(ctx: var SubProcess): SpResult
-    {.cdecl, importc: "subproc_run", nodecl, discardable.}
+proc prepareResults*(ctx: var SubProcess) {.cdecl, importc: "subproc_prepare_results", nodecl.}
+proc run*(ctx: var SubProcess)  {.cdecl, importc: "subproc_run", nodecl.}
 proc close*(ctx: var SubProcess) {.cdecl, importc: "subproc_close", nodecl.}
 proc getPid*(ctx: var SubProcess): Pid
     {.cdecl, importc: "subproc_get_pid", nodecl.}
@@ -69,6 +67,10 @@ proc setIoCallback*(ctx: var SubProcess, which: SpIoKind,
 proc rawFdWrite*(fd: cint, buf: pointer, l: csize_t)
     {.cdecl, importc: "write_data", nodecl.}
 
+
+proc binaryCstringToString*(s: cstring, l: int): string =
+  for i in 0 ..< l:
+    result.add(s[i])
 
 # Nim proxies. Note that the allocCStringArray() calls are going to leak
 # for the time being. We should clean them up in a destructor.
@@ -94,7 +96,7 @@ template getTaggedValue*(ctx: var SubProcess, tag: static[cstring]): string =
   if outlen == 0:
     ""
   else:
-    bytesToString(cast[ptr UncheckedArray[char]](s), int(outlen))
+    binaryCstringToString(s, outlen);
 
 proc getStdin*(ctx: var SubProcess): string =
   ctx.getTaggedValue("stdin")
