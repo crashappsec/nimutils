@@ -1292,7 +1292,7 @@ sb_prepare_results(switchboard_t *ctx)
     
     while (party) {	
 	if (party->party_type == PT_STRING && party->can_write_to_it) {
-	    capture_result_t *r = &(ctx->result.captures[ix]);
+	    capture_result_t *r = ctx->result.captures + ix;
 
 	    strobj = get_dstr_obj(party);
 	    r->tag = strobj->tag;
@@ -1336,7 +1336,7 @@ sb_prepare_results(switchboard_t *ctx)
 	    }
 	}
 
-	process_result_t *r = &(ctx->result.process_info[ix]);
+	process_result_t *r = ctx->result.process_info + ix;
 	r->pid         = procs->pid;
 	r->found_errno = procs->found_errno;
 	r->term_signal = procs->term_signal;

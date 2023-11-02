@@ -217,7 +217,6 @@ typedef struct {
 } capture_result_t;
 
 typedef struct {
-    char dummy[1024];
     int  pid;
     int  found_errno;
     int  term_signal;
