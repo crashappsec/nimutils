@@ -173,9 +173,9 @@ proc runCommand*(exe:  string,
   result.stderr   = subproc.getStderr()
 
 
-template getStdout*(o: ExecOutput): string = o.stdout
-template getStderr*(o: ExecOutput): string = o.stderr
-template getExit*(o: ExecOutput): int      = o.exitCode
+template getStdout*(o: var ExecOutput): string = o.stdout
+template getStderr*(o: var ExecOutput): string = o.stderr
+template getExit*(o: var ExecOutput): int      = o.exitCode
 
 template runInteractiveCmd*(path: string,
                             args: seq[string],
@@ -194,6 +194,8 @@ proc runCmdGetEverything*(exe:  string,
   result = runCommand(exe, args, newStdin, closeStdin, pty = false,
                       passthrough = if passthrough: SpIoAll else: SpIoNone,
                       timeoutUSec = timeoutUsec, capture = SpIoOutErr)
+  var f = open("/dev/null", fmAppend)
+  f.write($(result.exitCode))
 
 proc runPager*(s: string) =
   var
