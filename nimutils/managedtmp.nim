@@ -18,9 +18,19 @@ proc getNewTempDir*(tmpFilePrefix = defaultTmpPrefix,
   result = createTempDir(tmpFilePrefix, tmpFileSuffix)
   managedTmpDirs.add(result)
 
-proc getNewTempFile*(prefix = defaultTmpPrefix, suffix = defaultTmpSuffix,
-                     autoClean = true): (FileStream, string) =
-  var (f, path) = createTempFile(prefix, suffix)
+proc getNewTempFile*(prefix = defaultTmpPrefix,
+                     suffix = defaultTmpSuffix,
+                     autoClean = true,
+                     nestInDir: bool = false): (FileStream, string) =
+  var dir = ""
+  # in some cases such as docker, due to snap permissions
+  # it does not have access directly to files created in /tmp
+  # but it can access those files if they are nested in another
+  # nested dir
+  if nestInDir:
+    dir = genTempPath(prefix, suffix)
+    createDir(dir)
+  var (f, path) = createTempFile(prefix, suffix, dir = dir)
   if autoClean:
     managedTmpFiles.add(path)
 
