@@ -6,8 +6,49 @@ import switchboard, posix, random, os, file
 
 type
   Termcap* {. importc: "struct termios", header: "<termios.h>" .} = object
+    c_iflag*:  uint
+    c_oflag*:  uint
+    c_cflag*:  uint
+    c_lflag*:  uint
+    c_cc*:     array[20, byte]
+    c_ispeed*: int
+    c_ospeed*: int
+  TcsaConst* = enum
+    TCSANOW, TCSADRAIN, TCSAFLUSH
+
+  CCConst* = enum
+    VEOF = 0, VEOL = 1, VEOL2 = 2, VERASE = 3, VWERASE = 4, VKILL = 5,
+    VREPRINT = 6, VINTR = 8, VQUIT = 9, VSUSP = 10, VDSUSP = 11, VSTART = 12,
+    VSTOP = 13, VLNEXT = 14, VDISCARD = 15, VMIN = 16, VTIME = 17,
+    VSTATUS = 18, NCCS = 20
+
+  IFConst* = enum
+    IGNBRK = 0x01'i32, BRKINT = 0x02, IGNPAR = 0x04, PARMRK = 0x08,
+    INPCK = 0x10, ISTRIP = 0x20, INLCR = 0x40, IGNCR = 0x80, ICRNL = 0x100,
+    IXON = 0x200, IXOFF = 0x400, IXANY = 0x800, IUCLC = 0x1000,
+    IMAXBEL = 0x2000
+
+  OFConst* = enum
+    TAB0 = 0x00'i32, OPOST = 0x01, ONLCR = 0x02, TABDLY = 0x04,
+    ONOEOT = 0x08, OCRNL = 0x10, OLCUC = 0x20, ONOCR = 0x40, ONLRET = 0x80
+
+  CFConst* = enum
+    CS5 = 0, CIGNORE = 0x01, CS6 = 0x100, CS7 = 0x200, CSIZE = 0x300,
+    CSTOPB = 0x400, CREAD = 0x800, PARENB = 0x1000, PARODD = 0x2000,
+    HUPCL = 0x4000, CLOCAL = 0x8000, CRTSCTS = 0x10000, MDMBUF = 0x100000
+
+  LFConst* = enum
+    ECHOKE = 0x01, ECHOE = 0x02, ECHOK = 0x04, ECHO = 0x08, ECHONL = 0x10,
+    ECHOPRT = 0x20, ECHOCTL = 0x40, ISIG = 0x80, ICANON = 0x100,
+    ALTWERASE = 0x200, IEXTEN = 0x400, EXTPROC = 0x800, TOSTOP = 0x400000,
+    FLUSHO = 0x800000, XCASE = 0x1000000, NOKERNINFO = 0x2000000,
+    PENDIN = 0x20000000, NOFLSH = 0x80000000
+
   SubProcCallback* =
     proc (i0: pointer, i1: pointer, i2: cstring, i3: int) {. cdecl, gcsafe .}
+  SpStartupCallback* =
+    proc (i0: var SubProcess) {. cdecl, gcsafe .}
+
   SPIoKind* = enum
     SPIoNone = 0, SpIoStdin = 1, SpIoStdout = 2,
     SpIoInOut = 3, SpIoStderr = 4, SpIoInErr = 5,
@@ -16,6 +57,10 @@ type
   SPResult* = ptr SPResultObj
   SubProcess*  {.importc: "subprocess_t", header: joinPath(splitPath(currentSourcePath()).head, "switchboard.h") .} = object
 
+proc tcgetattr*(fd: cint, info: var Termcap): cint {. cdecl, importc,
+                                 header: "<termios.h>", discardable.}
+proc tcsetattr*(fd: cint, opt: TcsaConst, info: var Termcap):
+              cint {. cdecl, importc, header: "<termios.h>", discardable.}
 proc termcap_get*(termcap: var Termcap) {.sproc.}
 proc termcap_set*(termcap: var Termcap) {.sproc.}
 proc termcap_set_typical_parent*() {.sproc.}
@@ -33,6 +78,11 @@ proc subproc_get_errno(ctx: var SubProcess, wait: bool): cint {.sproc.}
 proc subproc_get_signal(ctx: var SubProcess, wait: bool): cint {.sproc.}
 
 # Functions we can call directly w/o a nim proxy.
+proc setParentTermcap*(ctx: var SubProcess, tc: var Termcap) {.cdecl,
+                          importc: "subproc_set_parent_termcap", nodecl.}
+proc setChildTermcap*(ctx: var SubProcess, tc: var Termcap) {.cdecl,
+                          importc: "subproc_set_parent_termcap", nodecl.}
+
 proc setPassthroughRaw*(ctx: var SubProcess, which: SPIoKind, combine: bool)
     {.cdecl, importc: "subproc_set_passthrough", nodecl.}
 template setPassthrough*(ctx: var SubProcess, which = SPIoAll, merge = false) =
@@ -52,7 +102,8 @@ proc getPtyFd*(ctx: var SubProcess): cint
     {.cdecl, importc: "subproc_get_pty_fd", nodecl.}
 proc start*(ctx: var SubProcess) {.cdecl, importc: "subproc_start", nodecl.}
 proc poll*(ctx: var SubProcess): bool {.cdecl, importc: "subproc_poll", nodecl.}
-proc prepareResults*(ctx: var SubProcess) {.cdecl, importc: "subproc_prepare_results", nodecl.}
+proc prepareResults*(ctx: var SubProcess) {.cdecl,
+                     importc: "subproc_prepare_results", nodecl.}
 proc run*(ctx: var SubProcess)  {.cdecl, importc: "subproc_run", nodecl.}
 proc close*(ctx: var SubProcess) {.cdecl, importc: "subproc_close", nodecl.}
 proc getPid*(ctx: var SubProcess): Pid
@@ -64,10 +115,10 @@ proc getExtra*(ctx: var SubProcess): pointer
 proc setIoCallback*(ctx: var SubProcess, which: SpIoKind,
                            callback: SubProcCallback): bool
     {.cdecl, importc: "subproc_set_io_callback", nodecl, discardable.}
+proc setStartupCallback*(ctx: var SubProcess, callback: SpStartupCallback) {.
+      cdecl, importc: "subproc_set_startup_callback", nodecl .}
 proc rawFdWrite*(fd: cint, buf: pointer, l: csize_t)
     {.cdecl, importc: "write_data", nodecl.}
-
-
 proc binaryCstringToString*(s: cstring, l: int): string =
   for i in 0 ..< l:
     result.add(s[i])

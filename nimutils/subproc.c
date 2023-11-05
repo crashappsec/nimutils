@@ -220,6 +220,18 @@ subproc_use_pty(subprocess_t *ctx)
     return true;
 }
 
+bool
+subproc_set_startup_callback(subprocess_t *ctx, void (*cb)(void *))
+{
+    ctx->startup_callback = cb;
+}
+
+int
+subproc_get_pty_fd(subprocess_t *ctx)
+{
+    return ctx->pty_fd;
+}
+
 static void
 setup_subscriptions(subprocess_t *ctx, bool pty)
 {
@@ -341,6 +353,14 @@ subproc_install_callbacks(subprocess_t *ctx)
 }
 
 static void
+run_startup_callback(subprocess_t *ctx)
+{
+    if (ctx->startup_callback) {
+	(*ctx->startup_callback)(ctx);
+    }
+}
+
+static void
 subproc_spawn_fork(subprocess_t *ctx)
 {
     pid_t           pid;
@@ -370,6 +390,7 @@ subproc_spawn_fork(subprocess_t *ctx)
 		    &ctx->subproc_stderr, true);
 	subproc_install_callbacks(ctx);
 	setup_subscriptions(ctx, false);
+	run_startup_callback(ctx);
     } else {
 	close(stdin_pipe[1]);
 	close(stdout_pipe[0]);
@@ -385,14 +406,15 @@ subproc_spawn_fork(subprocess_t *ctx)
 static void
 subproc_spawn_forkpty(subprocess_t *ctx)
 {
-    struct termios termcap;
     struct winsize wininfo;
-    struct termios *term_ptr = &termcap;
+    struct termios *term_ptr = ctx->child_termcap;
     struct winsize *win_ptr  = &wininfo;
     pid_t           pid;
     int             pty_fd;
     int             stdin_pipe[2];
 
+
+    tcgetattr(0, &ctx->saved_termcap);
 
     if (ctx->pty_stdin_pipe) {
 	pipe(stdin_pipe);
@@ -411,12 +433,20 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     setvbuf(stdin, NULL, _IONBF, (size_t) 0);
 
     if(!isatty(0)) {
-	term_ptr = NULL;
 	win_ptr  = NULL;
     } else {
 	ioctl(0, TIOCGWINSZ, win_ptr);
-	tcgetattr(0, term_ptr);
     }
+
+    if (!term_ptr) {
+	struct termios termcap = ctx->saved_termcap;
+	termcap.c_lflag &= ~(ICANON | IEXTEN);
+	termcap.c_oflag &= ~OPOST;
+	termcap.c_cc[VMIN]  = 0;
+	termcap.c_cc[VTIME] = 1;
+	term_ptr = &termcap;
+    }
+
     pid = forkpty(&pty_fd, NULL, term_ptr, win_ptr);
 
     if (pid != 0) {
@@ -437,13 +467,19 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	subproc_install_callbacks(ctx);
 	setup_subscriptions(ctx, true);
 
-	tcgetattr(0, &ctx->saved_termcap);
-	termcap.c_lflag &= ~(ECHO|ICANON);
-	termcap.c_cc[VMIN]  = 0;
-	termcap.c_cc[VTIME] = 0;
-	tcsetattr(0, TCSANOW, term_ptr);
+	if (!ctx->parent_termcap) {
+	    struct termios termcap = ctx->saved_termcap;
+	    termcap.c_lflag &= ~(ECHO|ICANON);
+	    termcap.c_cc[VMIN]  = 0;
+	    termcap.c_cc[VTIME] = 1;
+	    tcsetattr(1, TCSAFLUSH, &termcap);
+	}
+	else {
+	    tcsetattr(1, TCSAFLUSH, ctx->parent_termcap);
+	}
 	int flags = fcntl(pty_fd, F_GETFL, 0) | O_NONBLOCK;
 	fcntl(pty_fd, F_SETFL, flags);
+	run_startup_callback(ctx);
 
     } else {
 	if (ctx->pty_stdin_pipe) {
@@ -451,12 +487,23 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	    dup2(stdin_pipe[0], 0);
 	}
 
-	termcap.c_lflag &= ~(ICANON | ISIG | IEXTEN);
-	termcap.c_oflag &= ~OPOST;
-	termcap.c_cc[VMIN]  = 0;
-	termcap.c_cc[VTIME] = 0;
-
-	tcsetattr(pty_fd, TCSANOW, term_ptr);
+	signal(SIGHUP,   SIG_DFL);
+	signal(SIGINT,   SIG_DFL);
+	signal(SIGILL,   SIG_DFL);
+	signal(SIGABRT,  SIG_DFL);
+	signal(SIGFPE,   SIG_DFL);
+	signal(SIGKILL,  SIG_DFL);
+	signal(SIGSEGV,  SIG_DFL);
+	signal(SIGPIPE,  SIG_DFL);
+	signal(SIGALRM,  SIG_DFL);
+	signal(SIGTERM,  SIG_DFL);
+	signal(SIGCHLD,  SIG_DFL);
+	signal(SIGCONT,  SIG_DFL);
+	signal(SIGSTOP,  SIG_DFL);
+	signal(SIGTSTP,  SIG_DFL);
+	signal(SIGTTIN,  SIG_DFL);
+	signal(SIGTTOU,  SIG_DFL);
+	signal(SIGWINCH, SIG_DFL);
 	subproc_do_exec(ctx);
     }
 }
@@ -653,6 +700,18 @@ subproc_get_signal(subprocess_t *ctx, bool wait_for_exit)
 }
 
 void
+subproc_set_parent_termcap(subprocess_t *ctx, struct termios *tc)
+{
+    ctx->parent_termcap = tc;
+}
+
+void
+subproc_set_child_termcap(subprocess_t *ctx, struct termios *tc)
+{
+    ctx->child_termcap = tc;
+}
+
+void
 subproc_set_extra(subprocess_t *ctx, void *extra)
 {
     sb_set_extra(&ctx->sb, extra);
@@ -662,12 +721,6 @@ void *
 subproc_get_extra(subprocess_t *ctx)
 {
     return sb_get_extra(&ctx->sb);
-}
-
-int
-subproc_get_pty_fd(subprocess_t *ctx)
-{
-    return ctx->pty_fd;
 }
 
 #ifdef SB_TEST

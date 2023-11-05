@@ -251,32 +251,36 @@ typedef struct switchboard_t {
 typedef sb_result_t sp_result_t;
 
 typedef struct {
-    switchboard_t  sb;
-    bool           run;
-    bool           use_pty;
-    int            pty_fd;
-    bool           pty_stdin_pipe;
-    bool           str_waiting;
-    char          *cmd;
-    char         **argv;
-    char         **envp;
-    char          *path;
-    char           passthrough;
-    bool           pt_all_to_stdout;
-    char           capture;
-    bool           combine_captures;  // Combine stdout / err and termout
-    party_t        str_stdin;
-    party_t        parent_stdin;
-    party_t        parent_stdout;
-    party_t        parent_stderr;
-    party_t        subproc_stdin;
-    party_t        subproc_stdout;
-    party_t        subproc_stderr;
-    party_t        capture_stdin;
-    party_t        capture_stdout;
-    party_t        capture_stderr;
-    struct termios saved_termcap;
-    struct dcb_t  *deferred_cbs;
+    switchboard_t   sb;
+    bool            run;
+    int             signal_fd;
+    int             pty_fd;
+    bool            pty_stdin_pipe;
+    bool            use_pty;
+    bool            str_waiting;
+    char           *cmd;
+    char          **argv;
+    char          **envp;
+    char           *path;
+    char            passthrough;
+    bool            pt_all_to_stdout;
+    char            capture;
+    bool            combine_captures;  // Combine stdout / err and termout
+    party_t         str_stdin;
+    party_t         parent_stdin;
+    party_t         parent_stdout;
+    party_t         parent_stderr;
+    party_t         subproc_stdin;
+    party_t         subproc_stdout;
+    party_t         subproc_stderr;
+    party_t         capture_stdin;
+    party_t         capture_stdout;
+    party_t         capture_stderr;
+    void            (*startup_callback)(void *);
+    struct termios  saved_termcap;
+    struct termios *parent_termcap;
+    struct termios *child_termcap;
+    struct dcb_t   *deferred_cbs;
 } subprocess_t;
 
 #define SP_IO_STDIN     1
@@ -340,6 +344,8 @@ extern bool subproc_set_io_callback(subprocess_t *, unsigned char,
 extern void subproc_set_timeout(subprocess_t *, struct timeval *);
 extern void subproc_clear_timeout(subprocess_t *);
 extern bool subproc_use_pty(subprocess_t *);
+extern bool subproc_set_startup_callback(subprocess_t *, void (*)(void *));
+extern int  subproc_get_pty_fd(subprocess_t *);
 extern void subproc_start(subprocess_t *);
 extern bool subproc_poll(subprocess_t *);
 extern void subproc_prepare_results(subprocess_t *);
@@ -351,6 +357,8 @@ extern char *subproc_get_capture(subprocess_t *, char *, size_t *);
 extern int subproc_get_exit(subprocess_t *, bool);
 extern int subproc_get_errno(subprocess_t *, bool);
 extern int subproc_get_signal(subprocess_t *, bool);
+extern void subproc_set_parent_termcap(subprocess_t *, struct termios *);
+extern void subproc_set_child_termcap(subprocess_t *, struct termios *);
 extern void subproc_set_extra(subprocess_t *, void *);
 extern void *subproc_get_extra(subprocess_t *);
 extern int subproc_get_pty_fd(subprocess_t *);
@@ -361,3 +369,4 @@ extern void process_status_check(monitor_t *, bool);
 // pty params.
 // ASCII Cinema.
 #endif
+
