@@ -2,13 +2,9 @@
 ## :Copyright: 2022-2023, Crash Override, Inc.
 
 import macros, times, os, posix
-
 # The name flatten conflicts with a method in the options module.
 from options import get, Option, isSome, isNone
 export get, Option, isSome, isNone
-
-#{.warning[UnusedImport]: off.}
-
 
 template unreachable*() =
   let info = instantiationInfo()

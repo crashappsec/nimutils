@@ -12,15 +12,15 @@
 ## same license. I also migrated the crypto to openssl.
 
 import nimutils/[box, random, unicodeid, pubsub, sinks, misc, texttable],
-       nimutils/[file, process, filetable, encodings, advisory_lock]
-import nimutils/[sha, aes, prp, hexdump, markdown, htmlparse, net]
-import nimutils/[colortable, rope_base, rope_styles, rope_construct,
-                 rope_prerender, rope_ansirender, switchboard, subproc]
+       nimutils/[file, process, filetable, encodings, advisory_lock, progress],
+       nimutils/[sha, aes, prp, hexdump, markdown, htmlparse, net],
+       nimutils/[colortable, rope_base, rope_styles, rope_construct],
+       nimutils/[rope_prerender, rope_ansirender, switchboard, subproc]
 export box, random, unicodeid, pubsub, sinks, misc, random, texttable,
-       file, process, filetable, encodings, advisory_lock, sha, aes, prp,
-       hexdump, markdown, htmlparse, net
-export colortable, rope_base, rope_styles, rope_construct, rope_prerender,
-       rope_ansirender, switchboard, subproc
+       file, process, filetable, encodings, advisory_lock, progress, sha,
+       aes, prp, hexdump, markdown, htmlparse, net, colortable, rope_base,
+       rope_styles, rope_construct, rope_prerender, rope_ansirender,
+       switchboard, subproc
 
 ## Things we don't want to force people to consume need to be imported
 ## manually. Currently, that's:
