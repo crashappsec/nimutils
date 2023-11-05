@@ -21,6 +21,9 @@ type
     curColor*:   string
     pctColor*:   string
     barColor*:   string
+    lastN*:      int
+    lastT*:      string
+    lastPct*:    string
 
 
 proc secToDuration*(duration: uint64): string =
@@ -42,7 +45,7 @@ template updateBar(txt: string) =
     stdout.flushFile()
 
 proc update*(ctx: var ProgressBar, newCur: int): bool {.discardable.} =
-  var gotWinch = false
+  var redraw = false
 
   if newCur == ctx.curItems:
     if ctx.winchCb == ProgressWinchCb(nil):
@@ -50,7 +53,7 @@ proc update*(ctx: var ProgressBar, newCur: int): bool {.discardable.} =
     if not ctx.winchCb():
       return
     else:
-      gotWinch = true
+      redraw = true
 
   ctx.curItems = newCur
 
@@ -65,13 +68,20 @@ proc update*(ctx: var ProgressBar, newCur: int): bool {.discardable.} =
    timeStr:     string
 
   if ctx.showPct:
+    if pctStr != ctx.lastPct:
+      redraw = true
+      ctx.lastPct = pctStr
     usedLen = len(pctStr)
     pctStr  = withColor(pctStr, ctx.pctColor)
   if ctx.showBars:
     usedLen += 2
     bar = withColor("|", ctx.barColor)
   if ctx.showTime:
-    timeStr  = " " & elapsedSec.secToDuration() & " "
+    timeStr = " " & elapsedSec.secToDuration() & " "
+    if timeStr != ctx.lastT:
+      redraw = true
+      ctx.lastT = timeStr
+
     usedLen += len(timeStr)
     timeStr  = withColor(timestr, ctx.timeColor)
 
@@ -86,7 +96,11 @@ proc update*(ctx: var ProgressBar, newCur: int): bool {.discardable.} =
       progRaw       = $(ctx.progChar.repeat(shownProgress))
       progStr       = withColor(progRaw, ctx.progColor)
 
-    updateBar(pctStr & bar & progStr & curStr & nonPr & bar & timeStr)
+    if shownProgress != ctx.lastN:
+      redraw = true
+
+    if redraw:
+      updateBar(pctStr & bar & progStr & curStr & nonPr & bar & timeStr)
   else:
     updateBar(pctStr & timeStr)
 
