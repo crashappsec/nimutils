@@ -364,7 +364,7 @@ extern void *subproc_get_extra(subprocess_t *);
 extern int subproc_get_pty_fd(subprocess_t *);
 extern void termcap_get(struct termios *);
 extern void termcap_set(struct termios *);
-extern void termcap_set_typical_parent();
+extern void termcap_set_raw_mode(struct termios *);
 extern void process_status_check(monitor_t *, bool);
 // pty params.
 // ASCII Cinema.

@@ -63,8 +63,6 @@ proc tcsetattr*(fd: cint, opt: TcsaConst, info: var Termcap):
               cint {. cdecl, importc, header: "<termios.h>", discardable.}
 proc termcap_get*(termcap: var Termcap) {.sproc.}
 proc termcap_set*(termcap: var Termcap) {.sproc.}
-proc termcap_set_typical_parent*() {.sproc.}
-
 proc subproc_init(ctx: var SubProcess, cmd: cstring, args: cStringArray)
     {.sproc.}
 proc subproc_set_envp(ctx: var SubProcess, args: cStringArray)
@@ -93,6 +91,8 @@ proc setCaptureRaw*(ctx: var SubProcess, which: SPIoKind, combine: bool)
 template setCapture*(ctx: var SubProcess, which = SPIoOutErr, merge = false) =
   ctx.setCaptureRaw(which, merge)
 
+proc rawMode*(termcap: var Termcap) {.cdecl, importc: "termcap_set_raw_mode",
+                                      nodecl.}
 proc setTimeout*(ctx: var SubProcess, value: var Timeval)
     {.cdecl, importc: "subproc_set_timeout", nodecl.}
 proc clearTimeout*(ctx: var SubProcess)

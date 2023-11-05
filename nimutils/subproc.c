@@ -403,6 +403,17 @@ subproc_spawn_fork(subprocess_t *ctx)
     }
 }
 
+void
+termcap_set_raw_mode(struct termios *termcap) {
+    termcap->c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    termcap->c_oflag &= ~OPOST;
+    termcap->c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    termcap->c_cflag &= ~(CSIZE | PARENB);
+    termcap->c_cc[VMIN]  = 1;
+    termcap->c_cc[VTIME] = 0;
+    tcsetattr(1, TCSAFLUSH, termcap);
+}
+
 static void
 subproc_spawn_forkpty(subprocess_t *ctx)
 {
@@ -438,19 +449,9 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	ioctl(0, TIOCGWINSZ, win_ptr);
     }
 
-    if (!term_ptr) {
-	struct termios termcap = ctx->saved_termcap;
-	termcap.c_lflag &= ~(ICANON | IEXTEN);
-	termcap.c_oflag &= ~OPOST;
-	termcap.c_cc[VMIN]  = 0;
-	termcap.c_cc[VTIME] = 1;
-	term_ptr = &termcap;
-    }
-
     pid = forkpty(&pty_fd, NULL, term_ptr, win_ptr);
 
     if (pid != 0) {
-
 	if (ctx->pty_stdin_pipe) {
 	    close(stdin_pipe[0]);
 	    sb_init_party_fd(&ctx->sb, &ctx->subproc_stdin, stdin_pipe[1],
@@ -468,11 +469,7 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	setup_subscriptions(ctx, true);
 
 	if (!ctx->parent_termcap) {
-	    struct termios termcap = ctx->saved_termcap;
-	    termcap.c_lflag &= ~(ECHO|ICANON);
-	    termcap.c_cc[VMIN]  = 0;
-	    termcap.c_cc[VTIME] = 1;
-	    tcsetattr(1, TCSAFLUSH, &termcap);
+	    termcap_set_raw_mode(&ctx->saved_termcap);
 	}
 	else {
 	    tcsetattr(1, TCSAFLUSH, ctx->parent_termcap);
@@ -517,19 +514,6 @@ void
 termcap_set(struct termios *termcap) {
     tcsetattr(0, TCSANOW, termcap);
 }
-
-void
-termcap_set_typical_parent() {
-    struct termios cap;
-
-    tcgetattr(0, &cap);
-
-    cap.c_lflag &= ~(ECHO|ICANON);
-    cap.c_cc[VMIN]  = 0;
-    cap.c_cc[VTIME] = 0;
-    tcsetattr(0, TCSANOW, &cap);
-}
-
 
 /*
  * Start a subprocess if you want to be responsible for making
