@@ -406,10 +406,10 @@ subproc_spawn_fork(subprocess_t *ctx)
 void
 termcap_set_raw_mode(struct termios *termcap) {
     termcap->c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    termcap->c_oflag &= ~OPOST;
+    //termcap->c_oflag &= ~OPOST;
     termcap->c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
     termcap->c_cflag &= ~(CSIZE | PARENB);
-    termcap->c_cc[VMIN]  = 1;
+    termcap->c_cc[VMIN]  = 0;
     termcap->c_cc[VTIME] = 0;
     tcsetattr(1, TCSAFLUSH, termcap);
 }
@@ -440,9 +440,6 @@ subproc_spawn_forkpty(subprocess_t *ctx)
     //
     // Note that this means the child process will see isatty() return
     // true for stdin and stdout, but not stderr.
-    setvbuf(stdout, NULL, _IONBF, (size_t) 0);
-    setvbuf(stdin, NULL, _IONBF, (size_t) 0);
-
     if(!isatty(0)) {
 	win_ptr  = NULL;
     } else {
@@ -479,6 +476,10 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	run_startup_callback(ctx);
 
     } else {
+
+	setvbuf(stdout, NULL, _IONBF, (size_t) 0);
+	setvbuf(stdin, NULL, _IONBF, (size_t) 0);
+	
 	if (ctx->pty_stdin_pipe) {
 	    close(stdin_pipe[1]);
 	    dup2(stdin_pipe[0], 0);
