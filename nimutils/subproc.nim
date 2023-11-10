@@ -69,7 +69,7 @@ proc subproc_set_envp(ctx: var SubProcess, args: cStringArray)
     {.sproc.}
 proc subproc_pass_to_stdin(ctx: var SubProcess, s: cstring, l: csize_t,
                            close_fd: bool): bool {.sproc.}
-proc subproc_get_capture(ctx: var SubProcess, tag: cstring, ln: ptr cint):
+proc subproc_get_capture(ctx: var SubProcess, tag: cstring, ln: ptr csize_t):
                         cstring {.sproc.}
 proc subproc_get_exit(ctx: var SubProcess, wait: bool): cint {.sproc.}
 proc subproc_get_errno(ctx: var SubProcess, wait: bool): cint {.sproc.}
@@ -138,16 +138,16 @@ proc setEnv*(ctx: var SubProcess, env: openarray[string]) =
 proc pipeToStdin*(ctx: var SubProcess, s: string, close_fd: bool): bool =
   return ctx.subproc_pass_to_stdin(cstring(s), csize_t(s.len()), close_fd)
 
-template getTaggedValue*(ctx: var SubProcess, tag: static[cstring]): string =
+proc getTaggedValue*(ctx: var SubProcess, tag: cstring): string =
   var
-    outlen: cint
+    outlen: csize_t
     s:      cstring
 
   s = subproc_get_capture(ctx, tag, addr outlen)
   if outlen == 0:
-    ""
+    result = ""
   else:
-    binaryCstringToString(s, outlen);
+    result = binaryCstringToString(s, int(outlen))
 
 proc getStdin*(ctx: var SubProcess): string =
   ctx.getTaggedValue("stdin")
@@ -220,8 +220,8 @@ proc runCommand*(exe:  string,
   result          = ExecOutput()
   result.pid      = subproc.getPid()
   result.exitCode = subproc.getExitCode(waitForExit)
-  result.stdout   = subproc.getStdout()
   result.stdin    = subproc.getStdin()
+  result.stdout   = subproc.getStdout()
   result.stderr   = subproc.getStderr()
 
 template getStdout*(o: ExecOutput): string = o.stdout
