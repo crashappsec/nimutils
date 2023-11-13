@@ -53,9 +53,9 @@ type
     SPIoNone = 0, SpIoStdin = 1, SpIoStdout = 2,
     SpIoInOut = 3, SpIoStderr = 4, SpIoInErr = 5,
     SpIoOutErr = 6, SpIoAll = 7
-  SPResultObj* {. importc: "sb_result_t", header: joinPath(splitPath(currentSourcePath()).head, "switchboard.h") .} = object
+  SPResultObj* {. importc: "sb_result_t", header: "switchboard.h" .} = object
   SPResult* = ptr SPResultObj
-  SubProcess*  {.importc: "subprocess_t", header: joinPath(splitPath(currentSourcePath()).head, "switchboard.h") .} = object
+  SubProcess*  {.importc: "subprocess_t", header: "switchboard.h" .} = object
 
 proc tcgetattr*(fd: cint, info: var Termcap): cint {. cdecl, importc,
                                  header: "<termios.h>", discardable.}

@@ -72,6 +72,9 @@ proc ansiStyleInfo(b: TextPlane, ch: uint32): AnsiStyleInfo =
     result.ansiStart = "\e[" & codes.join(";") & "m"
 
 proc preRenderBoxToAnsiString*(b: TextPlane, ensureNl = true): string =
+  ## Low-level interface for taking our lowest-level internal
+  ## representation, where the exact layout of the output is fully
+  ## specified, and converting it into ansi codes for the terminal.
   # TODO: Add back in unicode underline, etc.
   var
     styleInfo:  AnsiStyleInfo
@@ -133,12 +136,41 @@ template stylizeHtml*(s: string, width = -1, showLinks = false,
 
 proc stylize*(s: string, width = -1, showLinks = false,
               ensureNl = true, style = defaultStyle): string =
+  ## Apply a full style object to a string, using the passed style.
+  ## Does not process Markdown or HTML.
+  ##
+  ## Returns a string.
+  ##
+  ## Note that you should never pass strings with control codes to
+  ## this API. It will not get considered in the state machine /
+  ## processing done. Not only should you avoid manually adding
+  ## control codes, this also means you should never feed the output
+  ## of this API back into the API.
+
   return s.textRope().
            preRender(width, showLinks, style).
            preRenderBoxToAnsiString(ensureNl)
 
 proc stylize*(s: string, tag: string, width = -1, showLinks = false,
               ensureNl = true, style = defaultStyle): string =
+  ## Apply a full style object to a string, specifying a `tag` to
+  ## use (an html tag) for the style. Does not process Markdown or
+  ## HTML.
+  ##
+  ## If passed, `style` should be a style object that will be the
+  ## starting style (after layering it on top of the default style).
+  ##
+  ## Any stored style associated with the `tag` parameter will get
+  ## applied AFTER the style object.
+  ##
+  ## Returns a string.
+  ##
+  ## Note that you should never pass strings with control codes to
+  ## this API. It will not get considered in the state machine /
+  ## processing done. Not only should you avoid manually adding
+  ## control codes, this also means you should never feed the output
+  ## of this API back into the API.
+
   var r: Rope
 
   if tag != "":
@@ -151,6 +183,23 @@ proc stylize*(s: string, tag: string, width = -1, showLinks = false,
            preRenderBoxToAnsiString(ensureNl)
 
 proc withColor*(s: string, fg: string, bg = ""): string =
+  ## Deprecated.
+  ##
+  ## The style API allows you to apply color, chaining the results,
+  ## but has more extensive options than color.
+  ##
+  ## To replace both the fg color and bg color, do:
+  ## s.fgColor("red").bgColor("white")
+  ##
+  ## Or, clear the colors with defaultFg() and defaultBg()
+  ##
+  ## Note that you should never pass strings with control codes to
+  ## this API. It will not get considered in the state machine /
+  ## processing done. Not only should you avoid manually adding
+  ## control codes, this also means you should never feed the output
+  ## of this API back into the API.
+
+
   if fg == "" and bg == "":
     result = s
   else:
@@ -165,10 +214,49 @@ proc `$`*(r: Rope, width = -1, ensureNl = true, showLinks = false,
            preRenderBoxToAnsiString(ensureNl)
 
 proc print*(s: string, file = stdout, forceMd = false, width = -1,
-            ensureNl = true, showLinks = false, style = defaultStyle) =
+            ensureNl = true, showLinks = false, style = defaultStyle,
+                                         noAutoDetect = false) =
+  ## Much like `echo()`, but more capable in terms of the processing
+  ## you can do.
+  ##
+  ## Particularly, `print()` can accept Markdown or HTML, and render
+  ## it for the terminal to the current terminal width. It can also
+  ## apply foreground/background colors, and other styling.
+  ##
+  ## If a string to print starts with '#', it's assumed to be Markdown
+  ## (HTML if it starts with '<'). To always skip conversion, then set
+  ## `noAutoDetect = true`.
+  ##
+  ## If you know your string might contain Markdown or HTML, but might
+  ## not start with a special character, you can instead set
+  ## `forceMd = true`.
+  ##
+  ## Generally, the terminal width is automatically queried at the
+  ## time you call `print()`, but the `width` parameter allows you
+  ## to render to a particular width.
+  ##
+  ## When true, `showLinks` currently will render both the URL and the
+  ## text in an html <a> element, using a markdown-like syntax.
+  ##
+  ## The `style` parameter allows you to override elements of the
+  ## default starting style. However, it does NOT override any style
+  ## formatting set. To do that, use the style API.
+  ##
+  ## Unlike `echo()`, where inputs to print can be comma separated,
+  ## and are automatically converted to strings, `print()` only
+  ## accepts strings in the first parameter (there's a variant that
+  ## supports Ropes, essentially strings already
+  ##
+  ## Do not pass strings with control codes as inputs.
+  ##
+  ## Markdown is processed by cmark-gfm (which converts it to HTML),
+  ## and HTML is processd by gumbo.  If you use this feature, but pass
+  ## text that the underlying processor doesn't accept, the result is
+  ## undefined. Assume you won't get what you want, anyway!
+
   var toWrite: string
 
-  if forceMd or (len(s) > 1 and s[0] == '#'):
+  if forceMd or ((not noAutoDetect) and len(s) > 1 and s[0] == '#'):
     toWrite = s.stylizeMd(width, showLinks, ensureNl, style)
   elif len(s) >= 1 and s[0] == '<':
     toWrite = s.stylizeHtml(width, showLinks, ensureNl, style)

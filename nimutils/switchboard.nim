@@ -6,11 +6,11 @@ static:
   {.compile: joinPath(splitPath(currentSourcePath()).head, "c/switchboard.c").}
 
 type
-  SwitchBoard* {.importc: "switchboard_t", header: joinPath(splitPath(currentSourcePath()).head, "switchboard.h") .} = object
-  Party* {.importc: "party_t", header: joinPath(splitPath(currentSourcePath()).head, "switchboard.h") .} = object
+  SwitchBoard* {.importc: "switchboard_t", header: "switchboard.h" .} = object
+  Party* {.importc: "party_t", header: "switchboard.h" .} = object
   SBCallback* =
     proc (i0: pointer, i1: pointer, i2: cstring, i3: int) {. cdecl, gcsafe .}
-  SBResultObj* {. importc: "sb_result_t", header: joinPath(splitPath(currentSourcePath()).head, "switchboard.h") .} = object
+  SBResultObj* {. importc: "sb_result_t", header: "switchboard.h" .} = object
   SbFdPerms* = enum sbRead = 0, sbWrite = 1, sbAll = 2
 
 proc sb_init*(ctx: var SwitchBoard, heap_elems: csize_t) {.sb.}

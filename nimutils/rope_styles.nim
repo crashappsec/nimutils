@@ -12,6 +12,20 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
                bulletChar = Rune(0x0000), minColWidth = -1, maxColWidth = -1,
                borders: openarray[BorderOpts] = [], boxStyle: BoxStyle = nil,
                align = AlignIgnore): FmtStyle =
+    ## A swiss-army-knife interface for getting the exact style you're
+    ## looking for.
+    ##
+    ## Styles get pushed and popped while walking through the
+    ## underlying DOM; when multiple styles are pushed at once,
+    ## they're *merged*, with anything in the newer style overriding
+    ## anything it defines.
+    ##
+    ## For the parameters, the default values all mean "inherit from
+    ## the existing style".
+    ##
+    ## To that end, internally, style objects
+
+Depending on the context where you apply a style object,
     result = FmtStyle()
 
     if fgColor != "":
@@ -321,16 +335,16 @@ proc typicalBorders*(r: Rope): Rope {.discardable.} =
 proc typicalBorders*(s: string): Rope {.discardable.} =
   return s.typicalBorders()
 
-proc defaultBackground*(r: Rope): Rope {.discardable.} =
+proc defaultBg*(r: Rope): Rope {.discardable.} =
   return r.ropeStyle(newStyle(bgColor = "default"))
 
-proc defaultBackground*(s: string): Rope {.discardable.} =
+proc defaultBg*(s: string): Rope {.discardable.} =
   return s.defaultBackground()
 
-proc defaultForeground*(r: Rope): Rope {.discardable.} =
+proc defaultFg*(r: Rope): Rope {.discardable.} =
   return r.ropeStyle(newStyle(fgColor = "default"))
 
-proc defaultForeground*(s: string): Rope {.discardable.} =
+proc defaultFg*(s: string): Rope {.discardable.} =
   return s.defaultForeground()
 
 proc bgColor*(r: Rope, color: string): Rope {.discardable.} =
