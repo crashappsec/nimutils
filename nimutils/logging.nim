@@ -2,7 +2,7 @@
 ## :Copyright: 2023, Crash Override, Inc.
 
 import tables, options, streams, pubsub, sinks, strutils,
-       rope_base, rope_construct, rope_ansirender,
+       rope_base, rope_construct, rope_ansirender
 
 type LogLevel* = enum
   ## LogLevel describes what kind of messages you want to see.
