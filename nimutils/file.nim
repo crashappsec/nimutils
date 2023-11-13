@@ -3,7 +3,7 @@
 
 import os, posix, strutils, posix_utils
 
-proc getMyAppPath(): string {.importc.}
+proc getMyAppPath*(): string {.importc.}
 
 proc tildeExpand(s: string): string {.inline.} =
   var homedir = getHomeDir()

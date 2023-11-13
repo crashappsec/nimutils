@@ -119,9 +119,6 @@ proc preRenderBoxToAnsiString*(b: TextPlane, ensureNl = true): string =
   #   else:
   #     result = "\n"
 
-proc textRope*(s: string): Rope =
-  return Rope(kind: RopeAtom, text: s.toRunes())
-
 template stylizeMd*(s: string, width = -1, showLinks = false,
                     ensureNl = true, style = defaultStyle): string =
   s.htmlStringToRope().

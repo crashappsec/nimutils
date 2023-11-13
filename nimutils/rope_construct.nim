@@ -182,6 +182,13 @@ proc `+`*(r1: Rope, r2: Rope): Rope =
 
   return r1
 
+proc `+=`*(r1: var Rope, r2: Rope) =
+  if r1 == nil:
+    r1 = r2
+    return
+  r1 = r1 + r2
+
+
 proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope
 
 proc doDescend(n: HtmlNode, pre: var seq[bool]): Rope =
@@ -493,3 +500,5 @@ proc ul*(l: seq[string]): Rope =
   for item in l:
     listItems.add(li(item))
   return ul(listItems)
+
+template textRope*(l: string, pre = false): Rope = rawStrToRope(l, pre)

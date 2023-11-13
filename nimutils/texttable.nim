@@ -200,5 +200,6 @@ proc instantTable*(cells: seq[seq[string]], verticalHeaders = false,
     return cells.instantTableVerticalHeaders(caption)
 
 template instantTableWithHeaders*(cells: seq[seq[string]], horizontal = true,
-                                  caption = Rope(nil)): Rope =
-  instantTable(cells, horizontal, caption)
+                                  caption = Rope(nil)): string =
+  ## Deprecated, for compatability with older con4m.
+  $(instantTable(cells, horizontal, true, caption))
