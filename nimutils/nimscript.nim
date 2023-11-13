@@ -1,4 +1,5 @@
-import os
+import os, strutils
+export os, strutils
 
 var
   targetArch* = hostCPU
@@ -8,12 +9,13 @@ var
 proc setTargetStr(target: string) =
   targetStr = target
 
-template setupTargetArch*() =
-  when defined(macosx):
+proc setupTargetArch*(quiet = true) =
+  once:
+    when defined(macosx):
       # -d:arch=amd64 will allow you to specifically cross-compile to intel.
       # The .strdefine. pragma sets the variable from the -d: flag w/ the same
       # name, overriding the value of the const.
-      const arch  {.strdefine.} = "detect"
+      const arch {.strdefine.} = "detect"
 
       var
         targetStr  = ""
@@ -33,21 +35,23 @@ template setupTargetArch*() =
         echo "Override: arch = " & arch
 
       if targetArch == "arm64":
-        echo "Building for arm64"
+        if not quiet:
+          echo "Building for arm64"
         setTargetStr("arm64-apple-macos13")
       elif targetArch == "amd64":
         setTargetStr("x86_64-apple-macos13")
-        echo "Building for amd64"
+        if not quiet:
+          echo "Building for amd64"
       else:
-        echo "Invalid target architecture for MacOs: " & arch
+        if not quiet:
+          echo "Invalid target architecture for MacOs: " & arch
         quit(1)
 
 template getTargetArch*() =
-  once:
-    setupTargetArch()
+  setupTargetArch()
   targetArch
 
-template applyCommonLinkOptions*(staticLink = true) =
+template applyCommonLinkOptions*(staticLink = true, quiet = true) =
   switch("d", "ssl")
   switch("d", "nimPreviewHashRef")
   switch("gc", "refc")
@@ -55,7 +59,7 @@ template applyCommonLinkOptions*(staticLink = true) =
   switch("d", "useOpenSSL3")
   switch("cincludes", getEnv("HOME").joinPath("/.local/c0/include"))
 
-  setupTargetArch()
+  setupTargetArch(quiet)
 
   when defined(macosx):
     switch("cpu", targetArch)

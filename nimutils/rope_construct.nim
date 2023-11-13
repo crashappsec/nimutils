@@ -57,6 +57,8 @@ proc rawStrToRope*(s: string, pre: bool): Rope =
       prev.next = brk
       brk.next  = cur
 
+{.warning[CaseTransition]:off.}
+
 proc refCopy*(dst: var Rope, src: Rope) =
   dst.kind = src.kind
   dst.tag  = src.tag
