@@ -4,8 +4,7 @@
 # Pretty basic table formatting. Works with fixed width unicode, though
 # I don't factor out non-printable spaces right now, I just count runes.
 
-import rope_construct, rope_ansirender, markdown, unicode, std/terminal,
-       unicodeid
+import rope_base, rope_construct, markdown, unicode, unicodeid, std/terminal
 
 proc formatCellsAsMarkdownList*(base: seq[seq[string]],
                                 toEmph: openarray[string],
@@ -107,14 +106,13 @@ proc filterEmptyColumns*(inrows: seq[seq[string]],
 
   return (newRows, returnedHeaders)
 
-proc instantTable*(cells: seq[string], html = false): string =
+proc instantTable*(cells: openarray[string], tableCaption = Rope(nil)): Rope =
   var
     remainingWidth         = terminalWidth()
     numcol                 = 0
     maxWidth               = 0
-    row:  seq[string]      = @[]
-    rows: seq[seq[string]]
-
+    row:  seq[Rope]        = @[]
+    rows: seq[Rope]        = @[]
   # This gives every column equal width, and assumes space for borders
   # and pad.
 
@@ -129,25 +127,78 @@ proc instantTable*(cells: seq[string], html = false): string =
 
   for i, item in cells:
     if i != 0 and i mod numcol == 0:
-      rows.add(row)
+      rows.add(tr(row))
       row = @[]
-    row.add(item.strip())
+    row.add(td(item))
 
   var n = len(cells)
   while n mod numcol != 0:
-    row.add("")
+    row.add(td(""))
     n = n + 1
 
-  rows.add(row)
+  rows.add(tr(row))
 
-  result = rows.formatCellsAsHtmlTable()
+  return table(tbody(rows), caption = tableCaption)
 
-  if not html:
-    result = result.stylizeHtml()
+template instantTableNoHeaders(cells: seq[seq[string]], tableCaption: Rope):
+         Rope =
+  var
+    row:  seq[Rope] = @[]
+    rows: seq[Rope] = @[]
 
-proc instantTableWithHeaders*(cells: seq[seq[string]]): string =
-  let
-    headers = cells[0]
-    rest    = cells[1 .. ^1]
+  for cellrow in cells:
+    for item in cellrow:
+      row.add(td(item))
+    rows.add(tr(row))
+    row = @[]
 
-  return rest.formatCellsAsHtmlTable(headers).stylizeHtml()
+  table(tbody(rows), thead(@[]), caption = tableCaption)
+
+template instantTableHorizontalHeaders(cells: seq[seq[string]],
+                                       tableCaption: Rope): Rope =
+  var
+    row:  seq[Rope] = @[]
+    rows: seq[Rope] = @[]
+
+  for i, cellrow in cells:
+    if i == 0:
+      for item in cellrow:
+        row.add(th(item))
+    else:
+      for item in cellrow:
+        row.add(td(item))
+    rows.add(tr(row))
+    row = @[]
+
+  table(tbody(rows), caption = tableCaption)
+
+template instantTableVerticalHeaders(cells: seq[seq[string]],
+                                     tableCaption: Rope): Rope =
+  var
+    row:  seq[Rope] = @[]
+    rows: seq[Rope] = @[]
+
+  for cellrow in cells:
+    for i, item in cellrow:
+      if i == 0:
+        row.add(th(item))
+      else:
+        row.add(td(item))
+    rows.add(tr(row))
+    row = @[]
+
+  table(tbody(rows), caption = tableCaption)
+
+
+proc instantTable*(cells: seq[seq[string]], verticalHeaders = false,
+                   noheaders = false, caption = Rope(nil)): Rope =
+  if noHeaders:
+    return cells.instantTableNoHeaders(caption)
+  elif not verticalHeaders:
+    return cells.instantTableHorizontalHeaders(caption)
+  else:
+    return cells.instantTableVerticalHeaders(caption)
+
+template instantTableWithHeaders*(cells: seq[seq[string]], horizontal = true,
+                                  caption = Rope(nil)): Rope =
+  instantTable(cells, horizontal, caption)

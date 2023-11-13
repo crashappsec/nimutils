@@ -119,6 +119,9 @@ proc preRenderBoxToAnsiString*(b: TextPlane, ensureNl = true): string =
   #   else:
   #     result = "\n"
 
+proc textRope*(s: string): Rope =
+  return Rope(kind: RopeAtom, text: s.toRunes())
+
 template stylizeMd*(s: string, width = -1, showLinks = false,
                     ensureNl = true, style = defaultStyle): string =
   s.htmlStringToRope().
@@ -133,8 +136,8 @@ template stylizeHtml*(s: string, width = -1, showLinks = false,
 
 proc stylize*(s: string, width = -1, showLinks = false,
               ensureNl = true, style = defaultStyle): string =
-  let r = Rope(kind: RopeAtom, text: s.toRunes())
-  return r.preRender(width, showLinks, style).
+  return s.textRope().
+           preRender(width, showLinks, style).
            preRenderBoxToAnsiString(ensureNl)
 
 proc stylize*(s: string, tag: string, width = -1, showLinks = false,
@@ -159,12 +162,25 @@ proc withColor*(s: string, fg: string, bg = ""): string =
 
   result = result.strip()
 
-proc print*(s: string, file = stdout, md = true, width = -1, ensureNl = true,
-           showLinks = false, style = defaultStyle) =
+proc `$`*(r: Rope, width = -1, ensureNl = true, showLinks = false,
+                                          style = defaultStyle): string =
+  return r.preRender(width, showLinks, style).
+           preRenderBoxToAnsiString(ensureNl)
+
+proc print*(s: string, file = stdout, forceMd = false, width = -1,
+            ensureNl = true, showLinks = false, style = defaultStyle) =
   var toWrite: string
-  if md:
+
+  if forceMd or (len(s) > 1 and s[0] == '#'):
     toWrite = s.stylizeMd(width, showLinks, ensureNl, style)
-  else:
+  elif len(s) >= 1 and s[0] == '<':
     toWrite = s.stylizeHtml(width, showLinks, ensureNl, style)
+  else:
+    toWrite = $(s.textRope(), width, ensureNl, showLinks, style)
 
   file.write(toWrite)
+
+proc print*(r: Rope, file = stdout, width = -1, ensureNl = true,
+            showLinks = false, style = defaultStyle) =
+  file.write(r.preRender(width, showLinks, style).
+               preRenderBoxToAnsiString(ensureNl))

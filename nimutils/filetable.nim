@@ -9,7 +9,7 @@
 ## :Copyright: 2022, 2023, Crash Override, Inc.
 
 
-import tables, strutils, os, system/nimscript
+import tables, strutils, os
 
 type
   FileTable*        = Table[string, string]
@@ -68,10 +68,3 @@ template newOrderedFileTable*(dir: static[string]): OrderedFileTable =
 
     ret[key] = fileContents
   ret
-
-when isMainModule:
-  const x = newFileTable("/Users/viega/dev/sami/src/help/")
-
-  for k, v in x:
-    echo "Filename: ", k
-    echo "Contents: ", v[0 .. 40], "..."

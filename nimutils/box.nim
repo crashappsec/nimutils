@@ -82,7 +82,6 @@ proc arrItemType*[T](a: openarray[T]): auto =
     return default(T)
 proc arrItemType*(a: BoxAtom): BoxAtom = a
 
-
 proc `==`*(box1, box2: Box) : bool {.noSideEffect.} =
   # The noSideEffect works around a bug in nim2.0
   if box1.kind != box2.kind:
@@ -281,67 +280,3 @@ proc boxToJson*(b: Box): string =
         result = result & " }"
     else:
         return "null" # Boxed objects not supported
-
-when isMainModule:
-    var
-        i1 = "a"
-        l1 = @["a", "b", "c"]
-        l2 = @["d", "e", "f"]
-        l3 = @["g", "h", "i"]
-        l123 = @[l1, l2, l3]
-        b1, b123: Box
-        o123: seq[seq[string]] = @[]
-        oMy: seq[Box] = @[]
-        a1 = pack(i1)
-
-    echo typeof(a1)
-    echo unpack[string](a1)
-    b1 = pack(l1)
-    echo b1
-    echo unpack[seq[string]](b1)
-    b123 = pack(l123)
-    echo b123
-    echo typeof(b123)
-    echo typeof(o123)
-    o123 = unpack[seq[seq[string]]](b123)
-    echo o123
-    oMy = unpack[seq[Box]](b123)
-    echo oMy
-
-    var myDict = newTable[string, seq[string]]()
-
-    myDict["foo"] = @["a", "b"]
-    myDict["bar"] = @["b"]
-    myDict["boz"] = @["c"]
-    myDict["you"] = @["d"]
-
-    import streams
-
-    let
-        f = newFileStream("box.nim", fmRead)
-        contents = f.readAll()[0 .. 20]
-
-    myDict["file"] = @[contents]
-
-    let
-        dictBox = pack(myDict)
-        listbox = pack(l1)
-
-    var outlist: l1.type
-    unpack(listbox, outlist)
-
-    echo "Here's the listbox: ", listbox
-    echo "Here it is unpacked: ", outlist
-
-    var newDict: TableRef[string, seq[string]]
-
-    unpack(dictBox, newDict)
-
-    echo "Here's the dictbox(nothing should be quoted): ", dictBox
-    echo "Here it is unpacked (should have quotes): ", newDict
-    echo "Here it is, boxed, as Json: ", boxToJson(dictBox)
-
-    # This shouldn't work w/o a custom handler.
-    # import sugar
-    # var v: ()->int
-    # unpack[()->int](b123, v)

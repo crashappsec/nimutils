@@ -70,10 +70,8 @@ proc parseDocument*(html: string): HtmlNode =
   make_gumbo(cstring(html), cast[pointer](addr walker))
   result = walker.root
 
-
-include "headers/gumbo.nim"
-
 {.emit: """
+#include "gumbo.h"
 #include <stdlib.h>
 #include <string.h>
 

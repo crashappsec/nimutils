@@ -3,34 +3,39 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022 - 2023, Crash Override, Inc.
 
-include "headers/md4c.nim"
+
+
 import random
 
-type MdOpts* = enum
-  MdCommonMark              = 0x00000000,
-  MdCollapseWhiteSpace      = 0x00000001,
-  MdPermissiveAtxHeaders    = 0x00000002,
-  MdPermissiveUrlAutoLinks  = 0x00000004,
-  MdPermissiveMailAutoLinks = 0x00000008,
-  MdNoIndentedCodeBlocks    = 0x00000010,
-  MdNoHtmlBlocks            = 0x00000020,
-  MdNoHtmlpans              = 0x00000040,
-  MdNoHtml                  = 0x00000060,
-  MdTables                  = 0x00000100,
-  MdStrikeThrough           = 0x00000200,
-  MdPermissiveWwwAutoLinks  = 0x00000400,
-  MdPermissiveAutoLinks     = 0x0000040c,
-  MdTaskLists               = 0x00000800,
-  MdLatexMathSpans          = 0x00001000,
-  MdWikiLinks               = 0x00002000,
-  MdUnderline               = 0x00004000,
-  MdHeaderSelfLinks         = 0x00008000,
-  MdGithub                  = 0x00008f0c,
-  MdCodeLinks               = 0x00010000,
-  MdHtmlDebugOut            = 0x10000000,
-  MdHtmlVerbatimEntries     = 0x20000000,
-  MdHtmlSkipBom             = 0x40000000,
-  MdHtmlXhtml               = 0x80000000
+{.emit: """#include "md4c.h" """.}
+
+type
+  # We don't actually use this type, just pulls in the header concisely.
+  MdOpts* = enum
+    MdCommonMark              = 0x00000000,
+    MdCollapseWhiteSpace      = 0x00000001,
+    MdPermissiveAtxHeaders    = 0x00000002,
+    MdPermissiveUrlAutoLinks  = 0x00000004,
+    MdPermissiveMailAutoLinks = 0x00000008,
+    MdNoIndentedCodeBlocks    = 0x00000010,
+    MdNoHtmlBlocks            = 0x00000020,
+    MdNoHtmlpans              = 0x00000040,
+    MdNoHtml                  = 0x00000060,
+    MdTables                  = 0x00000100,
+    MdStrikeThrough           = 0x00000200,
+    MdPermissiveWwwAutoLinks  = 0x00000400,
+    MdPermissiveAutoLinks     = 0x0000040c,
+    MdTaskLists               = 0x00000800,
+    MdLatexMathSpans          = 0x00001000,
+    MdWikiLinks               = 0x00002000,
+    MdUnderline               = 0x00004000,
+    MdHeaderSelfLinks         = 0x00008000,
+    MdGithub                  = 0x00008f0c,
+    MdCodeLinks               = 0x00010000,
+    MdHtmlDebugOut            = 0x10000000,
+    MdHtmlVerbatimEntries     = 0x20000000,
+    MdHtmlSkipBom             = 0x40000000,
+    MdHtmlXhtml               = 0x80000000
 
 
 type HtmlOutputContainer = ref object

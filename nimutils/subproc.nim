@@ -1,7 +1,7 @@
 import switchboard, posix, random, os, file
 
 {.warning[UnusedImport]: off.}
-{.compile: joinPath(splitPath(currentSourcePath()).head, "subproc.c").}
+{.compile: joinPath(splitPath(currentSourcePath()).head, "c/subproc.c").}
 {.pragma: sproc, cdecl, importc, nodecl.}
 
 type
@@ -277,12 +277,3 @@ proc runPager*(s: string) =
 
 template runCmdGetOutput*(exe: string, args: seq[string]): string =
   execProcess(exe, args = args, options = {})
-
-when isMainModule:
-  var res = runCommand("/bin/cat", @["aes.nim"], pty = true, capture = SpIoAll,
-                                                       passthrough = SpIoNone)
-
-  echo "pid = ", res.pid
-
-  sleep(2000)
-  echo res.stdout

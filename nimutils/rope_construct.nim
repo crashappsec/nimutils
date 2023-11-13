@@ -1,7 +1,8 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import  unicode, markdown, htmlparse, tables, parseutils, colortable, rope_base
+import  unicode, markdown, htmlparse, tables, parseutils, colortable, rope_base,
+        macros
 
 from strutils import startswith, replace
 
@@ -234,13 +235,19 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
           continue
         result.items.add(item.htmlTreeToRope(pre))
     of "right":
-      result = Rope(kind: RopeAlignedContainer, tag: "ralign",
+      result = Rope(kind: RopeAlignedContainer, tag: "right",
                     contained: n.descend())
     of "center":
-      result = Rope(kind: RopeAlignedContainer, tag: "calign",
+      result = Rope(kind: RopeAlignedContainer, tag: "center",
                     contained: n.descend())
     of "left":
-      result = Rope(kind: RopeAlignedContainer, tag: "lalign",
+      result = Rope(kind: RopeAlignedContainer, tag: "left",
+                    contained: n.descend())
+    of "justify":
+      result = Rope(kind: RopeAlignedContainer, tag: "justify",
+                    contained: n.descend())
+    of "flush":
+      result = Rope(kind: RopeAlignedContainer, tag: "flush",
                     contained: n.descend())
     of "thead", "tbody", "tfoot":
       result = Rope(kind:  RopeTableRows, tag: n.contents)
@@ -283,7 +290,7 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
         else: # whitespace colgroup; currently not handling.
           discard
     of "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div",
-       "code", "ins", "del", "kbd", "mark", "q", "s", "small",
+       "code", "ins", "del", "kbd", "mark", "p", "q", "s", "small", "td", "th",
        "sub", "sup", "title", "em", "i", "b", "strong", "u", "caption",
        "var", "italic", "strikethrough", "strikethru", "underline", "bold":
       # Since we know about this list, short-circuit the color checking code,
@@ -296,9 +303,6 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
       result = Rope(kind: RopeTaggedContainer, tag: n.contents,
                     contained: n.descend())
       discard pre.pop()
-    of "td", "th":
-      result = Rope(kind: RopeTaggedContainer, tag: n.contents,
-                         contained: n.descend())
     else:
       let colorTable = getColorTable()
       let below      = n.descend()
@@ -353,3 +357,121 @@ proc htmlStringToRope*(s: string, markdown = true): Rope =
     return tree.children[0].children[0].htmlTreeToRope()
   else:
     return tree.htmlTreeToRope()
+
+macro basicTagGen(ids: static[openarray[string]]): untyped =
+  result = newStmtList()
+
+  for id in ids:
+    let
+      strNode = newLit(id)
+      idNode  = newIdentNode(id)
+      hidNode = newIdentNode("html" & id)
+      decl    = quote do:
+        proc `idNode`*(r: Rope): Rope =
+          return Rope(kind: RopeTaggedContainer, tag: `strNode`,
+                      contained: r)
+        proc `idNode`*(s: string): Rope =
+          return `idNode`(s.rawStrToRope(pre = false))
+    result.add(decl)
+
+macro hidTagGen(ids: static[openarray[string]]): untyped =
+  result = newStmtList()
+
+  for id in ids:
+    let
+      strNode = newLit(id)
+      hidNode = newIdentNode("html" & id)
+      decl    = quote do:
+        proc `hidNode`*(s: string): string =
+          return "<" & `strNode` & ">" & s & "</" & `strNode` & ">"
+
+    result.add(decl)
+
+macro alignedGen(ids: static[openarray[string]]): untyped =
+  result = newStmtList()
+
+  for id in ids:
+    let
+      strNode = newLit(id)
+      idNode  = newIdentNode(id)
+      hidNode = newIdentNode("html" & id)
+      decl    = quote do:
+        proc `idNode`*(r: Rope): Rope =
+          return Rope(kind: RopeAlignedContainer, tag: `strNode`,
+                      contained: r)
+        proc `idNode`*(s: string): Rope =
+          return `idNode`(s.rawStrToRope(pre = false))
+    result.add(decl)
+
+macro trSetGen(ids: static[openarray[string]]): untyped =
+  result = newStmtList()
+
+  for id in ids:
+    let
+      strNode = newLit(id)
+      idNode  = newIdentNode(id)
+      decl    = quote do:
+        proc `idNode`*(l: seq[Rope]): Rope =
+          return Rope(kind: RopeTableRows, tag: `strNode`,
+                      cells: l)
+
+    result.add(decl)
+
+proc tr*(l: seq[Rope]): Rope =
+  return Rope(kind: RopeTableRow, tag: "tr", cells: l)
+
+proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
+            caption: Rope = nil, columnInfo: seq[ColInfo] = @[]): Rope =
+  result = Rope(kind: RopeTable, tag: "table", tbody: tbody, thead: thead,
+                tfoot: tfoot, caption: caption, colInfo: columnInfo)
+
+proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
+  for item in pcts:
+    result.add(ColInfo(widthPct: item, span: 1))
+
+basicTagGen(["h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div",
+             "code", "ins", "del", "kbd", "mark", "p", "q", "s", "small",
+             "sub", "sup", "title", "em", "i", "b", "strong", "u", "caption",
+             "td", "th", "var", "italic", "strikethrough", "strikethru",
+             "underline", "bold"])
+
+alignedGen(["right", "center", "left", "justify", "flush"])
+
+trSetGen(["thead", "tbody", "tfoot"])
+
+hidTagGen(["a", "abbr", "address", "article", "aside", "b", "base", "bdi",
+           "bdo", "blockquote", "br", "caption", "center", "cite", "code",
+           "col", "colgroup", "data", "datalist", "dd", "details", "dfn",
+           "dialog", "dl", "dt", "em", "embed", "fieldset", "figcaption",
+            "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
+            "header", "hr", "i", "ins", "kbd", "label", "legend", "li",
+            "link", "main", "mark", "menu", "meta", "meter", "nav", "ol",
+            "optgroup", "output", "p", "param", "pre", "progress", "q", "s",
+            "samp", "search", "section", "select", "span", "strong", "style",
+            "sub", "summary", "sup", "table", "tbody", "td", "tfoot",
+            "th", "thead", "title", "tr", "u", "ul"])
+
+
+proc pre*(r: Rope): Rope =
+  return Rope(kind: RopeTaggedContainer, tag: "pre", contained: r)
+
+proc pre*(s: string): Rope =
+  return pre(s.rawStrToRope(pre = true))
+
+proc ol*(l: seq[Rope]): Rope =
+  return Rope(kind: RopeList, tag: "ol", items: l)
+
+proc ol*(l: seq[string]): Rope =
+  var listItems: seq[Rope]
+  for item in l:
+    listItems.add(li(item))
+  return ol(listItems)
+
+proc ul*(l: seq[Rope]): Rope =
+  return Rope(kind: RopeList, tag: "ul", items: l)
+
+proc ul*(l: seq[string]): Rope =
+  var listItems: seq[Rope]
+  for item in l:
+    listItems.add(li(item))
+  return ul(listItems)

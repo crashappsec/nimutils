@@ -1,7 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022, 2023, Crash Override, Inc.
 
-import std/sysrand, openssl, strutils
+import std/sysrand, openssl
 
 template secureRand*[T](): T =
   ## Returns a uniformly distributed random value of any _sized_ type without
@@ -36,14 +36,3 @@ proc randString*(l: int): string =
   discard RAND_bytes(b, cint(l))
   result = bytesToString(cast[ptr UncheckedArray[char]](b), l)
   dealloc(b)
-
-template randStringHex*(l: int): string =
-  randString(l).toHex().toLowerAscii()
-
-when isMainModule:
-  import strutils
-  echo secureRand[uint64]()
-  echo secureRand[int32]()
-  echo secureRand[float]()
-  echo secureRand[array[6, byte]]()
-  echo randString(12).toHex()

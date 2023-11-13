@@ -2,7 +2,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import unicode, tables, rope_base, options
+import unicode, tables, rope_base, options, random, hexdump
 
 proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
                lpad = -1, rpad = -1, casing = CasingIgnore,
@@ -73,37 +73,37 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
       for item in borders:
         case item
         of BorderNone:
-          result.useTopBorder    = some(false)
-          result.useBottomBorder = some(false)
-          result.useLeftBorder   = some(false)
-          result.useRightBorder  = some(false)
-          result.useVerticalSeparator = some(false)
+          result.useTopBorder           = some(false)
+          result.useBottomBorder        = some(false)
+          result.useLeftBorder          = some(false)
+          result.useRightBorder         = some(false)
+          result.useVerticalSeparator   = some(false)
           result.useHorizontalSeparator = some(false)
         of BorderTop:
-          result.useTopBorder = some(true)
+          result.useTopBorder           = some(true)
         of BorderBottom:
-          result.useBottomBorder = some(true)
+          result.useBottomBorder        = some(true)
         of BorderLeft:
-          result.useLeftBorder = some(true)
+          result.useLeftBorder          = some(true)
         of BorderRight:
-          result.useRightBorder = some(true)
+          result.useRightBorder         = some(true)
         of HorizontalInterior:
           result.useHorizontalSeparator = some(true)
         of VerticalInterior:
-          result.useVerticalSeparator = some(true)
+          result.useVerticalSeparator   = some(true)
         of BorderTypical:
-          result.useTopBorder = some(true)
-          result.useBottomBorder = some(true)
-          result.useLeftBorder = some(true)
-          result.useRightBorder = some(true)
-          result.useVerticalSeparator = some(true)
+          result.useTopBorder           = some(true)
+          result.useBottomBorder        = some(true)
+          result.useLeftBorder          = some(true)
+          result.useRightBorder         = some(true)
+          result.useVerticalSeparator   = some(true)
           result.useHorizontalSeparator = some(false)
         of BorderAll:
-          result.useTopBorder = some(true)
-          result.useBottomBorder = some(true)
-          result.useLeftBorder = some(true)
-          result.useRightBorder = some(true)
-          result.useVerticalSeparator = some(true)
+          result.useTopBorder           = some(true)
+          result.useBottomBorder        = some(true)
+          result.useLeftBorder          = some(true)
+          result.useRightBorder         = some(true)
+          result.useVerticalSeparator   = some(true)
           result.useHorizontalSeparator = some(true)
     if boxStyle != nil:
       result.boxStyle = some(boxStyle)
@@ -281,10 +281,132 @@ proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
 template setDefaultStyle*(style: FmtStyle) =
   defaultStyle = style
 
-type StyleType = enum StyleTypeTag, StyleTypeClass, StyleTypeId
+type StyleType* = enum StyleTypeTag, StyleTypeClass, StyleTypeId
 
 proc setStyle*(reference: string, style: FmtStyle, kind = StyleTypeTag) =
   case kind
   of StyleTypeTag:   styleMap[reference]       = style
   of StyleTypeClass: perClassStyles[reference] = style
   of StyleTypeId:    perIdStyles[reference]    = style
+
+proc setClass*(r: Rope, name: string) =
+  r.class = name
+
+proc ropeStyle*(r: Rope, style: FmtStyle): Rope =
+  if r.id == "":
+    r.id = randString(8).hex()
+
+  if r.id in perIdStyles:
+    perIdStyles[r.id] = style.mergeStyles(perIdStyles[r.id])
+  else:
+    perIdStyles[r.id] = style.mergeStyles(defaultStyle)
+
+  return r
+
+proc noTableBorders*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(borders = [BorderNone]))
+
+proc noTableBorders*(s: string): Rope {.discardable.} =
+  return s.noTableBorders()
+
+proc allTableBorders*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(borders = [BorderAll]))
+
+proc allTableBorders*(s: string): Rope {.discardable.} =
+  return s.allTableBorders()
+
+proc typicalBorders*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(borders = [BorderTypical]))
+
+proc typicalBorders*(s: string): Rope {.discardable.} =
+  return s.typicalBorders()
+
+proc defaultBackground*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(bgColor = "default"))
+
+proc defaultBackground*(s: string): Rope {.discardable.} =
+  return s.defaultBackground()
+
+proc defaultForeground*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(fgColor = "default"))
+
+proc defaultForeground*(s: string): Rope {.discardable.} =
+  return s.defaultForeground()
+
+proc bgColor*(r: Rope, color: string): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(bgColor = color))
+
+proc bgColor*(s: string, color: string): Rope {.discardable.} =
+  return s.bgColor(color)
+
+proc fgColor*(r: Rope, color: string): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(fgColor = color))
+
+proc fgColor*(s: string, color: string): Rope {.discardable.} =
+  return s.fgColor(color)
+
+proc topMargin*(r: Rope, n: int): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(tmargin = n))
+
+proc topMargin*(s: string, n: int): Rope {.discardable.} =
+  return s.topMargin(n)
+
+proc bottomMargin*(r: Rope, n: int): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(bmargin = n))
+
+proc bottomMargin*(s: string, n: int): Rope {.discardable.} =
+  return s.bottomMargin(n)
+
+proc leftPad*(r: Rope, n: int): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(lpad = n))
+
+proc leftPad*(s: string, n: int): Rope {.discardable.} =
+  return s.leftPad(n)
+
+proc rightPad*(r: Rope, n: int): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(rpad = n))
+
+proc rightPad*(s: string, n: int): Rope {.discardable.} =
+  return s.rightPad(n)
+
+proc plainBorders*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(boxStyle = BoxStylePlain))
+
+proc plainBorders*(s: string): Rope {.discardable.} =
+  return s.plainBorders()
+
+proc boldBorders*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(boxStyle = BoxStyleBold))
+
+proc boldBorders*(s: string): Rope {.discardable.} =
+  return s.boldBorders()
+
+proc doubleBorders*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(boxStyle = BoxStyleDouble))
+
+proc doubleBorders*(s: string): Rope {.discardable.} =
+  return s.doubleBorders()
+
+proc dashBorders*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(boxStyle = BoxStyleDash))
+
+proc dashBorders*(s: string): Rope {.discardable.} =
+  return s.dashBorders()
+
+proc altDashBorders*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(boxStyle = BoxStyleDash2))
+
+proc altDashBorders*(s: string): Rope {.discardable.} =
+  return s.altDashBorders()
+
+proc boldDashBorders*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(boxStyle = BoxStyleBoldDash))
+
+proc boldDashBorders*(s: string): Rope {.discardable.} =
+  return s.boldDashBorders()
+
+proc altBoldDashBorders*(r: Rope): Rope {.discardable.} =
+  return r.ropeStyle(newStyle(boxStyle = BoxStyleBoldDash2))
+
+proc altBoldDashBorders*(s: string): Rope {.discardable.} =
+  return s.altBoldDashBorders()

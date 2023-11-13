@@ -1,4 +1,4 @@
-import unicode, tables, options, unicodeid, unicodedb/properties, misc
+import unicode, options, unicodeid, unicodedb/properties, misc
 const
  defaultTextWidth* {.intdefine.}    = 80
  bareMinimumColWidth* {.intdefine.} = 2
@@ -226,7 +226,6 @@ let
                                 bottomT:    Rune(0x253b),
                                 leftT:      Rune(0x2523),
                                 rightT:     Rune(0x252b))
-
 
 proc copyStyle*(inStyle: FmtStyle): FmtStyle =
   result = FmtStyle(textColor:              inStyle.textColor,

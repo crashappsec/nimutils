@@ -142,7 +142,7 @@ proc findAllExePaths*(cmdName:    string,
   ## not-executable), and we do not open the file, so there's the
   ## chance of the executable going away before we try to run it.
   ##
-  ## The point is, the caller should eanticipate failure.
+  ## The point is, the caller should anticipate failure.
   let
     (mydir, me) = getMyAppPath().splitPath()
   var
@@ -240,7 +240,7 @@ proc getAllFileNames*(dir: string,
       continue
     let fullpath = joinPath(dir, filename)
     var statbuf: Stat
-    if lstat(fullPath, statbuf) < 0:
+    if lstat(cstring(fullPath), statbuf) < 0:
       continue
     elif S_ISLNK(statbuf.st_mode):
       if dirExists(fullpath):

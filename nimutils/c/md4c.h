@@ -1,4 +1,3 @@
-{.emit: """
 /*
  * MD4C: Markdown parser for C
  * (http://github.com/mity/md4c)
@@ -9889,4 +9888,3 @@ c_markdown_to_html(char *mdoc, size_t len, void *outobj, size_t flags) {
 #endif
 
 #endif  /* MD4C_H */
-""".}

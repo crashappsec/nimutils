@@ -1,4 +1,4 @@
-import aes, sha, random, hexdump
+import aes, sha, random
 
 ## We're going to make a PRP using the Luby-Rackoff construction. The
 ## easiest thing for us to do is to break the input into two 'halves',
@@ -79,7 +79,7 @@ proc xor_in_place(o: pointer, s: cstring, i: cint):
 proc runHmacPrf(ctx: PrpCtx, key: string) =
   var toXor = key.hmacSha3(ctx.contents[16..^1])
 
-  xor_in_place(addr ctx.contents[0], toXor, cint(16))
+  xor_in_place(addr ctx.contents[0], cstring(toXor), cint(16))
 
 proc runCtrPrf(ctx: PrpCtx, key: string) =
   aesCtrInPlaceOneShot(key, addr ctx.contents[16], cint(len(ctx.contents) - 16))
@@ -130,16 +130,3 @@ proc brb*(key, toDecrypt: string, nonce: string): string =
   ctx.round1()
 
   return ctx.contents
-
-
-when isMainModule:
-  var
-    nonce: string
-    key = "0123456789abcdef"
-    ct  =  prp(key,
-               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" &
-               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-               nonce)
-
-  echo ct.hex()
-  echo brb(key, ct, nonce)

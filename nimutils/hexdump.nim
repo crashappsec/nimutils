@@ -5,10 +5,10 @@
 #
 # :Author: John Viega (john@viega.org)
 
-import strutils, os, system/nimscript
+import strutils, os
 
 static:
-  {.compile: joinPath(splitPath(currentSourcePath()).head, "hex.c").}
+  {.compile: joinPath(splitPath(currentSourcePath()).head, "c/hex.c").}
 
 proc hex*(s: string): string =
   return s.toHex().toLowerAscii()

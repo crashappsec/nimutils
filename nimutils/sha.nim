@@ -16,15 +16,15 @@ proc sha256_raw(s: cstring, count: csize_t, md_buf: cstring) {.cdecl, dynLib:DLL
 proc sha512_raw(s: cstring, count: csize_t, md_buf: cstring) {.cdecl, dynLib:DLLUtilName,importc: "SHA512".}
 
 type
-  Sha256ctx = object
+  Sha256ctx* = object
     evpCtx: EVP_MD_CTX
-  Sha512ctx = object
+  Sha512ctx* = object
     evpCtx: EVP_MD_CTX
-  Sha3ctx = object
+  Sha3ctx* = object
     evpCtx: EVP_MD_CTX
-  Sha256Digest = array[32, uint8]
-  Sha512Digest = array[64, uint8]
-  Sha3Digest   = array[64, uint8]
+  Sha256Digest* = array[32, uint8]
+  Sha512Digest* = array[64, uint8]
+  Sha3Digest*   = array[64, uint8]
 
 proc `=destroy`*(ctx: Sha256ctx) =
   EVP_MD_CTX_free(ctx.evpCtx)
@@ -154,15 +154,3 @@ template hmacSha512Hex*(key: string, s: string): string =
 
 template hmacSha3Hex*(key: string, s: string): string =
   hmacSha3(key, s).toHex().toLowerAscii()
-
-when isMainModule:
-  import streams
-  let text = newFileStream("logging.nim").readAll()
-  var ctx: Sha256ctx
-
-  initSha256(ctx)
-  ctx.update(text)
-  echo ctx.final().toHex().toLowerAscii()
-  echo Sha256(text).toHex().toLowerAscii()
-  echo hmacSha256("foo", "bar").toHex().toLowerAscii()
-  echo hmacSha256Hex("foo", "bar")

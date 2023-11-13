@@ -1,4 +1,3 @@
-{.emit: """
 // Copyright 2010 Google Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -968,4 +967,3 @@ const char *gumbo_status_to_string(GumboOutputStatus status);
 #endif
 
 #endif // GUMBO_GUMBO_H_
-""".}

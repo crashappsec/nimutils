@@ -106,7 +106,7 @@ macro declB32Decoder(modifier: static[string], mapname: untyped): untyped =
     d32 = ident("d32" & modifier)
 
   return quote do:
-    proc `d32`(c: char): uint {.inline.} =
+    proc `d32`*(c: char): uint {.inline.} =
       if int(c) > 90 or int(c) < 48:
         raise newException(ValueError, "Invalid b32 char")
       let ix = if int(c) >= 65: int(c) - 55 else: int(c) - 48
@@ -228,47 +228,3 @@ proc ulidToTimeStamp*(s: string): uint64 =
   result = result or uint64(d32v(s[7])) shl 10
   result = result or uint64(d32v(s[8])) shl 5
   result = result or uint64(d32v(s[9]))
-
-
-when isMainModule:
-  let x = getUlid()
-  echo unixTimeInMs()
-  echo x, " ", x.ulidToTimeStamp()
-  let y = getUlid()
-  echo y, " ", y.ulidToTimeStamp()
-  echo unixTimeInMs()
-  echo base32Encode("This is some string.")
-  echo "KRUGS4ZANFZSA43PNVSSA43UOJUW4ZZO (is the answer)"
-  echo base32Encode("This is some string")
-  echo "KRUGS4ZANFZSA43PNVSSA43UOJUW4ZY  (is the answer)"
-  echo base32Encode("This is some strin")
-  echo "KRUGS4ZANFZSA43PNVSSA43UOJUW4    (is the answer)"
-  echo base32Encode("This is some stri")
-  echo "KRUGS4ZANFZSA43PNVSSA43UOJUQ     (is the answer)"
-  echo base32Encode("This is some str")
-  echo "KRUGS4ZANFZSA43PNVSSA43UOI       (is the answer)"
-
-
-  echo "-----"
-  echo base32vEncode("This is some string.")
-  echo base32vDecode(base32vEncode("1his is some string."))
-  echo base32vEncode("This is some string")
-  echo base32vDecode(base32vEncode("2his is some string"))
-  echo base32vEncode("This is some strin")
-  echo base32vDecode(base32vEncode("3his is some strin"))
-  echo base32vEncode("This is some stri")
-  echo base32vDecode(base32vEncode("4his is some stri"))
-  echo base32vEncode("This is some str")
-  echo base32vDecode(base32vEncode("5his is some str"))
-
-  echo "-----"
-  echo base32Encode("This is some string.")
-  echo base32Decode(base32Encode("1his is some string."))
-  echo base32Encode("This is some string")
-  echo base32Decode(base32Encode("2his is some string"))
-  echo base32Encode("This is some strin")
-  echo base32Decode(base32Encode("3his is some strin"))
-  echo base32Encode("This is some stri")
-  echo base32Decode(base32Encode("4his is some stri"))
-  echo base32Encode("This is some str")
-  echo base32Decode(base32Encode("5his is some str"))

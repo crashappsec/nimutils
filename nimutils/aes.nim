@@ -6,67 +6,8 @@ const badNonceError =  "GCM nonces should be exactly 12 bytes. If " &
 
 {.emit: """
 // This is just a lot easier to do in straight C.
-// We're going to assume headers aren't available and declare what we use.
-
-#include <limits.h>
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-
-#ifndef EVP_CTRL_GCM_GET_TAG
-#define EVP_CIPHER_CTX void
-#define EVP_CTRL_GCM_GET_TAG 0x10
-#define EVP_CTRL_GCM_SET_TAG 0x11
-#endif
-
-typedef void *GCM128_CONTEXT;
-
-extern int EVP_EncryptUpdate(void *ctx, unsigned char *out,
-                             int *outl, const unsigned char *in, int inl);
-extern int EVP_EncryptFinal(EVP_CIPHER_CTX *ctx, unsigned char *out,
-                             int *outl);
-extern int EVP_CIPHER_CTX_ctrl(EVP_CIPHER_CTX *ctx, int type, int arg,
-                                   void *ptr);
-extern int EVP_EncryptInit_ex2(EVP_CIPHER_CTX *ctx, const void *type,
-                              const unsigned char *key, const unsigned char *iv,
-                              void *params);
-extern int EVP_CipherInit_ex2(EVP_CIPHER_CTX *ctx, const void *type,
-                       const unsigned char *key, const unsigned char *iv,
-                       int enc, void *params);
-extern int EVP_DecryptUpdate(EVP_CIPHER_CTX *ctx, unsigned char *out,
-                             int *outl, const unsigned char *in, int inl);
-extern int EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx, unsigned char *outm,
-                               int *outl);
-extern int EVP_DecryptInit_ex(EVP_CIPHER_CTX *ctx, void *type,
-                              void *impl, const unsigned char *key,
-                              const unsigned char *iv);
-
-extern int bswap_64(int);
-
-typedef struct gcm_ctx {
-  EVP_CIPHER_CTX *aes_ctx;
-  int            num_ops;
-  char           *msg;
-  int            mlen;
-  char           *aad;
-  int            alen;
-  uint8_t        nonce[12];
-} gcm_ctx_t;
-
-typedef struct gcm_ctx_for_nonce_bump {
-  EVP_CIPHER_CTX *aes_ctx;
-  int            num_ops;
-  char           *msg;
-  int            mlen;
-  char           *aad;
-  int            alen;
-  uint32_t       highnonce;
-  uint64_t       lownonce;
-} nonce_ctx_t;
-
-extern char *
-chex(void *ptr, unsigned int len, unsigned int start_offset,
-     unsigned int width);
+// We assume we don't have full headers; nimugcm.h is a slimmed down version.
+#include "nimugcm.h"
 
 static void bump_nonce(nonce_ctx_t *ctx) {
   #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -170,7 +111,6 @@ N_CDECL(int, do_gcm_decrypt)(gcm_ctx_t *ctx, void *tocast) {
     return 0;
 }
 
-
 """.}
 
 {.pragma: lcrypto, cdecl, dynlib: DLLUtilName, importc.}
@@ -202,7 +142,7 @@ type
   AesCtx* = object
     aesCtx: EVP_CIPHER_CTX
 
-  GcmCtx* {.importc: "gcm_ctx_t".} = object
+  GcmCtx* {.importc: "gcm_ctx_t", header: "nimugcm.h" .} = object
     aes_ctx:  EVP_CIPHER_CTX
     num_ops:  cint
     msg:      cstring
@@ -383,48 +323,3 @@ proc gcmDecrypt*(ctx: var GcmCtx, msg: string, nonce: string,
 
   result = some(bytesToString(outbuf, len(msg) - 16))
   dealloc(outbuf)
-
-when isMainModule:
-  import strutils, hexdump
-
-  var
-    encCtx: GcmCtx
-    decCtx: GcmCtx
-    nonce:  string
-    ct:     string
-    pt    = "This is a test between disco and death"
-    key   = "0123456789abcdef"
-  gcmInitEncrypt(encCtx, key)
-  gcmInitDecrypt(decCtx, key)
-
-  echo "Initial pt: ", pt
-
-  for i in 1 .. 3:
-    ct    = encCtx.gcmEncrypt(pt)
-    nonce = encCtx.gcmGetNonce()
-    pt    = decCtx.gcmDecrypt(ct, nonce).get("<error>")
-
-    echo "Nonce: ", nonce.toHex().toLowerAscii()
-    echo "CT: "
-    echo strDump(ct)
-    echo "Decrypted: ", pt
-
-  echo "Keystream test: "
-
-  let
-    stream1 = aesPrfOneShot(key, 200)
-    stream2 = aesPrfOneShot(key, 200)
-
-  echo stream1.toHex()
-  assert len(stream1) == 200
-  assert stream1 == stream2
-
-  let text = "This is a test, yo, dawg"
-
-  aesCtrInPlaceOneshot(key, text)
-
-  echo "Covered dog: ", text.hex()
-
-  aesCtrInPlaceOneshot(key, text)
-
-  echo text

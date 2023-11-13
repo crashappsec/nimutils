@@ -122,10 +122,16 @@ proc log*(level: string, msg: string) =
                   msg & "\n",
                         newOrderedTable({ keyLogLevel: level }))
 
-proc error*(msg: string) = log(llError, msg)
-proc warn*(msg: string)  = log(llWarn, msg)
-proc info*(msg: string)  = log(llInfo, msg)
-proc trace*(msg: string) = log(llTrace, msg)
+template log*(level: LogLevel, msg: Rope) = log(level, $(msg))
+template log*(level: string, msg: Rope) = log(level, $(msg))
+template error*(msg: string) = log(llError, msg)
+template warn*(msg: string)  = log(llWarn, msg)
+template info*(msg: string)  = log(llInfo, msg)
+template trace*(msg: string) = log(llTrace, msg)
+template error*(msg: Rope) = log(llError, $(msg))
+template warn*(msg: Rope)  = log(llWarn, $(msg))
+template info*(msg: Rope)  = log(llInfo, $(msg))
+template trace*(msg: Rope) = log(llTrace, $(msg))
 
 when not defined(release):
   let
