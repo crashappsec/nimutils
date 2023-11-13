@@ -374,6 +374,21 @@ macro basicTagGen(ids: static[openarray[string]]): untyped =
           return `idNode`(s.rawStrToRope(pre = false))
     result.add(decl)
 
+macro tagGenRename(id: static[string], rename: static[string]): untyped =
+  result = newStmtList()
+
+  let
+    strNode = newLit(id)
+    idNode  = newIdentNode(rename)
+    hidNode = newIdentNode("html" & id)
+    decl    = quote do:
+      proc `idNode`*(r: Rope): Rope =
+        return Rope(kind: RopeTaggedContainer, tag: `strNode`,
+                    contained: r)
+      proc `idNode`*(s: string): Rope =
+        return `idNode`(s.rawStrToRope(pre = false))
+  result.add(decl)
+
 macro hidTagGen(ids: static[openarray[string]]): untyped =
   result = newStmtList()
 
@@ -430,10 +445,14 @@ proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
     result.add(ColInfo(widthPct: item, span: 1))
 
 basicTagGen(["h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div",
-             "code", "ins", "del", "kbd", "mark", "p", "q", "s", "small",
-             "sub", "sup", "title", "em", "i", "b", "strong", "u", "caption",
-             "td", "th", "var", "italic", "strikethrough", "strikethru",
-             "underline", "bold"])
+             "code", "ins", "del", "kbd", "mark", "small", "sub", "sup",
+             "title", "em", "strong", "caption", "td", "th", "italic",
+             "strikethru", "underline", "bold"])
+
+tagGenRename("p",   "paragraph")
+tagGenRename("q",   "quote")
+tagGenRename("u",   "unstructured")
+tagGenRename("var", "variable")
 
 alignedGen(["right", "center", "left", "justify", "flush"])
 
@@ -443,14 +462,13 @@ hidTagGen(["a", "abbr", "address", "article", "aside", "b", "base", "bdi",
            "bdo", "blockquote", "br", "caption", "center", "cite", "code",
            "col", "colgroup", "data", "datalist", "dd", "details", "dfn",
            "dialog", "dl", "dt", "em", "embed", "fieldset", "figcaption",
-            "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
-            "header", "hr", "i", "ins", "kbd", "label", "legend", "li",
-            "link", "main", "mark", "menu", "meta", "meter", "nav", "ol",
-            "optgroup", "output", "p", "param", "pre", "progress", "q", "s",
-            "samp", "search", "section", "select", "span", "strong", "style",
-            "sub", "summary", "sup", "table", "tbody", "td", "tfoot",
-            "th", "thead", "title", "tr", "u", "ul"])
-
+           "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
+           "header", "hr", "i", "ins", "kbd", "label", "legend", "li",
+           "link", "main", "mark", "menu", "meta", "meter", "nav", "ol",
+           "optgroup", "output", "p", "param", "pre", "progress", "q", "s",
+           "samp", "search", "section", "select", "span", "strong", "style",
+           "sub", "summary", "sup", "table", "tbody", "td", "tfoot",
+           "th", "thead", "title", "tr", "u", "ul"])
 
 proc pre*(r: Rope): Rope =
   return Rope(kind: RopeTaggedContainer, tag: "pre", contained: r)
