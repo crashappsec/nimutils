@@ -19,7 +19,7 @@ for item in listDirs(thisDir()):
 proc getEnvDir(s: string, default = ""): string =
   result = getEnv(s, default)
 
-exec thisDir() & subdir & "/bin/buildlibs.sh " & thisDir() & "/files/deps"
+exec thisDir() & "/bin/buildlibs.sh " & thisDir() & "/files/deps"
 
 var
   default  = getEnvDir("HOME").joinPath(".local/c0")
