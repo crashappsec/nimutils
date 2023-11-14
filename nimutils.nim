@@ -381,6 +381,11 @@ Oh look, here comes a table!
 | ------- | -------- |
 | foo     | bar      |
 | crash   | override |
+
+## Some list
+- Hello, there.
+- This is an example list.
+- This bullet will be long enough that it can show how we wrap bulleted text intelligently.
 """
     let crazyTable = @[
       @[md(mdText), md(mdText)],
