@@ -54,6 +54,10 @@ type
     BorderAll          = 8
 
   FmtStyle* = ref object  # For terminal formatting.
+    ## Style objects are all expressed as deltas from a currently
+    ## active style. When combining styles (with `mergeStyle()`),
+    ## anything that is a `some()` object will take priority,
+    ## replacing any set value.
     textColor*:              Option[string]
     bgColor*:                Option[string]
     overflow*:               Option[OverflowPreference]
@@ -81,6 +85,12 @@ type
     alignStyle*:             Option[AlignStyle]
 
   BoxStyle* = ref object
+    ## This data structure specifies what Unicode characters to use
+    ## for different styles of box. Generally, you should not need to
+    ## do anything custom, as we provide all the standard options in
+    ## the unicode set. Some of them (particularly the dashed ones)
+    ## are not universally provided, so should be avoided if you're
+    ## not providing some sort of accomidation.
     horizontal*: Rune
     vertical*:   Rune
     upperLeft*:  Rune
@@ -106,10 +116,13 @@ type
     BrSoftLine, BrHardLine, BrParagraph, BrPage
 
   ColInfo* = object
+    ## Currently, we only support percents, so this object is more
+    ## a placeholder than anything.
     span*:     int
     widthPct*: int
 
   Rope* = ref object
+    ## The core rope object.  Generally should only access via API.
     next*:       Rope
     cycle*:      bool
     tag*:        string
@@ -228,6 +241,10 @@ let
                                 rightT:     Rune(0x252b))
 
 proc copyStyle*(inStyle: FmtStyle): FmtStyle =
+  ## Produces a full copy of a style. This is primarily used
+  ## during the rendering process, but can be used to start
+  ## with a known style to create another style, without
+  ## modifying the original style directly.
   result = FmtStyle(textColor:              inStyle.textColor,
                     bgColor:                inStyle.bgColor,
                     overflow:               inStyle.overFlow,
@@ -255,7 +272,7 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
 let DefaultBoxStyle* = BoxStyleDouble
 
 proc `$`*(plane: TextPlane): string =
-  # This is more intended for rebugging.
+  ## Produce a debug representation of a TextPlane object.
   for line in plane.lines:
     for ch in line:
       if ch <= 0x10ffff:
@@ -265,6 +282,10 @@ proc `$`*(plane: TextPlane): string =
     result.add('\n')
 
 proc mergeTextPlanes*(dst: var TextPlane, append: TextPlane) =
+  ## Merge two TextPlane objects. Since this type is mainly just the
+  ## output of the pre-renderer and will usually get passed right to a
+  ## renderer without you seeing it, you probably won't need this, but
+  ## its use does span modules, so it's exported.
   if len(dst.lines) == 0:
     dst.lines = append.lines
   elif len(append.lines) != 0:
@@ -344,6 +365,12 @@ proc getBreakOpps(s: seq[uint32]): seq[int] =
     result = result[0 ..< ^1]
 
 proc stripSpacesButNotFormatters*(input: seq[uint32]): seq[uint32] =
+  ## Given a sequence of 32-bit integers that contains a combination of
+  ## runes and formatting markers, strips white space off both sides,
+  ## but without removing any formatting markers.
+  ##
+  ## While subsequent format markers *can* be elided, we haven't
+  ## bothered yet.
   for i, ch in input:
     if ch > 0x10ffff:
       result.add(ch)
@@ -352,6 +379,8 @@ proc stripSpacesButNotFormatters*(input: seq[uint32]): seq[uint32] =
       return
 
 proc stripSpacesButNotFormattersFromEnd*(input: seq[uint32]): seq[uint32] =
+  ## Same as `stripSpacesButNotFormatters`, but does only removes
+  ## white space from the end.
   var n = len(input)
   while n > 0:
     n -= 1
@@ -445,6 +474,10 @@ proc ensureFormattingIsPerLine(plane: var TextPlane) =
       plane.lines[i] &= @[StylePop]
 
 proc wrapToWidth*(plane: var TextPlane, style: FmtStyle, w: int) =
+  ## Wraps the text that's already laid out in a TextPlane object,
+  ## using the given overflow strategy. Generally, this should
+  ## probably only be used internally; see `truncateToWidth()` for
+  ## something that will operate on UTF-32 (arrays of codepoints).
   # First, we're going to do a basic wrap, without regard to style
   # indicators. But then we want each line to have the correct stack
   # state, so we'll go back through and figure out when we need to add

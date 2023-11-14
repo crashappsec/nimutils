@@ -2,6 +2,9 @@
 ## :Copyright: 2023, Crash Override, Inc.
 
 ## For now, not intended to be threadsafe for mutation ops.
+## Additionally, this is some of the oldest code in Nimutils; it
+## probably should be updated / merged with the lower level IO
+## multiplexing switchboard that is now part of the library.
 
 import tables, sugar, options, json, strutils, strutils, std/terminal,
        unicodeid, rope_ansirender, rope_construct

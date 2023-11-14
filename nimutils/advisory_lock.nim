@@ -12,6 +12,8 @@ type OsErrRef = ref OsError
 
 proc obtainLockFile*(fname: string, writeLock = false, timeout: int64 = 5000,
                                                 oflags: cint = 0): cint =
+  ## Obtains a lock on a file, returning the file descriptor associated
+  ## with it. Unlock via `unlockFd()`
   var
     lockflags: cint
     openflags = oflags
@@ -46,6 +48,7 @@ proc obtainLockFile*(fname: string, writeLock = false, timeout: int64 = 5000,
     sleepdur = sleepdur shl 1
 
 proc unlockFd*(fd: cint) =
+  ## Releases a file lock.
   flock(fd, 8)
 
 proc writeViaLockFile*(loc:    string,
@@ -93,9 +96,11 @@ proc readViaLockFile*(loc: string, timeoutMs = 5000): string =
   fd.unlockFd()
 
 proc unlock*(f: var File) =
+  ## Releases a file lock.
   f.getFileHandle().unlockFd()
 
 proc lock*(f: var File, writelock = false, blocking = true) =
+  ## Gets a file lock from a File object.
   var opts: cint = 0
 
   if writelock:

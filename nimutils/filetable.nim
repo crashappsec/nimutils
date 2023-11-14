@@ -17,13 +17,13 @@ type
 
 
 proc staticListFiles*(arg: string): seq[string] =
-  # Unfortunately, for whatever reason, system/nimutils's listFiles()
-  # doesn't seem to work from here, so we can't use listFiles().  As a
-  # result, we use a staticexec("ls") and parse.  This obviously is
-  # not portable to all versions of Windows.
-  #
-  # This invocation of ls might not be super portable.  Deserves a bit
-  # of testing.
+  ## Unfortunately, for whatever reason, system/nimutils's listFiles()
+  ## doesn't seem to work from here, so we can't use listFiles().  As a
+  ## result, we use a staticexec("ls") and parse.  This obviously is
+  ## not portable to all versions of Windows.
+  ##
+  ## This is super hacky, but works well enough, without digging deep
+  ## into the Javascript runtime.
   result = @[]
 
   let
@@ -36,6 +36,14 @@ proc staticListFiles*(arg: string): seq[string] =
 
 
 template newFileTable*(dir: static[string]): FileTable =
+  ## This will, at compile time, read files from the named directory,
+  ## and produce a `Table[string, string]` where the keys are the file
+  ## names (without path info), and the values are the file contents.
+  ##
+  ## This doesn't use the newer dictionary interface, and I think at
+  ## this point, our tooling is good enough that we don't need this
+  ## for our own uses, but no reason why it can't stay if others might
+  ## find it useful.
   var
     ret: FileTable = initTable[string, string]()
     path = instantiationInfo(fullPaths = true).filename.splitPath().head
@@ -53,6 +61,7 @@ template newFileTable*(dir: static[string]): FileTable =
   ret
 
 template newOrderedFileTable*(dir: static[string]): OrderedFileTable =
+  ## Same as `newFileTable()` except uses an `OrderedTable`.
   var
     ret: OrderedFileTable = initOrderedTable[string, string]()
     path = instantiationInfo(fullPaths = true).filename.splitPath().head

@@ -9,7 +9,7 @@ var
 proc setTargetStr(target: string) =
   targetStr = target
 
-proc setupTargetArch*(quiet = true) =
+proc setupTargetArch(quiet = true) =
   once:
     when defined(macosx):
       # -d:arch=amd64 will allow you to specifically cross-compile to intel.
@@ -47,11 +47,23 @@ proc setupTargetArch*(quiet = true) =
           echo "Invalid target architecture for MacOs: " & arch
         quit(1)
 
-template getTargetArch*() =
+proc getTargetArch*(): string =
+  ## The Nim compile time runs in the Javascript VM. On a Mac, for
+  ## whatever crazy reason, the VM runs in an X86 emulator, meaning
+  ## that Nim's `hostCPU` builtin will always report `amd64`, even when
+  ## it should be reporting `arm` on M1/2/3 macs.
+  ##
+  ## This uses some trickery to detect when the underlying machine is
+  ## `arm`. If you set -d:arch=amd64 it will override.
+  ##
+  ## Meant to be run from your config.nims file.
+
   setupTargetArch()
-  targetArch
+  return targetArch
 
 template applyCommonLinkOptions*(staticLink = true, quiet = true) =
+  ## Applies the link options necessary for projects using nimutils.
+  ## Meant to be called from your config.nims file.
   switch("d", "ssl")
   switch("d", "nimPreviewHashRef")
   switch("gc", "refc")
@@ -78,6 +90,8 @@ template applyCommonLinkOptions*(staticLink = true, quiet = true) =
 
 template staticLinkLibraries*(libNames: openarray[string], libDir: string,
                               useMusl = true, muslBase = libDir) =
+  ## Automates statically linking all appropriate libraries.
+  ## Meant to be called from your config.nims file.
   when defined(linux):
     if useMusl:
       let muslPath = muslBase & "musl/bin/musl-gcc"

@@ -127,10 +127,12 @@ proc_list(size_t *count) {
     procinfo_t        *to_return;
     int                name[] = { CTL_KERN, KERN_PROC, KERN_PROC_ALL};
     size_t             i, len;
-    size_t             valid = 0;
+    size_t             valid    = 0;
+    int                failsafe = 0;
 
     // This loop should only ever run once from what I can tell, because
     // the OS has us massively over-allocate.
+    // If this goes more than 10 loops, we bail.
     while (true) {
 	err = sysctl(name, 3, NULL, &len, NULL, 0);
 	if (err != 0) {
@@ -145,6 +147,9 @@ proc_list(size_t *count) {
 	}
 	if (sysctl(name, 3, result, &len, NULL, 0) == -1) {
 	    free(result);
+	    if (failsafe++ == 10) {
+		return NULL;
+	    }
 	}
 	else {
 	    break;
@@ -225,7 +230,8 @@ proc_list_one(size_t *count, int pid) {
     procinfo_t        *to_return;
     int                name[] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, pid};
     size_t             i, len;
-    size_t             valid = 0;
+    size_t             valid    = 0;
+    int                failsafe = 0;    
 
     while (true) {
 	err = sysctl(name, 4, NULL, &len, NULL, 0);
@@ -239,6 +245,10 @@ proc_list_one(size_t *count, int pid) {
 	}
 	if (sysctl(name, 4, result, &len, NULL, 0) == -1) {
 	    free(result);
+
+	    if (failsafe++ == 10) {
+		return NULL;
+	    }
 	}
 	else {
 	    if (len != 1) {

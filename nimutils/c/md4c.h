@@ -9869,7 +9869,7 @@ entity_lookup(const char* name, size_t name_size)
 
 // John's stuff.
 typedef void (*CB_TYPE)(const char *, unsigned int, void*);
-N_LIB_PRIVATE N_CDECL(void, nimu_process_markdown)(NCSTRING s_p0, unsigned int n_p1, void* p_p2);
+N_LIB_PRIVATE N_CDECL(void, nimu_process_markdown)(NU8* s_p0, unsigned int n_p1, void* p_p2);
 
 MD_HTML_CALLBACKS x = {
   .process_output   = nimu_process_markdown,

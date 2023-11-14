@@ -41,7 +41,7 @@ type
 type HtmlOutputContainer = ref object
     s: string
 
-proc nimu_process_markdown(s: ptr UncheckedArray[char], n: cuint, p: pointer) {.cdecl,exportc.} =
+proc nimu_process_markdown(s: ptr UncheckedArray[byte], n: cuint, p: pointer) {.cdecl, exportc.} =
 
   var x: HtmlOutputContainer = (cast[ptr HtmlOutputContainer](p))[]
   x.s.add(bytesToString(s, int(n)))
@@ -50,6 +50,9 @@ proc c_markdown_to_html(s: cstring, l: cuint, o: pointer,
                         f: cint): cint {.importc, cdecl,nodecl.}
 
 proc markdownToHtml*(s: string, opts: openarray[MdOpts] = [MdGithub]): string =
+  ## Converts a string from Markdown to an html string. The string can
+  ## have embedded markdown. This functionality is implemented via the
+  ## MD4C library.
   var
     container = HtmlOutputContainer()
     res:       cint
@@ -63,12 +66,3 @@ proc markdownToHtml*(s: string, opts: openarray[MdOpts] = [MdGithub]): string =
   # First removing the good stuff makes it easier to replace reliably.
 
   result = container.s
-
-when isMainModule:
-  echo markdownToHtml("""
-# Hello world!
-
-| Example | Table |
-| ------- | ----- |
-| foo     | bar  |
-""")

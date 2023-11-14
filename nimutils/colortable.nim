@@ -2,6 +2,12 @@
 # https://en.wikipedia.org/wiki/Web_colors
 import tables, os, parseUtils
 
+## This array contains all names we recognize for full 24-bit color.
+## APIs that accept color names will also accept #abc123 style hex
+## codes, but the algorithm for converting down to 256 colors may
+## not be awesome, depending on your terminal, so color names are
+## preferable when possible (all colors here should have a 'close'
+## equal in the 256-color (8-bit) version below.
 var colorTable* = {
   "mediumvioletred"      : 0xc71585,
   "deeppink"             : 0xff1493,
@@ -161,6 +167,7 @@ var colorTable* = {
 # Someone should script up some A/B testing to hone in on some of
 # these better, but this all looks good enough for now.
 
+## 8-bit color mappings for our named colors.
 var color8Bit* =  {
   "mediumvioletred"      : 126,
   "deeppink"             : 206, # Pretty off still. 201, 199
@@ -317,24 +324,53 @@ template getColorTable*(): OrderedTable = colorTable
 template get8BitTable*(): OrderedTable  = color8Bit
 
 proc setShowColor*(val: bool) =
+  ## If this is set to `false`, then rope "rendering" will not apply
+  ## any ansi codes whatsoever.
+  ##
+  ## All output should otherwise look the same as it would with color,
+  ## meaning there will be no variations in width.
   showColor = val
 
 proc getShowColor*(): bool =
+  ## Returns whether color will be output.
   return showColor
 
 proc setUnicodeOverAnsi*(val: bool) =
+  ## In some cases, we can use Unicode to attempt to draw some features,
+  ## like underlining. This is generally good because people might turn
+  ## colors off, in which case we interpret that as *no ansi codes*.
+  ## Plus, some terminals may not support these things.
+  ##
+  ## Unfortunately, not all fonts render unicode underlining well either.
+  ## Thus, the toggle.
   unicodeOverAnsi = val
 
 proc getUnicodeOverAnsi*(): bool =
+  ## Returns whether we're preferring unicode over ansi, when possible.
   return unicodeOverAnsi
 
 proc setColor24Bit*(val: bool) =
+  ## Sets whether to use 24-bit color. If the terminal doesn't support
+  ## it, you won't like the results. If you turn this off, you'll only
+  ## get 256 colors, but you can be sure the terminal will render
+  ## okay.
+  ##
+  ## We do have limited auto-detection based on environment variables,
+  ## but it isn't very good at this point.
   color24Bit = val
 
 proc getColor24Bit*(): bool =
+  ## Returns true for 24-bit output, false for 8-bit.
   return color24Bit
 
 proc autoDetectTermPrefs*() =
+  ## Does very limited detection of terminal capabilities.  We'd
+  ## eventually like to do deeper terminal queries.  For now, you're
+  ## mainly on your own, sorry :/
+  ##
+  ## This is run once automatically when importing colortable, But you
+  ## can call it again if you like! I don't know why you would, since
+  ## you're in control of any environment variable changes, though :)
   # TODO: if on a TTY, query the terminal for trycolor support,
   # per the `Checking for colorterm` section of:
   # https://github.com/termstandard/colors
@@ -354,7 +390,12 @@ proc autoDetectTermPrefs*() =
     unicodeOverAnsi = false
 
 proc hexColorTo8Bit*(hex: string): int =
-  # Returns -1 if invalid.
+  ## Implements the algorithmic mapping of the 24-bit color space to 8
+  ## bit color. Returns -1 if the input was invalid.
+  ##
+  ## Since terminals will generally use a pallate for 256 colors, the
+  ## mappings usually aren't exact, and can occasionally be WAY off
+  ## what is expected.
   var color: int
 
   if parseHex(hex, color) != 6:
@@ -370,6 +411,8 @@ proc hexColorTo8Bit*(hex: string): int =
            int(blue * 3 / 255)
 
 proc colorNameToHex*(name: string): (int, int, int) =
+  ## Looks up a color name, and converts it to the three raw (r, g, b)
+  ## values that we need for ANSI codes.
   let colorTable = getColorTable()
   var color: int
 
@@ -380,6 +423,8 @@ proc colorNameToHex*(name: string): (int, int, int) =
   result = (color shr 16, (color shr 8) and 0xff, color and 0xff)
 
 proc colorNameToVga*(name: string): int =
+  ## Looks up a color name, and converts it to the 8-bit color value
+  ## mapped to that name.
   let color8Bit = get8BitTable()
 
   if name in color8Bit:
@@ -387,4 +432,5 @@ proc colorNameToVga*(name: string): int =
   else:
     return hexColorTo8Bit(name)
 
-autoDetectTermPrefs()
+once:
+  autoDetectTermPrefs()

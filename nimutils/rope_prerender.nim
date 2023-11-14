@@ -64,6 +64,10 @@ template pad(state: FmtState, w: int): seq[uint32] =
   state.styleRunes(uint32(Rune(' ')).repeat(w))
 
 proc noBoxRequired*(r: Rope): bool =
+  ## Generally, this call is only meant to be used either internally,
+  ## or by a renderer (the ansi renderer being the only one we
+  ## currently have).
+  ##
   ## Returns true if we have paragraph text that does NOT require any
   ## sort of box... so no alignment, padding, tables, lists, ...
   ##
@@ -100,6 +104,18 @@ proc noBoxRequired*(r: Rope): bool =
   return true
 
 proc unboxedRunelength*(r: Rope): int =
+  ## Returns the approximate display-width of a rope, without
+  ## considering the size of 'box' we're going to try to fit it into.
+  ##
+  ## That is, this call returns how many characters of fixed-sized
+  ## width we think we need to render the given rope.
+  ##
+  ## Note that we cannot ultimately know how a terminal will render a
+  ## given string, especially when it comes to Emoji. Under the hood,
+  ## we do our best, but stick to expected values provided in the
+  ## Unicode standard. But there may occasionally be length
+  ## calculation issues due to local fonts, etc.
+
   if r == Rope(nil):
     return 0
   case r.kind
@@ -849,12 +865,11 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
 
 proc preRender*(r: Rope, width = -1, showLinkTargets = false,
                 style = defaultStyle): TextPlane =
-  ## Denoted in the stream of characters to output, what styles
-  ## should be applied, when. We do this by dropping in unique
-  ## values into the uint32 stream that cannot be codepoints.  This
-  ## instructs the rendering implementation what style to push.
-  ##
-  ## There's a value for pop as well.
+  ## This takes a Rope that is essentially stored as a tree annotated
+  ## with style information, and produce a representation that is an
+  ## array of lines of unicode characters, interspersed with 32-bit
+  ## values outside the range of Unicode codepoints that allow for
+  ## lookup of styling information from the tree.
   ##
   ## Note that if you don't pass a width in, we end up calling an
   ## ioctl to query the terminal width. That does seem a bit

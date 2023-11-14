@@ -38,5 +38,8 @@ get_external_ipv4_address()
 proc get_external_ipv4_address() : cstring {.cdecl, importc.}
 
 proc getMyIpV4Addr*(): string =
+  ## Portably returns the primary IPv4 address as determined by the
+  ## machine's routing table. However, this does require internet
+  ## access.
   var s  = get_external_ipv4_address()
   result = $(s)

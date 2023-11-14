@@ -78,6 +78,7 @@ proc filterEmptyColumns*(inrows: seq[seq[string]],
                          headings: openarray[string],
                          emptyVals = ["", "None", "<em>None</em>", "[]"]):
  (seq[seq[string]], seq[string]) =
+  ## Deprecated. From the pre-rope days.
   var
     columnHasValues: seq[bool]
     returnedHeaders: seq[string]
@@ -106,7 +107,8 @@ proc filterEmptyColumns*(inrows: seq[seq[string]],
 
   return (newRows, returnedHeaders)
 
-proc instantTable*(cells: openarray[string], tableCaption = Rope(nil)): Rope =
+proc instantTable*[T: string|Rope](cells: openarray[T],
+                                   tableCaption = Rope(nil)): Rope =
   var
     remainingWidth         = terminalWidth()
     numcol                 = 0
@@ -117,7 +119,7 @@ proc instantTable*(cells: openarray[string], tableCaption = Rope(nil)): Rope =
   # and pad.
 
   for item in cells:
-    let w = item.strip().runeLength()
+    let w = item.runeLength()
     if  w > maxWidth:
       maxWidth = w
 
@@ -140,7 +142,8 @@ proc instantTable*(cells: openarray[string], tableCaption = Rope(nil)): Rope =
 
   return table(tbody(rows), caption = tableCaption)
 
-template instantTableNoHeaders(cells: seq[seq[string]], tableCaption: Rope):
+template instantTableNoHeaders[T: string|Rope](cells: seq[seq[T]],
+                                               tableCaption: Rope):
          Rope =
   var
     row:  seq[Rope] = @[]
@@ -154,8 +157,8 @@ template instantTableNoHeaders(cells: seq[seq[string]], tableCaption: Rope):
 
   table(tbody(rows), thead(@[]), caption = tableCaption)
 
-template instantTableHorizontalHeaders(cells: seq[seq[string]],
-                                       tableCaption: Rope): Rope =
+template instantTableHorizontalHeaders[T: string|Rope](cells: seq[seq[T]],
+                                                    tableCaption: Rope): Rope =
   var
     row:  seq[Rope] = @[]
     rows: seq[Rope] = @[]
@@ -172,8 +175,8 @@ template instantTableHorizontalHeaders(cells: seq[seq[string]],
 
   table(tbody(rows), caption = tableCaption)
 
-template instantTableVerticalHeaders(cells: seq[seq[string]],
-                                     tableCaption: Rope): Rope =
+template instantTableVerticalHeaders[T: string|Rope](cells: seq[seq[T]],
+                                                     tableCaption: Rope): Rope =
   var
     row:  seq[Rope] = @[]
     rows: seq[Rope] = @[]
@@ -190,7 +193,7 @@ template instantTableVerticalHeaders(cells: seq[seq[string]],
   table(tbody(rows), caption = tableCaption)
 
 
-proc instantTable*(cells: seq[seq[string]], verticalHeaders = false,
+proc instantTable*[T: string|Rope](cells: seq[seq[T]], verticalHeaders = false,
                    noheaders = false, caption = Rope(nil)): Rope =
   if noHeaders:
     return cells.instantTableNoHeaders(caption)

@@ -1,6 +1,11 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 ##
+## This was an experiment that didn't really work well; it needs a lot
+## more work to be useful, so please don't use this; the only reason I
+## haven't removed it is because there is code in Con4m that is still
+## using it for the time being.
+
 import macros
 
 type

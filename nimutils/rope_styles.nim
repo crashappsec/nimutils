@@ -2,7 +2,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import unicode, tables, rope_base, options, random, hexdump
+import unicode, tables, rope_base, rope_construct, options, random, hexdump
 
 proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
                lpad = -1, rpad = -1, casing = CasingIgnore,
@@ -21,11 +21,42 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
     ## anything it defines.
     ##
     ## For the parameters, the default values all mean "inherit from
-    ## the existing style".
+    ## the existing style". Anything you specify beyond the defaults
+    ## will lead to an override.
     ##
-    ## To that end, internally, style objects
+    ## Internally, individual style objects use Option[]s to know what
+    ## to override or not.
+    ##
+    ## Also, you need to consider the order in which style objects get
+    ## applied. There's usually a default style in place when we start
+    ## the pre-rendering process.
+    ##
+    ## Then, as we get to individual nodes, we look up the current
+    ## active style mapped to the for the node type (which map to
+    ## common html tags, and are interchangably called tags). If
+    ## there's a style, we merge it in (popping / unmerging it at the
+    ## end of processing the node).
+    ##
+    ## Then, if the node is in a 'class' (akin to an HTML class), and
+    ## there's a stored style for that class, we apply its overrides
+    ## next.
+    ##
+    ## Finally, if the node has an 'id' set, we apply any style
+    ## associated with the id. Then, we render.
+    ##
+    ## If you use the style API on rope objects, it works by mutating
+    ## the overrides, using the style associated w/ the node's ID
+    ## (creating a random ID if one isn't set).
+    ##
+    ## This means they take higher precidence than anything else, BUT,
+    ## the effects you set could still be masked by sub-nodes in the
+    ## tree. For instance, if you set something on a `table` node, the
+    ## saved styles for `tbody`, `tr` and `th`/`td` nodes can end up
+    ## masking what you were trying to set.
+    ##
+    ## The overall style for tags, classes and IDs can be set with
+    ## `setStyle()` and retrieved with `getStyle()`.
 
-Depending on the context where you apply a style object,
     result = FmtStyle()
 
     if fgColor != "":
@@ -134,8 +165,9 @@ var
     "body"     : newStyle(rpad = 1, lpad = 1),
     "div"      : newStyle(rpad = 1, lpad = 1, bgColor = "none"),
     "p"        : newStyle(bmargin = 1),
-    "h1"       : newStyle(fgColor = "red", bold = BoldOn,
-                          align = AlignL, italic = ItalicOn, casing = CasingUpper,
+    "basic"    : newStyle(bmargin = 0),
+    "h1"       : newStyle(fgColor = "red", bold = BoldOn, align = AlignL,
+                          italic = ItalicOn, casing = CasingUpper,
                           tmargin = 1, bmargin = 0),
     "h2"       : newStyle(fgColor = "lime", bgColor = "darkslategray",
                  bold = BoldOn, align = AlignL, italic = ItalicOn, tmargin = 2),
@@ -162,12 +194,17 @@ var
                  casing = CasingUpper, tmargin = 0, fgColor = "lime",
                  align = AlignC),
     "tr"       : newStyle(fgColor = "white", bold = BoldOn, lpad = 0, rpad = 0,
-                          overflow = OWrap, tmargin = 0, bgColor = "dodgerblue"),
+                          overflow = OWrap, tmargin = 0,
+                          bgColor = "dodgerblue"),
     "tr.even"  : newStyle(fgColor = "white", bgColor = "dodgerblue",
                            tmargin = 0, overflow = OWrap),
     "tr.odd"   : newStyle(fgColor = "white", bgColor = "steelblue",
                            tmargin = 0, overflow = OWrap),
     "em"       : newStyle(fgColor = "jazzberry", italic = ItalicOn),
+    "italic"   : newStyle(italic = ItalicOn),
+    "i"        : newStyle(italic = ItalicOn),
+    "u"        : newStyle(underline = UnderlineSingle),
+    "underline": newStyle(underline = UnderlineSingle),
     "strong"   : newStyle(inverse = InverseOn, italic = ItalicOn),
     "code"     : newStyle(inverse = InverseOn, italic = ItalicOn),
     "caption"  : newStyle(bgColor = "black", fgColor = "atomiclime",
@@ -179,6 +216,7 @@ var
   perIdStyles*    = Table[string, FmtStyle]()
 
   breakingStyles*: Table[string, bool] = {
+    "basic"      : true,
     "caption"    : true,
     "p"          : true,
     "div"        : true,
@@ -225,6 +263,14 @@ var
   styleToIdMap: Table[FmtStyle, uint32]
 
 proc getStyleId*(s: FmtStyle): uint32 =
+  ## This is really meant to be an internal API, but cross-module.  It
+  ## returns a 32-bit integer unique to the style (across the life of
+  ## program execution). This integer is added to the pre-render
+  ## stream to pass on information to the renderer, and is explicitly
+  ## NOT in the range of valid unicode characters.
+  ##
+  ## Note that the renderer does not need to keep stack state; the
+  ## styles it looks up have had all stack operations pre-applied.
   if s in styleToIdMap:
     return styleToIdMap[s]
 
@@ -234,6 +280,9 @@ proc getStyleId*(s: FmtStyle): uint32 =
   styleToIdMap[s]      = result
 
 proc idToStyle*(n: uint32): FmtStyle =
+  ## The inverse of `getStyleId()`, which enables renderers to look up
+  ## style information associated with the text that follows (until
+  ## seeing a reset marker or another style ID.)
   result = idToStyleMap[n]
 
   if result == defaultStyle:
@@ -243,6 +292,8 @@ proc idToStyle*(n: uint32): FmtStyle =
       return
 
 proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
+  ## This layers any new overrides on top of existing values, creating
+  ## a third style.
   result         = base.copyStyle()
   result.lpad    = changes.lpad
   result.rpad    = changes.rpad
@@ -293,20 +344,42 @@ proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
     result.alignStyle = changes.alignStyle
 
 template setDefaultStyle*(style: FmtStyle) =
+  ## This call allows you to set the default starting style, which is
+  ## applied whenever you call a routine that formats (such as
+  ## `print()` or `stylize()`
   defaultStyle = style
 
 type StyleType* = enum StyleTypeTag, StyleTypeClass, StyleTypeId
 
 proc setStyle*(reference: string, style: FmtStyle, kind = StyleTypeTag) =
+  ## Set a specific output style for a tag, class or ID, based on the
+  ## value of the `kind` parameter. See the notes on `newStyle()` for
+  ## how this gets applied.
   case kind
   of StyleTypeTag:   styleMap[reference]       = style
   of StyleTypeClass: perClassStyles[reference] = style
   of StyleTypeId:    perIdStyles[reference]    = style
 
+proc getStyle*(reference: string, kind = StyleTypeTag): FmtStyle =
+  ## Return the installed style associated w/ a Tag, Class or Id.
+  return case kind
+         of StyleTypeTag:   styleMap[reference]
+         of StyleTypeClass: perClassStyles[reference]
+         of StyleTypeId:    perIdStyles[reference]
+
 proc setClass*(r: Rope, name: string) =
+  ## Sets the 'class' associated with a given Rope.
   r.class = name
 
+proc setID*(r: Rope, name: string) =
+  ## Sets the 'id' associated with a given rope manually.
+
 proc ropeStyle*(r: Rope, style: FmtStyle): Rope =
+  ## Edits the style for a specific rope, merging any passed overrides
+  ## into the style associated with the Rope's ID.
+  ##
+  ## If the rope has no ID, it is assigned one at random by
+  ## hex-encoding a 64-bit random value.
   if r.id == "":
     r.id = randString(8).hex()
 
@@ -318,109 +391,167 @@ proc ropeStyle*(r: Rope, style: FmtStyle): Rope =
   return r
 
 proc noTableBorders*(r: Rope): Rope {.discardable.} =
+  ## Overrides a rope's current style to remove any
+  ## table borders.
   return r.ropeStyle(newStyle(borders = [BorderNone]))
 
-proc noTableBorders*(s: string): Rope {.discardable.} =
-  return s.noTableBorders()
-
 proc allTableBorders*(r: Rope): Rope {.discardable.} =
+  ## Overrides a rope's current style to add all
+  ## table borders.
   return r.ropeStyle(newStyle(borders = [BorderAll]))
 
-proc allTableBorders*(s: string): Rope {.discardable.} =
-  return s.allTableBorders()
-
 proc typicalBorders*(r: Rope): Rope {.discardable.} =
+  ## Overrides a rope's current style to set 'typical'
+  ## table borders, which is all except for internal
+  ## horizontal separators.
   return r.ropeStyle(newStyle(borders = [BorderTypical]))
 
-proc typicalBorders*(s: string): Rope {.discardable.} =
-  return s.typicalBorders()
-
 proc defaultBg*(r: Rope): Rope {.discardable.} =
-  return r.ropeStyle(newStyle(bgColor = "default"))
+  ## Remove any background color for the current node (going with
+  ## whatever the environment uses by default). Note that it may not
+  ## have the effect you think if sub-nodes set a color (i.e., don't
+  ## do this at the top level of a table).
+  return r.ropeStyle(FmtStyle(bgColor: some("")))
 
 proc defaultBg*(s: string): Rope {.discardable.} =
-  return s.defaultBackground()
+  ## Return a Rope that will ensure the current string's background
+  ## color is not set (unless you later change it with another call).
+  ##
+  ## This call does NOT process embedded markdown.
+  return s.textRope().defaultBg()
 
 proc defaultFg*(r: Rope): Rope {.discardable.} =
-  return r.ropeStyle(newStyle(fgColor = "default"))
+  ## Remove the foreground text color for the current node (applying
+  ## whatever the environment uses by default). Note that it may not
+  ## have the effect you think if sub-nodes set a color (i.e., don't
+  ## do this at the top level of a table).
+  return r.ropeStyle(FmtStyle(textColor: some("")))
 
 proc defaultFg*(s: string): Rope {.discardable.} =
-  return s.defaultForeground()
+  ## Return a Rope that will ensure the current string's foreground
+  ## color is not set (unless you later change it with another call).
+  ##
+  ## This call does NOT process embedded markdown.
+  return s.textRope().defaultFg()
 
 proc bgColor*(r: Rope, color: string): Rope {.discardable.} =
+  ## Overrides a rope's current style to set the background color.
+  ## Note that sub-nodes will still have their style applied after
+  ## this, and can have an impact. For instance, setting this at the
+  ## "table" level is unlikely to affect the entire table.
   return r.ropeStyle(newStyle(bgColor = color))
 
 proc bgColor*(s: string, color: string): Rope {.discardable.} =
-  return s.bgColor(color)
+  ## Returns a new Rope from a string, where the node will have the
+  ## explicit background color applied. This will not have sub-nodes,
+  ## so should override other settings (e.g., in a table).
+  return s.textRope().bgColor(color)
 
 proc fgColor*(r: Rope, color: string): Rope {.discardable.} =
+  ## Overrides a rope's current style to set the foreground color.
+  ## Note that sub-nodes will still have their style applied after
+  ## this, and can have an impact. For instance, setting this at the
+  ## "table" level is unlikely to affect the entire table.
   return r.ropeStyle(newStyle(fgColor = color))
 
 proc fgColor*(s: string, color: string): Rope {.discardable.} =
-  return s.fgColor(color)
+  ## Returns a new Rope from a string, where the node will have the
+  ## explicit foreground color applied. This will not have sub-nodes,
+  ## so should override other settings (e.g., in a table).
+  return s.textRope().fgColor(color)
 
 proc topMargin*(r: Rope, n: int): Rope {.discardable.} =
+  ## Add a top margin to a Rope object. This will be ignored if the
+  ## rope isn't a 'block' of some sort.  Currently, the margin is also
+  ## ignored for the first rope when rendering (though probably will
+  ## change).
   return r.ropeStyle(newStyle(tmargin = n))
 
-proc topMargin*(s: string, n: int): Rope {.discardable.} =
-  return s.topMargin(n)
-
 proc bottomMargin*(r: Rope, n: int): Rope {.discardable.} =
+  ## Add a bottom margin to a Rope object. This will be ignored if the
+  ## rope isn't a 'block' of some sort. Currently, the margin is also
+  ## ignored for the first rope when rendering (though probably will
+  ## change).
   return r.ropeStyle(newStyle(bmargin = n))
 
-proc bottomMargin*(s: string, n: int): Rope {.discardable.} =
-  return s.bottomMargin(n)
-
 proc leftPad*(r: Rope, n: int): Rope {.discardable.} =
+  ## Add left padding to a Rope object. This will be ignored if the
+  ## rope isn't a 'block' of some sort.
   return r.ropeStyle(newStyle(lpad = n))
 
-proc leftPad*(s: string, n: int): Rope {.discardable.} =
-  return s.leftPad(n)
-
 proc rightPad*(r: Rope, n: int): Rope {.discardable.} =
+  ## Add right padding to a Rope object. This will be ignored if the
+  ## rope isn't a 'block' of some sort.
   return r.ropeStyle(newStyle(rpad = n))
 
-proc rightPad*(s: string, n: int): Rope {.discardable.} =
-  return s.rightPad(n)
-
 proc plainBorders*(r: Rope): Rope {.discardable.} =
+  ## Overrides any settings for table borders; any nested table
+  ## contents will have plain borders, *if* borders are set, and if
+  ## the border setting isn't overriden by an internal node.
   return r.ropeStyle(newStyle(boxStyle = BoxStylePlain))
 
-proc plainBorders*(s: string): Rope {.discardable.} =
-  return s.plainBorders()
-
 proc boldBorders*(r: Rope): Rope {.discardable.} =
+  ## Overrides any settings for table borders; any nested table
+  ## contents will have bold borders, *if* borders are set, and if
+  ## the border setting isn't overriden by an internal node.
   return r.ropeStyle(newStyle(boxStyle = BoxStyleBold))
 
-proc boldBorders*(s: string): Rope {.discardable.} =
-  return s.boldBorders()
-
 proc doubleBorders*(r: Rope): Rope {.discardable.} =
+  ## Overrides any settings for table borders; any nested table
+  ## contents will have double-lined borders, *if* borders are set,
+  ## and if the border setting isn't overriden by an internal node.
   return r.ropeStyle(newStyle(boxStyle = BoxStyleDouble))
 
-proc doubleBorders*(s: string): Rope {.discardable.} =
-  return s.doubleBorders()
-
 proc dashBorders*(r: Rope): Rope {.discardable.} =
+  ## Overrides any settings for table borders; any nested table
+  ## contents will have dashed borders, *if* borders are set,
+  ## and if the border setting isn't overriden by an internal node.
+  ##
+  ## NB, All dashed borders don't render on all terminals, and we do
+  ## not currently attempt to detect this condition.
   return r.ropeStyle(newStyle(boxStyle = BoxStyleDash))
 
-proc dashBorders*(s: string): Rope {.discardable.} =
-  return s.dashBorders()
-
 proc altDashBorders*(r: Rope): Rope {.discardable.} =
+  ## Overrides any settings for table borders; any nested table
+  ## contents will have an dashed borders created from an alternate
+  ## part of the Unicode character set. This is only applied *if*
+  ## borders are set, and if the border setting isn't overriden by an
+  ## internal node.
+  ##
+  ## NB, All dashed borders don't render on all terminals, and we do
+  ## not currently attempt to detect this condition.
   return r.ropeStyle(newStyle(boxStyle = BoxStyleDash2))
 
-proc altDashBorders*(s: string): Rope {.discardable.} =
-  return s.altDashBorders()
-
 proc boldDashBorders*(r: Rope): Rope {.discardable.} =
+  ## Overrides any settings for table borders; any nested table
+  ## contents will have BOLD dashed borders, *if* borders are set,
+  ## and if the border setting isn't overriden by an internal node.
+  ##
+  ## NB, All dashed borders don't render on all terminals, and we do
+  ## not currently attempt to detect this condition.
   return r.ropeStyle(newStyle(boxStyle = BoxStyleBoldDash))
 
-proc boldDashBorders*(s: string): Rope {.discardable.} =
-  return s.boldDashBorders()
-
 proc altBoldDashBorders*(r: Rope): Rope {.discardable.} =
+  ## Overrides any settings for table borders; any nested table
+  ## contents will have BOLD dashed borders created from an alternate
+  ## part of the Unicode character set. This is only applied *if*
+  ## borders are set, and if the border setting isn't overriden by an
+  ## internal node.
+  ##
+  ## NB, All dashed borders don't render on all terminals, and we do
+  ## not currently attempt to detect this condition.
   return r.ropeStyle(newStyle(boxStyle = BoxStyleBoldDash2))
 
-proc altBoldDashBorders*(s: string): Rope {.discardable.} =
-  return s.altBoldDashBorders()
+proc setBullet*(r: Rope, c: Rune): Rope {.discardable.} =
+  ## Sets the character used as a bullet for lists. For ordered lists,
+  ## this does NOT change the numbering style, it changes the
+  ## character put after the number. Currently, there's no ability to
+  ## tweak the numbering style. You can instead use an unordered list,
+  ## remove the bullet with `removeBullet` and manually number.
+  return r.ropeStyle(newStyle(bulletChar = c))
+
+proc removeBullet*(r: Rope): Rope {.discardable.} =
+  ## Causes unordered list items to render without a bullet.
+  ## Ordered list items still render numbered; they just lose
+  ## the period after the number.
+  return r.ropeStyle(FmtStyle(bulletChar: some(Rune(0x0000))))

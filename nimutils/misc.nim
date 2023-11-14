@@ -102,7 +102,20 @@ proc copy*[T](data: sink T): ref T =
 proc getpass*(prompt: cstring) : cstring {.header: "<unistd.h>",
                                            header: "<pwd.h>",
                                           importc: "getpass".}
+  ## The raw getpass function. Nim 2.0 now wraps this, so could be
+  ## deprecated.
+
+template getPassword*(prompt: string): string =
+  ## Retrieve a password from the terminal (turning off echo for the
+  ## duration of the input). This is now part of Nim 2, but whatever.
+  $(getpass(cstring(prompt)))
 
 proc bytesToString*(bytes: openarray[byte]): string =
+  ## Take raw bytes and copy them into a string object.
   result = newString(bytes.len)
   copyMem(result[0].addr, bytes[0].unsafeAddr, bytes.len)
+
+proc bytesToString*(bytes: pointer, l: int): string =
+  ## Converts bytes at a memory address to a string.
+  result = newString(l)
+  copyMem(result[0].addr, bytes, l)

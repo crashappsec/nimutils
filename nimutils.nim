@@ -179,12 +179,12 @@ when isMainModule:
       123, 124, 125, 126, 127 ]
 
     print(h2("Basic hexdump"))
-    print(pre(hexDump(addr buf[0], 128, width = 80)))
+    print(pre(hexDump(listAddr(buf), 128, width = 80)))
 
   proc prpTests() =
     print(h2("Luby-Rackoff PRP"))
     var
-      nonce: string = "foo"
+      nonce: string = ""
       key = "0123456789abcdef"
       pt  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" &
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -366,8 +366,31 @@ when isMainModule:
              topMargin(2).boldBorders().typicalBorders()
     print(t4)
 
+  proc nestedTableTest() =
+    let mdText = """
+# Here's a markdown file!
 
+It's got some body text in it. The first paragraph really isn't
+particularly long, but it is certainly quite a bit longer than the
+second paragraph. So it should wrap, as long as your terminal is not
+insanely wide.
+
+Oh look, here comes a table!
+
+| Example | Table    |
+| ------- | -------- |
+| foo     | bar      |
+| crash   | override |
+"""
+    let crazyTable = @[
+      @[md(mdText), md(mdText)],
+      @[md(mdText), md(mdText)]
+    ]
+    print(instantTable(crazyTable, noheaders = true))
+
+  import nimutils/logging
   print(h1("Testing Nimutils functionality."))
+
   hexTests()
   boxTest()
   ulidTests()
@@ -379,4 +402,8 @@ when isMainModule:
   when defined(macosx):
     macProcTest()
   instantTableTests()
+  info(em("This is a test message."))
+  error(italic(underline(("So is this."))))
+  nestedTableTest()
+  print(defaultBg(fgColor("Goodbye!!", "jazzberry")))
   quit()

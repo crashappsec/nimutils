@@ -1,4 +1,5 @@
 ## Wraps libgumbo for fast, standards compliant HTML parsing.
+## Really only wraps the most basic functionality, though!
 ##
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022 - 2023, Crash Override, Inc.
@@ -65,6 +66,14 @@ proc add_attribute(ctx: var Walker, n, v: cstring) {.exportc, cdecl.} =
   ctx.cur.attrs[name] = val
 
 proc parseDocument*(html: string): HtmlNode =
+  ## Converts a string consisting of well-formed HTML into a tree
+  ## representing the DOM.
+  ##
+  ## If the string is not well-formed, results are undefined.  That
+  ## means, since this call just uses the `gumbo` library to construct
+  ## the tree, we're not too well versed in the consequences of using
+  ## it with bunk input. We've gotten passable results, but with very
+  ## little experience here.
   var walker = Walker(root: nil, cur: nil)
 
   make_gumbo(cstring(html), cast[pointer](addr walker))

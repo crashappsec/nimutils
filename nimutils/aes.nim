@@ -176,6 +176,7 @@ template getCipher(mode: string, key: string): EVP_CIPHER =
     raise newException(ValueError, "AES keys must be 16, 24 or 32 bytes.")
 
 proc initAesPRP*(ctx: var AesCtx, key: string) =
+  ## This sets a key for an AES context.
   ctx.aesCtx = EVP_CIPHER_CTX_new()
 
   let cipher = getCipher("ECB", key)
@@ -183,6 +184,8 @@ proc initAesPRP*(ctx: var AesCtx, key: string) =
   discard EVP_EncryptInit_ex(ctx.aesCtx, cipher, nil, cstring(key), nil)
 
 proc aesPrp*(ctx: AesCtx, input: string): string =
+  ## This is for using AES a a basic PRP (pseudo-random permutation).
+  ## Only use this interface if you know what you're doing.
   var i: cint
   if len(input) != 16:
     raise newException(ValueError, "The AES PRP operates on 16 byte strings.")
@@ -192,6 +195,10 @@ proc aesPrp*(ctx: AesCtx, input: string): string =
                                cint(16))
 
 proc aesBrb*(ctx: AesCtx, input: string): string =
+  ## This is for using AES a a basic PRP (pseudo-random permutation).
+  ## Only use this interface if you know what you're doing.
+  ##
+  ## Specifically, this is the inverse of the primary permutation.
   var i: cint
   if len(input) != 16:
     raise newException(ValueError, "The AES BRB operates on 16 byte strings.")
@@ -202,6 +209,11 @@ proc aesBrb*(ctx: AesCtx, input: string): string =
 
 proc gcmInitEncrypt*(ctx: var GcmCtx, key: string, nonce = ""):
             string {.discardable} =
+  ## Initialize authenticated encryption using AES-GCM. Nonces are
+  ## (intentionally) constrained to always be 12 bytes, and if you do
+  ## not pass in a nonce, you will get a random value.
+  ##
+  ## The nonce used is always returned.
 
   ctx.aesCtx = EVP_CIPHER_CTX_new()
   let cipher = getCipher("GCM", key)
@@ -223,10 +235,18 @@ proc gmacInit*(ctx: var GcmCtx, key: string, nonce = ""):
   return gcmInitEncrypt(ctx, key, nonce)
 
 proc aesPrfOneShot*(key: string, outlen: int, start: string = ""): string =
+  ## This runs AES as a pseudo-random function with a fixed-size (16
+  ## byte) input yielding an output of the length specified (in
+  ## bytes).
+  ##
+  ## The `start` parameter is essentially the nonce; do not reuse it.
+  ##
+  ## This is an `expert mode` interface.
+
   var
     ctx:    AesCtx
     nonce:  pointer = nil
-    outbuf: ptr char = cast[ptr char](alloc(outlen))
+    outbuf: pointer = alloc(outlen)
 
   ctx.aesCtx = EVP_CIPHER_CTX_new()
 
@@ -247,6 +267,14 @@ proc aesPrfOneShot*(key: string, outlen: int, start: string = ""): string =
 
 proc aesCtrInPlaceOneshot*(key: string, instr: pointer, l: cint,
                            start: string = "") =
+  ## This also is an `expert mode` interface, don't use counter mode
+  ## unless you know exactly what you're doing. GCM mode is more
+  ## appropriate.
+  ##
+  ## This runs counter mode, modifying a buffer in-place.
+  ##
+  ## The final parameter is a nonce.
+
   var
     ctx:    AesCtx
     nonce:  pointer = nil
@@ -266,9 +294,17 @@ proc aesCtrInPlaceOneshot*(key: string, instr: pointer, l: cint,
     raise newException(IoError, "Could not generate keystream")
 
 proc aesCtrInPlaceOneshot*(key, instr: string, start: string = "") =
+  ## This also is an `expert mode` interface, don't use counter mode
+  ## unless you know exactly what you're doing. GCM mode is more
+  ## appropriate.
+  ##
+  ## This runs counter mode, modifying a buffer in-place.
+  ##
+  ## The final parameter is a nonce.
   aesCtrInPlaceOneshot(key, addr instr[0], cint(instr.len()), start)
 
 proc gcmInitDecrypt*(ctx: var GcmCtx, key: string) =
+  ## Initializes the decryption side of GCM.
 
   ctx.aesCtx = EVP_CIPHER_CTX_new()
   let cipher = getCipher("GCM", key)
@@ -276,6 +312,8 @@ proc gcmInitDecrypt*(ctx: var GcmCtx, key: string) =
   EVP_DecryptInit_ex2(ctx.aesCtx, cipher, cstring(key), nil, nil)
 
 proc gcmEncrypt*(ctx: var GcmCtx, msg: string, aad = ""): string =
+  ## GCM-encrypts a single message in a session, using the
+  ## state setup by gcmEncryptInit()
   var outbuf: ptr char = cast[ptr char](alloc(len(msg) + 16))
 
   ctx.aad  = cstring(aad)
@@ -290,17 +328,27 @@ proc gcmEncrypt*(ctx: var GcmCtx, msg: string, aad = ""): string =
   dealloc(outbuf)
 
 proc gmac*(ctx: var GcmCtx, msg: string): string =
+  ## Runs the GMAC message authentication code algorithm on a single
+  ## message, for a session set up via gcmInitEncrypt().  This is the
+  ## same as passing a null message, but providing additional data to
+  ## authenticate.
+  ##
+  ## The receiver should always use gcmDecrypt() to validate.
   return gcmEncrypt(ctx, msg = "", aad = msg)
 
 proc gcmGetNonce*(ctx: var GcmCtx): string =
+  ## Returns the sessions nonce.
   for i, ch in ctx.nonce:
     result.add(char(ctx.nonce[i]))
 
 proc gmacGetNonce*(ctx: var GcmCtx): string =
+  ## Returns the sessions nonce.
   return gcmGetNonce(ctx)
 
 proc gcmDecrypt*(ctx: var GcmCtx, msg: string, nonce: string,
                     aad = ""): Option[string] =
+  ## Performs validation and decryption of an encrypted message for a session
+  ## initialized via `gcmInitDecrypt()`
   if len(msg) < 16:
     raise newException(ValueError, "Invalid GCM Ciphertext (too short)")
 

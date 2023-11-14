@@ -71,7 +71,7 @@ proc ansiStyleInfo(b: TextPlane, ch: uint32): AnsiStyleInfo =
   if len(codes) > 0:
     result.ansiStart = "\e[" & codes.join(";") & "m"
 
-proc preRenderBoxToAnsiString*(b: TextPlane, ensureNl = true): string =
+proc preRenderBoxToAnsiString*(b: TextPlane): string =
   ## Low-level interface for taking our lowest-level internal
   ## representation, where the exact layout of the output is fully
   ## specified, and converting it into ansi codes for the terminal.
@@ -116,23 +116,22 @@ proc preRenderBoxToAnsiString*(b: TextPlane, ensureNl = true): string =
     if getShowColor():
       result &= ansiReset()
 
-  # if ensureNl and not result.endswith("\n"):
-  #   if styleInfo.ansiStart.len() > 0 and getShowColor():
-  #     result &= ansiReset() & styleInfo.ansiStart & "\n" & ansiReset()
-  #   else:
-  #     result = "\n"
+template render(r: Rope, width: int, showLinks: bool, style: FmtStyle,
+                ensureNl: bool): string =
+  var toRender: Rope
+  if ensureNl and r.noBoxRequired():
+    toRender = ensureNewline(r)
+  else:
+    toRender = r
+  toRender.preRender(width, showLinks, style).preRenderBoxToAnsiString()
 
 template stylizeMd*(s: string, width = -1, showLinks = false,
                     ensureNl = true, style = defaultStyle): string =
-  s.htmlStringToRope().
-    preRender(width, showLinks, style).
-    preRenderBoxToAnsiString(ensureNl)
+  s.htmlStringToRope().render(width, showLinks, style, ensureNl)
 
 template stylizeHtml*(s: string, width = -1, showLinks = false,
                       ensureNl = true, style = defaultStyle): string =
-  s.htmlStringToRope(false).
-    preRender(width, showLinks, style).
-    preRenderBoxToAnsiString(ensureNl)
+  s.htmlStringToRope(false).render(width, showLinks, style, ensureNl)
 
 proc stylize*(s: string, width = -1, showLinks = false,
               ensureNl = true, style = defaultStyle): string =
@@ -146,10 +145,7 @@ proc stylize*(s: string, width = -1, showLinks = false,
   ## processing done. Not only should you avoid manually adding
   ## control codes, this also means you should never feed the output
   ## of this API back into the API.
-
-  return s.textRope().
-           preRender(width, showLinks, style).
-           preRenderBoxToAnsiString(ensureNl)
+  return s.textRope().render(width, showLinks, style, ensureNl)
 
 proc stylize*(s: string, tag: string, width = -1, showLinks = false,
               ensureNl = true, style = defaultStyle): string =
@@ -170,7 +166,6 @@ proc stylize*(s: string, tag: string, width = -1, showLinks = false,
   ## processing done. Not only should you avoid manually adding
   ## control codes, this also means you should never feed the output
   ## of this API back into the API.
-
   var r: Rope
 
   if tag != "":
@@ -179,8 +174,7 @@ proc stylize*(s: string, tag: string, width = -1, showLinks = false,
   else:
     r = Rope(kind: RopeAtom, text: s.toRunes())
 
-  return r.preRender(width, showLinks, style).
-           preRenderBoxToAnsiString(ensureNl)
+  return r.render(width, showLinks, style, ensureNl)
 
 proc withColor*(s: string, fg: string, bg = ""): string =
   ## Deprecated.
@@ -206,12 +200,10 @@ proc withColor*(s: string, fg: string, bg = ""): string =
     result =  s.stylize(ensureNl = false, style = newStyle(fgColor = fg,
                         bgColor = bg))
 
-  result = result.strip()
-
-proc `$`*(r: Rope, width = -1, ensureNl = true, showLinks = false,
+proc `$`*(r: Rope, width = -1, ensureNl = false, showLinks = false,
                                           style = defaultStyle): string =
-  return r.preRender(width, showLinks, style).
-           preRenderBoxToAnsiString(ensureNl)
+  ## Default rope-to-string output function.
+  return r.render(width, showLinks, style, ensureNl)
 
 proc print*(s: string, file = stdout, forceMd = false, width = -1,
             ensureNl = true, showLinks = false, style = defaultStyle,
@@ -249,8 +241,8 @@ proc print*(s: string, file = stdout, forceMd = false, width = -1,
   ##
   ## Do not pass strings with control codes as inputs.
   ##
-  ## Markdown is processed by cmark-gfm (which converts it to HTML),
-  ## and HTML is processd by gumbo.  If you use this feature, but pass
+  ## Markdown is processed by MD4C (which converts it to HTML), and
+  ## HTML is processd by gumbo. If you use this feature, but pass
   ## text that the underlying processor doesn't accept, the result is
   ## undefined. Assume you won't get what you want, anyway!
 
@@ -267,5 +259,4 @@ proc print*(s: string, file = stdout, forceMd = false, width = -1,
 
 proc print*(r: Rope, file = stdout, width = -1, ensureNl = true,
             showLinks = false, style = defaultStyle) =
-  file.write(r.preRender(width, showLinks, style).
-               preRenderBoxToAnsiString(ensureNl))
+  file.write(r.render(width, showLinks, style, ensureNl))

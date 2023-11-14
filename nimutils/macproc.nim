@@ -8,24 +8,24 @@ import os, posix
 
 type
   CGidInfo* {.importc: "gidinfo_t", header: "macproc.h", bycopy.} = object
-    id*: cint
+    id*:   cint
     name*: cstring
 
   CProcInfo* {.importc: "procinfo_t", header: "macproc.h", bycopy.} = object
-    pid*: cint
-    uid*: cint
-    gid*: cint
-    euid*: cint
-    ppid*: cint
-    username*: cstring
-    path*: cstring
-    argc*: cint
-    envc*: cint
-    memblock*: cstring
-    argv*: ptr UncheckedArray[cstring]
-    envp*: ptr UncheckedArray[cstring]
+    pid*:       cint
+    uid*:       cint
+    gid*:       cint
+    euid*:      cint
+    ppid*:      cint
+    username*:  cstring
+    path*:      cstring
+    argc*:      cint
+    envc*:      cint
+    memblock*:  cstring
+    argv*: ptr  UncheckedArray[cstring]
+    envp*: ptr  UncheckedArray[cstring]
     numgroups*: cint
-    gids*: ptr UncheckedArray[CGidInfo]
+    gids*: ptr  UncheckedArray[CGidInfo]
 
   GroupInfo* = object
     id*:   Gid
@@ -72,6 +72,7 @@ template copyProcessInfo(nimOne: var ProcessInfo, cOne: CProcInfo) =
         nimOne.groups.add(GroupInfo(id: Gid(grpObj.id), name: $(grpObj.name)))
 
 proc listProcesses*(): seq[ProcessInfo] =
+  ## Return process info for all processes on a MacOs machine.
   var num: csize_t
 
   let procInfo = proc_list(addr num)
@@ -85,6 +86,7 @@ proc listProcesses*(): seq[ProcessInfo] =
   del_procinfo(addr procInfo[0])
 
 proc getProcessInfo*(pid: Pid): ProcessInfo =
+  ## Return process info for a given process on a MacOs machine.
   var num: csize_t
 
   let procInfo = proc_list_one(addr num, pid)
@@ -95,16 +97,39 @@ proc getProcessInfo*(pid: Pid): ProcessInfo =
   result.copyProcessInfo(procInfo[])
   del_procinfo(procInfo);
 
-proc getPid*(o: ProcessInfo): Pid = o.pid
-proc getUid*(o: ProcessInfo): Uid = o.uid
-proc getGid*(o: ProcessInfo): Gid = o.gid
-proc getEuid*(o: ProcessInfo): Uid = o.euid
-proc getParentPid*(o: ProcessInfo): Pid = o.ppid
-proc getUserName*(o: ProcessInfo): string = o.username
-proc getExePath*(o: ProcessInfo): string = o.path
-proc getArgv*(o: ProcessInfo): seq[string] = o.argv
-proc getEnvp*(o: ProcessInfo): seq[string] = o.envp
-proc getGroups*(o: ProcessInfo): seq[GroupInfo] = o.groups
-
-proc getGid*(o: GroupInfo): Gid = o.id
-proc getGroupName*(o: GroupInfo): string = o.name
+proc getPid*(o: ProcessInfo): Pid =
+  ## Returns the process ID.
+  o.pid
+proc getUid*(o: ProcessInfo): Uid =
+  ## Returns the user ID of the process.
+  o.uid
+proc getGid*(o: ProcessInfo): Gid =
+  ## Returns the primary group ID of the process.
+  o.gid
+proc getEuid*(o: ProcessInfo): Uid =
+  ## Returns the effective uid for the process.
+  o.euid
+proc getParentPid*(o: ProcessInfo): Pid =
+  ## Returns the PID of the parent process.
+  o.ppid
+proc getUserName*(o: ProcessInfo): string =
+  ## Returns the user name associated with the process' UID
+  o.username
+proc getExePath*(o: ProcessInfo): string =
+  ## Returns the file system path for the executable.
+  o.path
+proc getArgv*(o: ProcessInfo): seq[string] =
+  ## Returns the value of the program's argv
+  o.argv
+proc getEnvp*(o: ProcessInfo): seq[string] =
+  ## Returns the contents of the environment passed to the process.
+  o.envp
+proc getGroups*(o: ProcessInfo): seq[GroupInfo] =
+  ## Any auxillary groups the process is in.
+  o.groups
+proc getGid*(o: GroupInfo): Gid =
+  ## Returns a GID
+  o.id
+proc getGroupName*(o: GroupInfo): string =
+  ## Returns the group name associated with a process.
+  o.name

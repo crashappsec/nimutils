@@ -1,5 +1,3 @@
-import aes, sha, random
-
 ## We're going to make a PRP using the Luby-Rackoff construction. The
 ## easiest thing for us to do is to break the input into two 'halves',
 ## one being 128 bits (the width of AES, which we will call the 'left
@@ -38,8 +36,11 @@ import aes, sha, random
 ##
 ## PRPs are reversable, and with feistel contstructions, it's by
 ## running the rounds backward. But instead of calling them 'encrypt'
-## and 'decrypt', we use reversed names... on the horizontal axis.
-## `brb` seems like a good function name for encryption.
+## and 'decrypt', we use reversed (horizontally) and mirrored names...
+## `brb` seems like a good function name for decryption.
+
+import aes, sha, random
+
 
 type PrpCtx = object
   contents: string
@@ -98,6 +99,23 @@ template round4(ctx: PrpCtx) =
 
 proc prp*(key, toEncrypt: string, nonce: var string, randomNonce = true):
         string =
+  ## Implements a 4-round Luby Rackoff PRP, which accepts inputs to
+  ## permute of 24 bytes or more.
+  ##
+  ## As long as we do not duplicate messages, this function will allow
+  ## us to do authenticated encryption without message expansion, with
+  ## no issues with nonce reuse, or bit-flipping attacks.
+  ##
+  ## This function is intended more for encrypted storage, where it's
+  ## a better option for most use cases than something based on
+  ## GCM.
+  ##
+  ## The practical downsides are:
+  ##
+  ## 1. It doesn't support streaming, so the whole message needs to be
+  ##    in memory.
+  ## 2. It uses more crypto operations, and rekeys AES more.
+  ## 3. The fact that we didn't bother tweak for small messages.
 
   if toEncrypt.len() < 24:
     raise newException(ValueError, "Minimum supported length for " &
@@ -119,6 +137,8 @@ proc prp*(key, toEncrypt: string, nonce: var string, randomNonce = true):
   return $(ctx.contents)
 
 proc brb*(key, toDecrypt: string, nonce: string): string =
+  ## The reverse permutation for our 4-round Luby Rackoff PRP.
+
   if toDecrypt.len() < 24:
     raise newException(ValueError, "Minimum supported length for " &
       "messages encrypted with our PRP is 24 bytes")

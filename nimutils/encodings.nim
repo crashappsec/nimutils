@@ -198,6 +198,9 @@ template oneChrTS() =
   mask64 = mask64 shr 5
 
 proc encodeUlid*(ts: uint64, randbytes: openarray[char], dash = true): string =
+  ## encode a ULID, passing in the specific non-timestamp
+  ## bytes. Generally, you should instead use `getUlid()`, which uses
+  ## random bytes, as is typical.
   var
     str      = ""
     mask64   = 0x3e00000000000'u64
@@ -210,6 +213,7 @@ proc encodeUlid*(ts: uint64, randbytes: openarray[char], dash = true): string =
   result = str & base32vEncode(randbytes[0 ..< 10])
 
 proc getUlid*(dash = true): string =
+  ## Returns a unique ULID, per the standard.
   var
     randbytes = secureRand[array[10, char]]()
     ts        = unixTimeInMs()
@@ -217,7 +221,11 @@ proc getUlid*(dash = true): string =
   encodeUlid(ts, randbytes)
 
 proc ulidToTimeStamp*(s: string): uint64 =
-  ## No error checking done on purpose.
+  ## Extracts a timestamp from a ULID, measured in miliseconds since
+  ## the start of 1970 UTC.
+  ##
+  ## We do no error checking; if you don't pass in an actual ULID, you
+  ## won't like your results.
   result = uint64(d32v(s[0])) shl 45
   result = result or uint64(d32v(s[1])) shl 40
   result = result or uint64(d32v(s[2])) shl 35

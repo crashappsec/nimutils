@@ -45,6 +45,8 @@ template updateBar(txt: string) =
     stdout.flushFile()
 
 proc update*(ctx: var ProgressBar, newCur: int): bool {.discardable.} =
+  ## Update the number of items completed, and, if needed, redraw the
+  ## progress bar.
   var redraw = false
 
   if newCur == ctx.curItems:
@@ -116,6 +118,14 @@ proc initProgress*(ctx: var ProgressBar, totalItems: int, showTime = true,
                    curChar = Rune('>'), timeColor = "atomiclime",
                    progColor = "jazzberry", curColor = "jazzberry",
                    pctColor = "atomiclime", barColor = "jazzberry") =
+  ## Initializes a basic progress bar "widget", which runs on the
+  ## command line.
+  ##
+  ## `totalItems` is in whatever units you wish; call `update` to
+  ## redraw the bar if needed, where you will pass the number of items
+  ## you've completed towards the total.
+  ##
+  ## This widget assumes you do no other IO.
   hideCursor()
 
   ctx.totalItems = totalItems

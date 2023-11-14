@@ -45,6 +45,15 @@
 ## I did just learn that you can do [: instead to get UFCS semantics.
 ## But when you get it wrong, the error messages are not even a little
 ## helpful.
+##
+## ********************************************************************
+## * NOTE that I expect to update this for the sake of Con4m, with a  *
+## * version that will better support reference semantics, optionally *
+## * carry around type information, and will be able to hold a much   *
+## * broader set of Nim objects. This interface might get preserved   *
+## * as-is, might get renamed, or might get full deprecated...        *
+## * so beware!                                                       *
+## ********************************************************************
 
 import std/typetraits
 import std/hashes
@@ -231,6 +240,7 @@ proc pack*[T](x: T): Box =
         raise newException(ValueError, "Bad type to pack: " & $(T.type))
 
 proc `$`*(x: Box): string =
+    ## Produces a basic string representation of a box.
     case x.kind
     of MkFloat:
         return $(x.f)
@@ -259,6 +269,7 @@ proc `$`*(x: Box): string =
         return "<boxed object>"
 
 proc boxToJson*(b: Box): string =
+    ## Produces a basic string representation of a box, as a JSON object.
     var addComma: bool = false
 
     case b.kind

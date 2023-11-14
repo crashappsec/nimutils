@@ -6,8 +6,20 @@ import  unicode, markdown, htmlparse, tables, parseutils, colortable, rope_base,
 
 from strutils import startswith, replace
 
-
-proc rawStrToRope*(s: string, pre: bool): Rope =
+proc textRope*(s: string, pre = false): Rope =
+  ## Converts a plain string to a rope object.  By default, white
+  ## space is treated as if you stuck the string in an HTML document,
+  ## which is to mean, line spacing is mostly ignored; spacing between
+  ## elements is handled by the relationship between adjacent items,
+  ## like it would be in HTML.
+  ##
+  ## To skip this processing, specify `pre = true`, which acts like
+  ## an HTML <pre> block.
+  ##
+  ## In both modes, we always replace tabs with four spaces, as
+  ## behavior based on tab-stops isn't supported (much better to use
+  ## table elements and skip tabs all-together). If you don't like it,
+  ## process it before sending it here.
   var
     curStr = ""
     lines: seq[string]
@@ -26,7 +38,7 @@ proc rawStrToRope*(s: string, pre: bool): Rope =
 
     for i, c in s:
       if c == '\t':
-        curStr.add(c)
+        curStr.add("    ")
       elif c == '\n':
         if skipNewline:
           skipNewLine = false
@@ -58,6 +70,9 @@ proc rawStrToRope*(s: string, pre: bool): Rope =
       brk.next  = cur
 
 proc refCopy*(dst: var Rope, src: Rope) =
+  ## Allows you to populate a rope (passed in the first parameter)
+  ## by copying the rope in the second parameter. This copies
+  ## recursively if needed.
   dst = Rope(kind: src.kind, tag: src.tag)
 
   case src.kind
@@ -123,6 +138,12 @@ proc refCopy*(dst: var Rope, src: Rope) =
     dst.next = f
 
 proc `&`*(r1: Rope, r2: Rope): Rope =
+  ## Returns a concatenation of two rope objects, *copying* the
+  ## elements in the rope. This is really only necessary if you might
+  ## end up with cycles in your ropes, or might mutate properties of
+  ## nodes.
+  ##
+  ## Typically, `+` is probably a better bet.
   var
     dupe1: Rope = Rope()
     dupe2: Rope = Rope()
@@ -148,6 +169,12 @@ proc `&`*(r1: Rope, r2: Rope): Rope =
   return dupe1
 
 proc `+`*(r1: Rope, r2: Rope): Rope =
+  ## Returns the concatenation of two ropes, but WITHOUT copying them.
+  ## Unless the first rope is nil, this will return the actual
+  ## left-hand object, so is identical to +=; use & or copy your
+  ## first rope before you use `+` if you want different semantics.
+  ##
+  ## We did it this way, because copying is rarely the right thing.
   if r1 == nil:
     return r2
   if r2 == nil:
@@ -182,11 +209,11 @@ proc `+`*(r1: Rope, r2: Rope): Rope =
   return r1
 
 proc `+=`*(r1: var Rope, r2: Rope) =
+  ## Same as `+`
   if r1 == nil:
     r1 = r2
     return
   r1 = r1 + r2
-
 
 proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope
 
@@ -342,7 +369,7 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
         discard parseInt(n.attrs["width"], width)
         result.width = width
   of HtmlText, HtmlCData:
-    result = n.contents.rawStrToRope(pre[^1])
+    result = n.contents.textRope(pre[^1])
   else:
     discard
 
@@ -352,6 +379,18 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
   n.htmlTreeToRope(pre)
 
 proc htmlStringToRope*(s: string, markdown = true): Rope =
+  ## Convert text that is either in HTML or in Markdown into a Rope
+  ## object. If `markdown = false` it will only do HTML conversion.
+  ##
+  ## Markdown conversion works by using MD4C to convert markdown to an
+  ## HTML DOM, and then uses gumbo to produce a tree, which we then
+  ## convert to a Rope (which is itself a tree).
+  ##
+  ## If your input is not well-formed, what you get is
+  ## undefined. Basically, we seem to always get trees of some sort
+  ## from the underlying library, but it may not map to what you want.
+
+
   let html = if markdown: markdownToHtml(s) else: s
   let tree = parseDocument(html).children[1]
 
@@ -364,6 +403,17 @@ proc htmlStringToRope*(s: string, markdown = true): Rope =
   else:
     return tree.htmlTreeToRope()
 
+template html*(s: string): Rope =
+  ## Converts HTML into a Rope object.
+  ##
+  ## If your input is not well-formed, what you get is
+  ## undefined. Basically, we seem to always get trees of some sort
+  ## from the underlying library, but it may not map to what you want.
+  s.htmlStringToRope(markdown = false)
+
+template md*(s: string): Rope =
+  ## An alias for htmlStringToRope, with markdown always true.
+  s.htmlStringToRope(markdown = true)
 macro basicTagGen(ids: static[openarray[string]]): untyped =
   result = newStmtList()
 
@@ -374,10 +424,14 @@ macro basicTagGen(ids: static[openarray[string]]): untyped =
       hidNode = newIdentNode("html" & id)
       decl    = quote do:
         proc `idNode`*(r: Rope): Rope =
+          ## Apply the style at the point of a rope node.  Sub-nodes
+          ## may override this, but at the time applied, it will
+          ## take priority for the node itself.
           return Rope(kind: RopeTaggedContainer, tag: `strNode`,
                       contained: r)
         proc `idNode`*(s: string): Rope =
-          return `idNode`(s.rawStrToRope(pre = false))
+          ## Turn a string into a rope, styled with this tag.
+          return `idNode`(s.textRope(pre = false))
     result.add(decl)
 
 macro tagGenRename(id: static[string], rename: static[string]): untyped =
@@ -389,10 +443,14 @@ macro tagGenRename(id: static[string], rename: static[string]): untyped =
     hidNode = newIdentNode("html" & id)
     decl    = quote do:
       proc `idNode`*(r: Rope): Rope =
+        ## Apply the style at the point of a rope node.  Sub-nodes
+        ## may override this, but at the time applied, it will
+        ## take priority for the node itself.
         return Rope(kind: RopeTaggedContainer, tag: `strNode`,
                     contained: r)
       proc `idNode`*(s: string): Rope =
-        return `idNode`(s.rawStrToRope(pre = false))
+        ## Turn a string into a rope, styled with this tag.
+        return `idNode`(s.textRope(pre = false))
   result.add(decl)
 
 macro hidTagGen(ids: static[openarray[string]]): untyped =
@@ -404,6 +462,11 @@ macro hidTagGen(ids: static[openarray[string]]): untyped =
       hidNode = newIdentNode("html" & id)
       decl    = quote do:
         proc `hidNode`*(s: string): string =
+          ## Encode the given string in this HTML tag. This does not
+          ## make any attempt to escape contents, and thus should
+          ## generally should only be used as a last resort; prefer
+          ## the interface that returns Rope objects instead (which
+          ## would not have issues with text escaping).
           return "<" & `strNode` & ">" & s & "</" & `strNode` & ">"
 
     result.add(decl)
@@ -421,7 +484,7 @@ macro alignedGen(ids: static[openarray[string]]): untyped =
           return Rope(kind: RopeAlignedContainer, tag: `strNode`,
                       contained: r)
         proc `idNode`*(s: string): Rope =
-          return `idNode`(s.rawStrToRope(pre = false))
+          return `idNode`(s.textRope(pre = false))
     result.add(decl)
 
 macro trSetGen(ids: static[openarray[string]]): untyped =
@@ -433,20 +496,60 @@ macro trSetGen(ids: static[openarray[string]]): untyped =
       idNode  = newIdentNode(id)
       decl    = quote do:
         proc `idNode`*(l: seq[Rope]): Rope =
+          ## Converge a set of tr() objects into the proper
+          ## structure expected by table() (which takes only
+          ## one Rope object for this).
           return Rope(kind: RopeTableRows, tag: `strNode`,
                       cells: l)
 
     result.add(decl)
 
 proc tr*(l: seq[Rope]): Rope =
+  ## Converge the passed td() / th() sells into a single row object.
+  ## Pass this to thead(), tbody() or tfoot() only.
   return Rope(kind: RopeTableRow, tag: "tr", cells: l)
 
 proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
             caption: Rope = nil, columnInfo: seq[ColInfo] = @[]): Rope =
+  ## Generates a Rope that outputs a table. The content parameters
+  ## must be created by tbody(), thead() or tfoot(), or else you will
+  ## get an error from the internals (we do not explicitly check for
+  ## this mistake right now).
+  ##
+  ## For the caption, you *should* provide a caption() object if you
+  ## want it to be styled appropriately, but this one should not error
+  ## if you don't.
+  ##
+  ## The `columnInfo` field can be set by calling `colPcts`
+  ## (currently, we only support percentage based widths, and do not
+  ## support column spans or row spans).
+
   result = Rope(kind: RopeTable, tag: "table", tbody: tbody, thead: thead,
                 tfoot: tfoot, caption: caption, colInfo: columnInfo)
 
 proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
+  ## This takes a list of column percentages and returns what you need
+  ## to pass to `table()`.
+  ##
+  ## Column widths are determined dynamically when rendering, based on
+  ## the available size that we're asked to render into. The given
+  ## percentage is used to calculate how much space to use for a
+  ## column.
+  ##
+  ## Percents do not need to add up to 100.
+  ##
+  ## If you specify a column's with to be 0, this is taken to be the
+  ## 'default' width, which we calculate by dividing any space not
+  ## allocated to other columns evenly, and giving the same amount to
+  ## each column (rounding down if there's no even division).
+  ##
+  ## However, if there is no room for a default column, we give it a
+  ## minimum size of two characters. There is currently no facility
+  ## for hiding columns. However, any columns that extend to the right
+  ## of the available width will end up truncated.
+  ##
+  ## Specified percents can also go above 100, but you will see
+  ## truncation there as well.
   for item in pcts:
     result.add(ColInfo(widthPct: item, span: 1))
 
@@ -477,27 +580,49 @@ hidTagGen(["a", "abbr", "address", "article", "aside", "b", "base", "bdi",
            "th", "thead", "title", "tr", "u", "ul"])
 
 proc pre*(r: Rope): Rope =
+  ## This is generally a no-op on a rope object; pre-formatting
+  ## happens when text is initially imported. If you add special
+  ## styling for 'pre' though, it will get applied.
   return Rope(kind: RopeTaggedContainer, tag: "pre", contained: r)
 
 proc pre*(s: string): Rope =
-  return pre(s.rawStrToRope(pre = true))
+  ## Creates a new rope from text, without removing spacing.  This is
+  ## essentially an abbreviation for s.textRope(pre = true), though
+  ## it does also add a `pre` container node, which will pick up
+  ## any styling you choose to apply to that tag.
+  return pre(s.textRope(pre = true))
 
 proc ol*(l: seq[Rope]): Rope =
+  ## Taking a list of li() Ropes, returns a Rope for an ordered (i.e.,
+  ## numbered) list. Currently, there is no way to change the
+  ## numbering style, or to continue numbering from previous lists.
   return Rope(kind: RopeList, tag: "ol", items: l)
 
 proc ol*(l: seq[string]): Rope =
+  ## Taking a list of strings, it creates a rope for an ordered list.
+  ## The list items are automatically wrapped in li() nodes, but are
+  ## otherwise unprocessed.
   var listItems: seq[Rope]
   for item in l:
     listItems.add(li(item))
   return ol(listItems)
 
 proc ul*(l: seq[Rope]): Rope =
+  ## Taking a list of li() Ropes, returns a Rope for an unordered
+  ## (i.e., bulleted) list.
   return Rope(kind: RopeList, tag: "ul", items: l)
 
+proc ensureNewline*(r: Rope): Rope {.discardable.} =
+  ## Used to wrap terminal output when ensureNl is true, but the
+  ## content is not enclosed in a basic block. This is done using
+  ## a special 'basic' tag.
+  return Rope(kind: RopeTaggedContainer, tag: "basic", contained: r)
+
 proc ul*(l: seq[string]): Rope =
+  ## Taking a list of strings, it creates a rope for a bulleted list.
+  ## The list items are automatically wrapped in li() nodes, but are
+  ## otherwise unprocessed.
   var listItems: seq[Rope]
   for item in l:
     listItems.add(li(item))
   return ul(listItems)
-
-template textRope*(l: string, pre = false): Rope = rawStrToRope(l, pre)
