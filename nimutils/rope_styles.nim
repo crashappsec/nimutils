@@ -65,7 +65,7 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
       result.bgColor   = some(bgColor)
     if overflow != OIgnore:
       result.overFlow = some(overflow)
-    if hang >= 0:
+    if hang != -1:
       result.hang = some(hang)
     if lpad >= 0:
       result.lpad = some(lpad)
@@ -109,10 +109,6 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
       result.underlineStyle = some(underline)
     if bulletChar != Rune(0x0000):
       result.bulletChar = some(bulletChar)
-    if minColWidth != -1:
-      result.minTableColWidth = some(minColWidth)
-    if maxColWidth != -1:
-      result.maxTableColWidth = some(maxColWidth)
 
     if len(borders) != 0:
       for item in borders:
@@ -156,11 +152,22 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
       result.alignStyle = some(align)
 
 var
-  defaultStyle* = newStyle(overflow = OWrap, lpad = 0, rpad = 0, tmargin = 0)
-  tableDefault  = newStyle(borders = [BorderAll], overflow = OWrap, tmargin = 0,
-                           fgColor = "white", bgcolor = "dodgerblue")
-  # 1. Even / odd columns
-  # 2. Table margins
+  plainStyle    = FmtStyle(
+    textColor: some(""), bgColor: some(""), overflow: some(OWrap),
+    lpad: some(0), rpad: some(0), tmargin: some(0), bmargin: some(0),
+    casing: some(CasingIgnore), bold: some(false), hang: some(2),
+    inverse: some(false), strikethrough: some(false),
+    italic: some(false), underlineStyle: some(UnderlineIgnore),
+    useTopBorder: some(true), useLeftBorder: some(true),
+    useRightBorder: some(true), useVerticalSeparator: some(false),
+    useHorizontalSeparator: some(false), boxStyle: some(BoxStyleDouble),
+    alignStyle: some(AlignIgnore))
+
+  defaultStyle* = plainStyle
+  tableDefault  = newStyle(overflow = OWrap, tmargin = 0,
+                                      borders = [BorderAll],
+                        bmargin = 0, fgColor = "white", bgcolor = "dodgerblue")
+
   styleMap*: Table[string, FmtStyle] = {
     "body"     : newStyle(rpad = 1, lpad = 1),
     "div"      : newStyle(rpad = 1, lpad = 1, bgColor = "none"),
@@ -172,7 +179,7 @@ var
     "h2"       : newStyle(fgColor = "lime", bgColor = "darkslategray",
                  bold = BoldOn, align = AlignL, italic = ItalicOn, tmargin = 2),
     "h3"       : newStyle(bgColor = "red", fgColor = "white",
-                 italic = ItalicOn, tmargin = 1, casing = CasingUpper),
+                 italic = ItalicOn, tmargin = 0, casing = CasingUpper),
     "h4"       : newStyle(bgColor = "red", fgColor = "white", italic = ItalicOn,
                           underline = UnderlineSingle, casing = CasingTitle),
     "h5"       : newStyle(fgColor = "darkslategray", bgColor = "lime",
@@ -183,23 +190,25 @@ var
     "ul"       : newStyle(bulletChar = Rune(0x2022), lpad = 2,
                                          align = AlignL), #•
     "li"       : newStyle(lpad = 1, overflow = OWrap, align = AlignL),
-    "table"    : tableDefault,
+    "table"    : newStyle(borders = [BorderAll], tmargin = 1, bmargin = 1),
     "thead"    : tableDefault,
     "tbody"    : tableDefault,
     "tfoot"    : tableDefault,
-    "tborder"  : tableDefault,
+    "plain"    : plainStyle,
+    "text"     : defaultStyle,
+    "tborder"  : newStyle(tmargin = 0, bmargin = 0, bgcolor = "dodgerblue"),
     "td"       : newStyle(tmargin = 0, overflow = OWrap, align = AlignL,
                                                   lpad = 1, rpad = 1),
     "th"       : newStyle(bgColor = "black", bold = BoldOn, overflow = OWrap,
                  casing = CasingUpper, tmargin = 0, fgColor = "lime",
                  align = AlignC),
-    "tr"       : newStyle(fgColor = "white", bold = BoldOn, lpad = 0, rpad = 0,
-                          overflow = OWrap, tmargin = 0,
+    "tr"       : newStyle(fgColor = "white", bold = BoldOn, lpad = 1, rpad = 1,
+                          overflow = OWrap, tmargin = 1,
                           bgColor = "dodgerblue"),
     "tr.even"  : newStyle(fgColor = "white", bgColor = "dodgerblue",
-                           tmargin = 0, overflow = OWrap),
+                           tmargin = 1, overflow = OWrap),
     "tr.odd"   : newStyle(fgColor = "white", bgColor = "steelblue",
-                           tmargin = 0, overflow = OWrap),
+                           tmargin = 1, overflow = OWrap),
     "em"       : newStyle(fgColor = "jazzberry", italic = ItalicOn),
     "italic"   : newStyle(italic = ItalicOn),
     "i"        : newStyle(italic = ItalicOn),
@@ -208,7 +217,7 @@ var
     "strong"   : newStyle(inverse = InverseOn, italic = ItalicOn),
     "code"     : newStyle(inverse = InverseOn, italic = ItalicOn),
     "caption"  : newStyle(bgColor = "black", fgColor = "atomiclime",
-                          align = AlignC, italic = ItalicOn, bmargin = 2)
+                          align = AlignC, italic = ItalicOn)
 
     }.toTable()
 
@@ -322,10 +331,6 @@ proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
     result.underlineStyle = changes.underlineStyle
   if changes.bulletChar.isSome():
     result.bulletChar = changes.bulletChar
-  if changes.minTableColWidth.isSome():
-    result.minTableColWidth = changes.minTableColWidth
-  if changes.maxTableColWidth.isSome():
-    result.maxTableColWidth = changes.maxTableColWidth
   if changes.useTopBorder.isSome():
     result.useTopBorder = changes.useTopBorder
   if changes.useBottomBorder.isSome():
@@ -363,7 +368,11 @@ proc setStyle*(reference: string, style: FmtStyle, kind = StyleTypeTag) =
 proc getStyle*(reference: string, kind = StyleTypeTag): FmtStyle =
   ## Return the installed style associated w/ a Tag, Class or Id.
   return case kind
-         of StyleTypeTag:   styleMap[reference]
+         of StyleTypeTag:
+           if reference == "default":
+              return defaultStyle
+           else:
+             styleMap[reference]
          of StyleTypeClass: perClassStyles[reference]
          of StyleTypeId:    perIdStyles[reference]
 
@@ -384,9 +393,9 @@ proc ropeStyle*(r: Rope, style: FmtStyle): Rope =
     r.id = randString(8).hex()
 
   if r.id in perIdStyles:
-    perIdStyles[r.id] = style.mergeStyles(perIdStyles[r.id])
+    perIdStyles[r.id] = perIdStyles[r.id].mergeStyles(style)
   else:
-    perIdStyles[r.id] = style.mergeStyles(defaultStyle)
+    perIdStyles[r.id] = style
 
   return r
 

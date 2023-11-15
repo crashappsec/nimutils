@@ -53,10 +53,10 @@ when isMainModule:
       psInfo.sort(psSorter)
       var body: seq[Rope]
       for pr in psInfo:
-        body.add(tr(@[fgColor(td($(pr.getPid())), "blue"),
+        body.add(tr(@[td(fgColor($(pr.getPid()), "blue")),
                       td(pr.getExePath()),
                        td(pr.getArgv().join(" ")),
-                       fgColor(td(pr.getUserName()), "fandango")]))
+                       td(fgColor(pr.getUserName(), "fandango"))]))
 
       print(table(tbody(body), thead = thead(head), caption = cap,
                                        columnInfo = widths))
@@ -69,7 +69,7 @@ when isMainModule:
     print(fgColor("PID was:       ", "atomiclime") + em($(res.getPid())))
     print(fgColor("Exit code was: ", "atomiclime") + em($(res.getExit())))
     print(fgColor("Stdout was:    ", "atomiclime") + em(pre(res.getStdout())))
-    print(fgColor("Stderr was:    ", "atomiclime") + textRope(res.getStderr()))
+    print(fgColor("Stderr was:    ", "atomiclime") + text(res.getStderr()))
     print(strdump(res.getStderr()))
 
   proc boxTest() =

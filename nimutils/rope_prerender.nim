@@ -338,6 +338,15 @@ template taggedBox(tag: string, code: untyped) =
 
   result = @[collapsed]
 
+template withStyle(tag: string, code: untyped) =
+  let
+    styleOpt   = state.getNewStartStyle(nil, tag)
+    style      = styleOpt.getOrElse(state.curStyle)
+
+  state.pushStyle(style)
+  code
+  state.popStyle()
+
 template standardBox(code: untyped) =
   taggedBox("", code)
 
@@ -450,43 +459,46 @@ proc getGenericBorder(state: var FmtState, colWidths: seq[int],
                       style: FmtStyle, horizontal: Rune,
                       leftBorder: Rune, rightBorder: Rune,
                       sep: Rune): RenderBox =
-  let
-    useLeft  = style.useLeftBorder.getOrElse(false)
-    useRight = style.useRightBorder.getOrElse(false)
-    useSep   = style.useVerticalSeparator.getOrElse(false)
+  withStyle("tborder"):
+    let
+      useLeft  = style.useLeftBorder.getOrElse(false)
+      useRight = style.useRightBorder.getOrElse(false)
+      useSep   = style.useVerticalSeparator.getOrElse(false)
 
-  var
-    plane = TextPlane(lines: @[@[]])
+    var
+      plane = TextPlane(lines: @[@[]])
 
-  if useLeft:
-    plane.lines[0] &= @[uint32(leftBorder)]
+    if useLeft:
+      plane.lines[0] &= @[uint32(leftBorder)]
 
-  for i, width in colWidths:
-    for j in 0 ..< width:
-      plane.lines[0].add(uint32(horizontal))
-    if useSep and i != len(colWidths) - 1:
-      plane.lines[0].add(uint32(sep))
+    for i, width in colWidths:
+      for j in 0 ..< width:
+        withStyle("table"):
+          plane.lines[0].add(uint32(horizontal))
+      if useSep and i != len(colWidths) - 1:
+        plane.lines[0].add(uint32(sep))
 
-  if useRight:
-    plane.lines[0].add(uint32(rightBorder))
-    plane.lines[0] = state.styleRunes(plane.lines[0])
+    if useRight:
+      plane.lines[0].add(uint32(rightBorder))
+      plane.lines[0] = state.styleRunes(plane.lines[0])
 
-  result = RenderBox(contents: plane)
+    result = RenderBox(contents: plane)
 
-template getTopBorder(state: var FmtState, s: BoxStyle): RenderBox =
-  state.getGenericBorder(state.colStack[^1], state.curStyle, s.horizontal,
-                         s.upperLeft, s.upperRight, s.topT)
+proc getTopBorder(state: var FmtState, s: BoxStyle): RenderBox =
+  result = state.getGenericBorder(state.colStack[^1], state.curStyle,
+           s.horizontal, s.upperLeft, s.upperRight, s.topT)
 
-template getHorizontalSep(state: var FmtState, s: BoxStyle): RenderBox =
-  state.getGenericBorder(state.colStack[^1], state.curStyle, s.horizontal,
-                         s.leftT, s.rightT, s.cross)
+proc getHorizontalSep(state: var FmtState, s: BoxStyle): RenderBox =
+  result = state.getGenericBorder(state.colStack[^1], state.curStyle,
+           s.horizontal, s.leftT, s.rightT, s.cross)
 
-template getBottomBorder(state: var FmtState, s: BoxStyle): RenderBox =
-  state.getGenericBorder(state.colStack[^1], state.curStyle, s.horizontal,
-                         s.lowerLeft, s.lowerRight, s.bottomT)
+proc getBottomBorder(state: var FmtState, s: BoxStyle): RenderBox =
+  result = state.getGenericBorder(state.colStack[^1], state.curStyle,
+           s.horizontal, s.lowerLeft, s.lowerRight, s.bottomT)
 
 proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
-  standardBox:
+  taggedBox("table"):
+   taggedBox("tborder"):
     var
       colWidths: seq[int]
       boxStyle  = state.curStyle.boxStyle.getOrElse(DefaultBoxStyle)
@@ -530,8 +542,8 @@ proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
 
     var
       topBorder = state.getTopBorder(boxStyle)
-      lowBorder = state.getBottomBorder(boxStyle)
       midBorder = state.getHorizontalSep(boxStyle)
+      lowBorder = state.getBottomBorder(boxStyle)
 
     if state.curStyle.useHorizontalSeparator.getOrElse(false):
       var newBoxes: seq[RenderBox]
@@ -543,11 +555,11 @@ proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
 
       result = newBoxes
 
-    if state.curStyle.useTopBorder.getOrElse(false):
-      result = @[topBorder] & result
-
     if state.curStyle.useBottomBorder.getOrElse(false):
       result.add(lowBorder)
+
+    if state.curStyle.useTopBorder.getOrElse(false):
+      result = @[topBorder] & result
 
     state.popTableWidths()
     if r.caption != Rope(nil):

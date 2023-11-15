@@ -322,9 +322,10 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
           result.cells.add(asRope)
         else: # whitespace colgroup; currently not handling.
           discard
-    of "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div",
+    of "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div", "basic",
        "code", "ins", "del", "kbd", "mark", "p", "q", "s", "small", "td", "th",
        "sub", "sup", "title", "em", "i", "b", "strong", "u", "caption",
+       "text", "plain",
        "var", "italic", "strikethrough", "strikethru", "underline", "bold":
       # Since we know about this list, short-circuit the color checking code,
       # even though if no color matches, the same thing happens as happens
@@ -524,8 +525,9 @@ proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
   ## (currently, we only support percentage based widths, and do not
   ## support column spans or row spans).
 
-  result = Rope(kind: RopeTable, tag: "table", tbody: tbody, thead: thead,
-                tfoot: tfoot, caption: caption, colInfo: columnInfo)
+  var table = Rope(kind: RopeTable, tag: "table", tbody: tbody, thead: thead,
+                   tfoot: tfoot, caption: caption, colInfo: columnInfo)
+  result = Rope(kind: RopeTaggedContainer, tag: "table", contained: table)
 
 proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
   ## This takes a list of column percentages and returns what you need
@@ -556,7 +558,7 @@ proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
 basicTagGen(["h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div",
              "code", "ins", "del", "kbd", "mark", "small", "sub", "sup",
              "title", "em", "strong", "caption", "td", "th", "italic",
-             "strikethru", "underline", "bold"])
+             "text", "plain", "strikethru", "underline", "bold", "deffmt"])
 
 tagGenRename("p",   "paragraph")
 tagGenRename("q",   "quote")
@@ -577,7 +579,7 @@ hidTagGen(["a", "abbr", "address", "article", "aside", "b", "base", "bdi",
            "optgroup", "output", "p", "param", "pre", "progress", "q", "s",
            "samp", "search", "section", "select", "span", "strong", "style",
            "sub", "summary", "sup", "table", "tbody", "td", "tfoot",
-           "th", "thead", "title", "tr", "u", "ul"])
+           "th", "thead", "title", "tr", "u", "ul", "text", "plain"])
 
 proc pre*(r: Rope): Rope =
   ## This is generally a no-op on a rope object; pre-formatting

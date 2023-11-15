@@ -70,6 +70,8 @@ proc ansiStyleInfo(b: TextPlane, ch: uint32): AnsiStyleInfo =
 
   if len(codes) > 0:
     result.ansiStart = "\e[" & codes.join(";") & "m"
+  else:
+    result.ansiStart = "\e[0m"
 
 proc preRenderBoxToAnsiString*(b: TextPlane): string =
   ## Low-level interface for taking our lowest-level internal
@@ -87,7 +89,7 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
           continue
         else:
           styleInfo = b.ansiStyleInfo(ch)
-        if styleInfo.ansiStart.len() > 0 and getShowColor():
+        if getShowColor():
           result &= ansiReset()
           result &= styleInfo.ansiStart
         if styleInfo.casing == CasingTitle:
@@ -116,7 +118,7 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
     if getShowColor():
       result &= ansiReset()
 
-  result &= ansiReset()
+
 
 template render(r: Rope, width: int, showLinks: bool, style: FmtStyle,
                 ensureNl: bool): string =

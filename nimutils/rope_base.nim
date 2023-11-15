@@ -73,8 +73,6 @@ type
     italic*:                 Option[bool]
     underlineStyle*:         Option[UnderlineStyle]
     bulletChar*:             Option[Rune]
-    minTableColWidth*:       Option[int]   # Currently not used.
-    maxTableColWidth*:       Option[int]   # Currently not used.
     useTopBorder*:           Option[bool]
     useBottomBorder*:        Option[bool]
     useLeftBorder*:          Option[bool]
@@ -248,6 +246,7 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
   result = FmtStyle(textColor:              inStyle.textColor,
                     bgColor:                inStyle.bgColor,
                     overflow:               inStyle.overFlow,
+                    hang:                   inStyle.hang,
                     tmargin:                inStyle.tmargin,
                     bmargin:                inStyle.bmargin,
                     casing:                 inStyle.casing,
@@ -257,8 +256,6 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
                     italic:                 inStyle.italic,
                     underlineStyle:         inStyle.underlineStyle,
                     bulletChar:             inStyle.bulletChar,
-                    minTableColWidth:       inStyle.minTableColWidth,
-                    maxTableColWidth:       inStyle.maxTableColWidth,
                     useTopBorder:           inStyle.useTopBorder,
                     useBottomBorder:        inStyle.useBottomBorder,
                     useLeftBorder:          inStyle.useLeftBorder,
