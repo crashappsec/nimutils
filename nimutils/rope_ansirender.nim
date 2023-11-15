@@ -6,7 +6,7 @@ import options, unicode, misc, colortable, rope_construct, rope_base,
 
 from strutils import join, endswith
 
-template ansiReset(): string = "\x1b[0m"
+template ansiReset(): string = "\e[0m"
 
 type AnsiStyleInfo = object
   ansiStart: string
@@ -73,28 +73,50 @@ proc ansiStyleInfo(b: TextPlane, ch: uint32): AnsiStyleInfo =
   else:
     result.ansiStart = "\e[0m"
 
-proc preRenderBoxToAnsiString*(b: TextPlane): string =
+template canColor(): bool =
+  if noColor or foundNoColor or not getShowColor():
+    false
+  else:
+    true
+
+proc preRenderBoxToAnsiString*(b: TextPlane, noColor = false): string =
   ## Low-level interface for taking our lowest-level internal
   ## representation, where the exact layout of the output is fully
   ## specified, and converting it into ansi codes for the terminal.
   # TODO: Add back in unicode underline, etc.
   var
     styleInfo:  AnsiStyleInfo
-    shouldTitle = false
+    shouldTitle  = false
+    foundNoColor = false
+    colorNest    = 0
 
   for line in b.lines:
     for ch in line:
       if ch > 0x10ffff:
         if ch == StylePop:
-          continue
+          if canColor():
+            result &= ansiReset()
+        elif ch == StyleColor:
+          if colorNest == 0:
+            foundNoColor = false
+          colorNest += 1
+        elif ch == StyleNoColor:
+          if colorNest == 0:
+            foundNoColor = true
+          colorNest += 1
+        elif ch == StyleColorPop:
+          colorNest -= 1
         else:
           styleInfo = b.ansiStyleInfo(ch)
-        if getShowColor():
+        if canColor():
           result &= ansiReset()
           result &= styleInfo.ansiStart
         if styleInfo.casing == CasingTitle:
           shouldTitle = true
       else:
+        if ch == uint32('\e'):
+          raise newException(ValueError, "ANSI escape codes are not allowed " &
+            "in text in this API")
         case styleInfo.casing
         of CasingTitle:
           if Rune(ch).isAlpha():
@@ -115,32 +137,37 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
           result &= $(Rune(ch))
     if not b.softBreak:
       result &= "\n"
-    if getShowColor():
+    if canColor():
       result &= ansiReset()
 
-
-
 template render(r: Rope, width: int, showLinks: bool, style: FmtStyle,
-                ensureNl: bool): string =
+                ensureNl: bool, noColor: bool, outerPad: bool): string =
   var toRender: Rope
   if ensureNl and r.noBoxRequired():
     toRender = ensureNewline(r)
   else:
     toRender = r
-  toRender.preRender(width, showLinks, style).preRenderBoxToAnsiString()
+  toRender.preRender(width, showLinks, style, outerPad).
+           preRenderBoxToAnsiString(noColor)
 
 template stylizeMd*(s: string, width = -1, showLinks = false,
-                    ensureNl = true, style = defaultStyle): string =
-  s.htmlStringToRope().render(width, showLinks, style, ensureNl)
+                    ensureNl = true, style = defaultStyle,
+                               noColor = false, outerPad = true): string =
+  s.htmlStringToRope().
+    render(width, showLinks, style, ensureNl, noColor, outerPad)
 
 template stylizeHtml*(s: string, width = -1, showLinks = false,
-                      ensureNl = true, style = defaultStyle): string =
-  s.htmlStringToRope(false).render(width, showLinks, style, ensureNl)
+                      ensureNl = true, style = defaultStyle,
+                                 noColor = false, outerPad = true): string =
+  s.htmlStringToRope(false).
+    render(width, showLinks, style, ensureNl, noColor, outerPad)
 
-proc stylize*(s: string, width = -1, showLinks = false,
-              ensureNl = true, style = defaultStyle): string =
+proc stylize*(s: string, width = -1, showLinks = false, ensureNl = true,
+              style = defaultStyle, noColor = false, outerPad = true): string =
   ## Apply a full style object to a string, using the passed style.
   ## Does not process Markdown or HTML.
+  ##
+  ## Deprecated; use the style API instead.
   ##
   ## Returns a string.
   ##
@@ -149,13 +176,16 @@ proc stylize*(s: string, width = -1, showLinks = false,
   ## processing done. Not only should you avoid manually adding
   ## control codes, this also means you should never feed the output
   ## of this API back into the API.
-  return s.textRope().render(width, showLinks, style, ensureNl)
+  return pre(s).render(width, showLinks, style, ensureNl, noColor, outerPad)
 
 proc stylize*(s: string, tag: string, width = -1, showLinks = false,
-              ensureNl = true, style = defaultStyle): string =
+              ensureNl = true, style = defaultStyle, noColor = false,
+              outerPad = true): string =
   ## Apply a full style object to a string, specifying a `tag` to
   ## use (an html tag) for the style. Does not process Markdown or
   ## HTML.
+  ##
+  ## Deprecated; use the style API instead.
   ##
   ## If passed, `style` should be a style object that will be the
   ## starting style (after layering it on top of the default style).
@@ -178,7 +208,7 @@ proc stylize*(s: string, tag: string, width = -1, showLinks = false,
   else:
     r = Rope(kind: RopeAtom, text: s.toRunes())
 
-  return r.render(width, showLinks, style, ensureNl)
+  return r.render(width, showLinks, style, ensureNl, noColor, outerPad)
 
 proc withColor*(s: string, fg: string, bg = ""): string =
   ## Deprecated.
@@ -205,11 +235,11 @@ proc withColor*(s: string, fg: string, bg = ""): string =
                         bgColor = bg))
 
 proc `$`*(r: Rope, width = -1, ensureNl = false, showLinks = false,
-                                          style = defaultStyle): string =
+          style = defaultStyle, noColor = false, outerPad = true): string =
   ## Default rope-to-string output function.
-  return r.render(width, showLinks, style, ensureNl)
+  return r.render(width, showLinks, style, ensureNl, noColor, outerPad)
 
-proc setvbuf*(f: File, buf: pointer, t: cint, s: cint): cint {. importc,
+proc setvbuf(f: File, buf: pointer, t: cint, s: cint): cint {. importc,
                                                     header: "<stdio.h>" .}
 
 proc unbufferIo*() =
@@ -220,7 +250,7 @@ proc unbufferIo*() =
 
 proc print*(s: string, file = stdout, forceMd = false, width = -1,
             ensureNl = true, showLinks = false, style = defaultStyle,
-                                         noAutoDetect = false) =
+            noAutoDetect = false, noColor = false, outerPad = true) =
   unbufferIo()
   ## Much like `echo()`, but more capable in terms of the processing
   ## you can do.
@@ -253,6 +283,9 @@ proc print*(s: string, file = stdout, forceMd = false, width = -1,
   ## accepts strings in the first parameter (there's a variant that
   ## supports Ropes, essentially strings already
   ##
+  ## The `noColor` flag will inhibit any ansi codes, despite any
+  ## global settings allowing color.
+  ##
   ## Do not pass strings with control codes as inputs.
   ##
   ## Markdown is processed by MD4C (which converts it to HTML), and
@@ -260,17 +293,25 @@ proc print*(s: string, file = stdout, forceMd = false, width = -1,
   ## text that the underlying processor doesn't accept, the result is
   ## undefined. Assume you won't get what you want, anyway!
 
+  if s[0] == '\e':
+    # If it starts with an Ansi code, fall back to echo, as it was
+    # probably generated with one of the above functions.
+    #
+    # But we avoid a linear scan of the entire string.
+    file.write(s)
+    return
   var toWrite: string
 
   if forceMd or ((not noAutoDetect) and len(s) > 1 and s[0] == '#'):
-    toWrite = s.stylizeMd(width, showLinks, ensureNl, style)
+    toWrite = s.stylizeMd(width, showLinks, ensureNl, style, noColor, outerPad)
   elif len(s) >= 1 and s[0] == '<':
-    toWrite = s.stylizeHtml(width, showLinks, ensureNl, style)
+    toWrite = s.stylizeHtml(width, showLinks, ensureNl, style, noColor, outerPad)
   else:
-    toWrite = pre(s).render(width, showLinks, style, ensureNl)
+    toWrite = pre(s).render(width, showLinks, style, ensureNl, noColor, outerPad)
   file.write(toWrite)
 
 proc print*(r: Rope, file = stdout, width = -1, ensureNl = true,
-            showLinks = false, style = defaultStyle) =
+            showLinks = false, style = defaultStyle, noColor = false,
+            outerPad = true) =
   unbufferIo()
-  file.write(r.render(width, showLinks, style, ensureNl))
+  file.write(r.render(width, showLinks, style, ensureNl, noColor, outerPad))

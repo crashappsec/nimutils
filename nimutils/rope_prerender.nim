@@ -44,6 +44,7 @@ type
     curStyle:     FmtStyle
     styleStack:   seq[uint32]
     colStack:     seq[seq[int]]
+    colorStack:   seq[bool]
     nextRope:     Rope
     savedRopes:   seq[Rope]
     processed:    seq[Rope] # For text items b/c I have a bug :/
@@ -135,6 +136,8 @@ proc unboxedRunelength*(r: Rope): int =
   else:
     return 0
 
+template runelength*(r: Rope): int = r.unboxedRuneLength()
+
 proc applyAlignment(state: FmtState, box: RenderBox, w: int) =
   for i in 0 ..< box.contents.lines.len():
     let
@@ -199,8 +202,8 @@ proc collapseColumn(state: FmtState, boxes: seq[RenderBox]): RenderBox =
     style   = state.curStyle
     lineLen = state.totalWidth - style.lpad.get(0) - style.rpad.get(0)
     blank   = state.pad(lineLen)
-    tmargin = if boxes.len() != 0: boxes[0].tmargin else: 0
-    bmargin = if boxes.len() != 0: boxes[0].bmargin else: 0
+    tmargin = if boxes.len() != 0: boxes[0].tmargin  else: 0
+    bmargin = if boxes.len() != 0: boxes[^1].bmargin else: 0
 
   for i, box in boxes:
     if i != 0:
@@ -215,13 +218,15 @@ proc collapseColumn(state: FmtState, boxes: seq[RenderBox]): RenderBox =
 
   result = RenderBox(contents: plane, tmargin: tmargin, bmargin: bmargin)
 
-proc collapsedBoxToTextPlane(state: FmtState, box: RenderBox): TextPlane =
+proc collapsedBoxToTextPlane(state: FmtState, box: RenderBox,
+                             outerPad = true): TextPlane =
   result       = box.contents
   result.width = box.width
-  for i in 0 ..< box.tmargin:
-    result.lines = @[state.pad(result.width)] & result.lines
-  for i in 0 ..< box.bmargin:
-    result.lines &= @[state.pad(result.width)]
+  if outerPad:
+    for i in 0 ..< box.tmargin:
+      result.lines = @[state.pad(result.width)] & result.lines
+    for i in 0 ..< box.bmargin:
+      result.lines &= @[state.pad(result.width)]
 
 proc pushTableWidths(state: var FmtState, widths: seq[int]) =
   state.colStack.add(widths)
@@ -313,19 +318,15 @@ template taggedBox(tag: string, code: untyped) =
   let
     styleOpt   = state.getNewStartStyle(r, tag)
     style      = styleOpt.getOrElse(state.curStyle)
-    savedWidth = state.totalWidth
     lpad       = style.lpad.getOrElse(0)
     rpad       = style.rpad.getOrElse(0)
     p          = lpad + rpad
 
   state.pushStyle(style)
 
-  if r.width != 0 and r.width < state.totalWidth:
-    state.totalWidth = r.width - p
-  else:
-    state.totalWidth -= p
+  state.totalWidth -= p
   code
-  state.totalWidth = savedWidth
+  state.totalWidth += p
   for item in result:
     if style.tmargin.isSome():
       item.tmargin = style.tmargin.get()
@@ -346,6 +347,17 @@ template withStyle(tag: string, code: untyped) =
   state.pushStyle(style)
   code
   state.popStyle()
+
+template withWidth(w: int, code: untyped) =
+  let oldWidth = state.totalWidth
+
+  if w < oldwidth:
+    state.totalWidth = w
+
+  code
+
+  state.totalWidth = oldWidth
+
 
 template standardBox(code: untyped) =
   taggedBox("", code)
@@ -763,10 +775,23 @@ proc extractText(state: var FmtState, r: Rope, extract: TextPlane) =
         # For now, we don't care about kind of break.
         extract.lines.add(@[])
       of RopeTaggedContainer:
-        let styleOpt = state.getNewStartStyle(cur)
-        state.pushStyle(styleOpt.getOrElse(state.curStyle))
-        subextract(cur.contained)
-        state.popStyle()
+        case cur.tag
+        of "width":
+          withWidth(cur.width):
+            subextract(cur.contained)
+        of "colors":
+          extract.addRunesToExtraction(@[StyleColor])
+          subextract(cur.contained)
+          extract.addRunesToExtraction(@[StyleColorPop])
+        of "nocolors":
+          extract.addRunesToExtraction(@[StyleNoColor])
+          subextract(cur.contained)
+          extract.addRunesToExtraction(@[StyleColorPop])
+        else:
+          let styleOpt = state.getNewStartStyle(cur)
+          state.pushStyle(styleOpt.getOrElse(state.curStyle))
+          subextract(cur.contained)
+          state.popStyle()
       else:
         assert false
 
@@ -812,8 +837,27 @@ proc preRenderBreak(state: var FmtState, r: Rope): seq[RenderBox] =
     result = state.preRender(r.guts)
 
 proc preRenderTagged(state: var FmtState, r: Rope): seq[RenderBox] =
-  standardBox:
+  case r.tag
+  of "width":
+    withWidth(r.width):
+      result = state.preRender(r.contained)
+  of "colors":
     result = state.preRender(r.contained)
+    result[0].contents.lines[0] = @[StyleColor] &
+      result[0].contents.lines[0]
+
+    result[0].contents.lines[^1] = @[StyleColorPop] &
+      result[0].contents.lines[^1]
+  of "nocolors":
+    result = state.preRender(r.contained)
+    result[0].contents.lines[0] = @[StyleNoColor] &
+      result[0].contents.lines[0]
+
+    result[0].contents.lines[^1] = @[StyleColorPop] &
+      result[0].contents.lines[^1]
+  else:
+    standardBox:
+      result = state.preRender(r.contained)
 
 proc preRenderColor(state:  var FmtState, r: Rope): seq[RenderBox] =
   standardBox:
@@ -876,7 +920,7 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
   planesToBox()
 
 proc preRender*(r: Rope, width = -1, showLinkTargets = false,
-                style = defaultStyle): TextPlane =
+                style = defaultStyle, outerPad = true): TextPlane =
   ## This takes a Rope that is essentially stored as a tree annotated
   ## with style information, and produce a representation that is an
   ## array of lines of unicode characters, interspersed with 32-bit
@@ -896,7 +940,7 @@ proc preRender*(r: Rope, width = -1, showLinkTargets = false,
     strip = false
 
   if width <= 0:
-    state.totalWidth = terminalWidth()
+    state.totalWidth = terminalWidth() + width
   else:
     state.totalWidth = width
 
@@ -908,7 +952,7 @@ proc preRender*(r: Rope, width = -1, showLinkTargets = false,
     strip            = true
 
   let preRender = state.collapseColumn(state.preRender(r))
-  result        = state.collapsedBoxToTextPlane(preRender)
+  result        = state.collapsedBoxToTextPlane(preRender, outerPad)
   result.width  = state.totalWidth
 
   if strip:

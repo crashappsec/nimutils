@@ -36,7 +36,7 @@ when defined(macosx):
 ##              isn't worth it if you're not using it.
 
 when isMainModule:
-  import tables, streams, algorithm, strutils
+  import tables, streams, algorithm, strutils, unicode
 
   when defined(macosx):
     proc psSorter(x, y: ProcessInfo): int =
@@ -356,26 +356,45 @@ when isMainModule:
                   "sigv4.nim", "unicodeid.nim"]
     mess1.sort()
     let tbl = instantTable(mess1, h3("Auto-arranged into columns"))
-    tbl.noTableBorders().topMargin(2)
-    print(tbl)
+    print(tbl.noTableBorders().topMargin(2))
 
     var mess2 = @[@["1, 1", "Column 2", "Column 3", "Column 4"],
                   @["Row 2", "Row 2", "Row 2", "Row 2"],
                   @["Row 3", "Row 3", "Row 3", "Row 3"],
                   @["Row 4", "Row 4", "Row 4", "Row 4"]]
 
-    let t2 = instantTable(mess2, caption = h3("Table with horizontal header")).
-             topMargin(2).typicalBorders()
+    let t2 = quickTable(mess2, caption = h3("Table with horizontal header")).
+             topMargin(2).typicalBorders().colPcts([10, 40, 40, 10])
     print(t2)
 
-    let t3 = instantTable(mess2, verticalHeaders = true,
+    let t3 = quickTable(mess2, verticalHeaders = true,
                        caption = h3("Table with vertical header"))
     print(t3.typicalBorders())
 
-    let t4 = instantTable(mess2, noheaders = true,
+    let t4 = quickTable(mess2, noheaders = true,
                           caption = h3("Table w/o header")).
              topMargin(2).boldBorders().typicalBorders()
     print(t4)
+
+    let
+      st  = "This is a test of something I'd really like to know about, " &
+            "I think??"
+      txt = textBox(st, 30, true, boxStyle = BoxStyleAscii)
+      res = txt.search(text = "test")
+
+    print(h5("Search results"))
+    for item in res:
+      var s: seq[Rune] = item.text
+      echo $(s)
+
+    echo txt.debugWalk()
+    print(container(txt))
+
+    print(textBox(center(pre(txt))), width = -10)
+
+  # TODO!!!  Need to add width() and nocolor(), and nocolor needs to
+  # override any color in the dom underneath it.
+  # Can probably just generate special ColorOff, ColorOn
 
   proc nestedTableTest() =
     let mdText = """
@@ -402,7 +421,7 @@ Oh look, here comes a table!
       @[md(mdText), md(mdText)],
       @[md(mdText), md(mdText)]
     ]
-    print(instantTable(crazyTable, noheaders = true))
+    print(quickTable(crazyTable, noheaders = true))
 
   import nimutils/logging
   print(h1("Testing Nimutils functionality."))
@@ -415,12 +434,12 @@ Oh look, here comes a table!
   aesGcmTests()
   keyStreamTest()
   dictTests()
-  when defined(macosx):
-    macProcTest()
-  instantTableTests()
+  #when defined(macosx):
+  #  macProcTest()
   info(em("This is a test message."))
   error(italic(underline(("So is this."))))
   nestedTableTest()
   basic_subproc_tests()
+  instantTableTests()
   print(defaultBg(fgColor("Goodbye!!", "jazzberry")))
   quit()

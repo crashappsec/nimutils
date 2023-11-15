@@ -1,7 +1,12 @@
-import unicode, options, unicodeid, unicodedb/properties, misc
+import unicode, options, unicodeid, unicodedb/properties, misc, strutils,
+       random, hexdump
+
 const
  defaultTextWidth* {.intdefine.}    = 80
  bareMinimumColWidth* {.intdefine.} = 2
+ StyleColorPop*                     = 0xfffffffd'u32
+ StyleColor*                        = 0xfffffffd'u32
+ StyleNoColor*                      = 0xfffffffe'u32
  StylePop*                          = 0xffffffff'u32
 
 type
@@ -40,7 +45,6 @@ type
     # Otherwise, no munging of spaces inside a line is done.
     # For centering, if spaces do not divide evenly, we add the
     # single extra space to the right.
-
 
   BorderOpts* = enum
     BorderNone         = 0,
@@ -123,10 +127,9 @@ type
     ## The core rope object.  Generally should only access via API.
     next*:       Rope
     cycle*:      bool
-    tag*:        string
     id*:         string
+    tag*:        string
     class*:      string
-    width*:      int       # Requested width in columns for a container
 
     case kind*: RopeKind
     of RopeAtom:
@@ -142,6 +145,8 @@ type
       items*: seq[Rope]
     of RopeTaggedContainer, RopeAlignedContainer:
       contained*: Rope
+      width*:      int  # Requested width in columns for a container.
+
     of RopeTable:
       colInfo*: seq[ColInfo]
       thead*:   Rope # RopeTableRows
@@ -158,6 +163,85 @@ type
     lines*:     seq[seq[uint32]]
     width*:     int # Advisory.
     softBreak*: bool
+
+proc buildWalk(r: Rope, results: var seq[Rope]) =
+  if r == nil:
+    return
+
+  results.add(r)
+
+  case r.kind
+  of RopeBreak:
+    r.guts.buildWalk(results)
+  of RopeLink:
+    r.toHighlight.buildWalk(results)
+  of RopeList:
+    for item in r.items:
+      item.buildWalk(results)
+  of RopeTaggedContainer, RopeAlignedContainer:
+    r.contained.buildWalk(results)
+  of RopeTable:
+    r.thead.buildWalk(results)
+    r.tbody.buildWalk(results)
+    r.tfoot.buildWalk(results)
+    r.caption.buildWalk(results)
+  of RopeTableRow, RopeTableRows:
+    for item in r.cells:
+      item.buildWalk(results)
+  of RopeFgColor, RopeBgColor:
+    r.toColor.buildWalk(results)
+  else:
+    discard
+
+  r.next.buildWalk(results)
+
+proc ropeWalk*(r: Rope): seq[Rope] =
+ r.buildWalk(result)
+
+proc search*(r:     Rope,
+             tag:   openarray[string] = [],
+             class: openarray[string] = [],
+             id:    openarray[string] = [],
+             text:  openarray[string] = []): seq[Rope] =
+
+  for item in r.ropeWalk():
+    if item.tag in tag or item.class in class or item.id in id:
+      result.add(item)
+    elif text.len() != 0 and item.kind == RopeAtom:
+      for s in text:
+        if s in $(item.text):
+          result.add(item)
+          break
+
+proc search*(r: Rope, tag = "", class = "", id = "", text = ""): seq[Rope] =
+  var tags, classes, ids, texts: seq[string]
+
+  if tag != "":
+    tags.add(tag)
+  if class != "":
+    classes.add(tag)
+  if id != "":
+    ids.add(ids)
+  if text != "":
+    texts.add(text)
+
+  return r.search(tags, classes, ids, texts)
+
+proc debugWalk*(r: Rope): seq[string] =
+  if r != nil:
+    for item in r.ropeWalk():
+      var one = "id: "
+      if item.id == "":
+        item.id = randString(8).hex()
+
+      one &= item.id & "; tag: "
+      if item.tag == "":
+        one &= "<none>; "
+      else:
+        one &= item.tag
+      if item.class != "":
+        one &= "class: " & item.class
+      result.add(one)
 
 let
   BoxStylePlain* =     BoxStyle(horizontal: Rune(0x2500),
@@ -237,6 +321,28 @@ let
                                 bottomT:    Rune(0x253b),
                                 leftT:      Rune(0x2523),
                                 rightT:     Rune(0x252b))
+  BoxStyleAsterisk*  = BoxStyle(horizontal: Rune('*'),
+                                vertical:   Rune('*'),
+                                upperLeft:  Rune('*'),
+                                upperRight: Rune('*'),
+                                lowerLeft:  Rune('*'),
+                                lowerRight: Rune('*'),
+                                cross:      Rune('*'),
+                                topT:       Rune('*'),
+                                bottomT:    Rune('*'),
+                                leftT:      Rune('*'),
+                                rightT:     Rune('*'))
+  BoxStyleAscii*     = BoxStyle(horizontal: Rune('-'),
+                                vertical:   Rune('|'),
+                                upperLeft:  Rune('/'),
+                                upperRight: Rune('\\'),
+                                lowerLeft:  Rune('\\'),
+                                lowerRight: Rune('/'),
+                                cross:      Rune('+'),
+                                topT:       Rune('-'),
+                                bottomT:    Rune('-'),
+                                leftT:      Rune('|'),
+                                rightT:     Rune('|'))
 
 proc copyStyle*(inStyle: FmtStyle): FmtStyle =
   ## Produces a full copy of a style. This is primarily used

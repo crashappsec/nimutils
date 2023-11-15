@@ -472,22 +472,6 @@ macro hidTagGen(ids: static[openarray[string]]): untyped =
 
     result.add(decl)
 
-macro alignedGen(ids: static[openarray[string]]): untyped =
-  result = newStmtList()
-
-  for id in ids:
-    let
-      strNode = newLit(id)
-      idNode  = newIdentNode(id)
-      hidNode = newIdentNode("html" & id)
-      decl    = quote do:
-        proc `idNode`*(r: Rope): Rope =
-          return Rope(kind: RopeAlignedContainer, tag: `strNode`,
-                      contained: r)
-        proc `idNode`*(s: string): Rope =
-          return `idNode`(s.textRope(pre = false))
-    result.add(decl)
-
 macro trSetGen(ids: static[openarray[string]]): untyped =
   result = newStmtList()
 
@@ -510,62 +494,15 @@ proc tr*(l: seq[Rope]): Rope =
   ## Pass this to thead(), tbody() or tfoot() only.
   return Rope(kind: RopeTableRow, tag: "tr", cells: l)
 
-proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
-            caption: Rope = nil, columnInfo: seq[ColInfo] = @[]): Rope =
-  ## Generates a Rope that outputs a table. The content parameters
-  ## must be created by tbody(), thead() or tfoot(), or else you will
-  ## get an error from the internals (we do not explicitly check for
-  ## this mistake right now).
-  ##
-  ## For the caption, you *should* provide a caption() object if you
-  ## want it to be styled appropriately, but this one should not error
-  ## if you don't.
-  ##
-  ## The `columnInfo` field can be set by calling `colPcts`
-  ## (currently, we only support percentage based widths, and do not
-  ## support column spans or row spans).
-
-  var table = Rope(kind: RopeTable, tag: "table", tbody: tbody, thead: thead,
-                   tfoot: tfoot, caption: caption, colInfo: columnInfo)
-  result = Rope(kind: RopeTaggedContainer, tag: "table", contained: table)
-
-proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
-  ## This takes a list of column percentages and returns what you need
-  ## to pass to `table()`.
-  ##
-  ## Column widths are determined dynamically when rendering, based on
-  ## the available size that we're asked to render into. The given
-  ## percentage is used to calculate how much space to use for a
-  ## column.
-  ##
-  ## Percents do not need to add up to 100.
-  ##
-  ## If you specify a column's with to be 0, this is taken to be the
-  ## 'default' width, which we calculate by dividing any space not
-  ## allocated to other columns evenly, and giving the same amount to
-  ## each column (rounding down if there's no even division).
-  ##
-  ## However, if there is no room for a default column, we give it a
-  ## minimum size of two characters. There is currently no facility
-  ## for hiding columns. However, any columns that extend to the right
-  ## of the available width will end up truncated.
-  ##
-  ## Specified percents can also go above 100, but you will see
-  ## truncation there as well.
-  for item in pcts:
-    result.add(ColInfo(widthPct: item, span: 1))
-
 basicTagGen(["h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div",
-             "code", "ins", "del", "kbd", "mark", "small", "sub", "sup",
-             "title", "em", "strong", "caption", "td", "th", "italic",
-             "text", "plain", "strikethru", "underline", "bold", "deffmt"])
+             "container", "code", "ins", "del", "kbd", "mark", "small", "sub",
+             "sup", "colors", "nocolors", "width", "title", "em", "strong",
+             "caption", "td", "th", "text", "plain", "deffmt"])
 
 tagGenRename("p",   "paragraph")
 tagGenRename("q",   "quote")
 tagGenRename("u",   "unstructured")
 tagGenRename("var", "variable")
-
-alignedGen(["right", "center", "left", "justify", "flush"])
 
 trSetGen(["thead", "tbody", "tfoot"])
 
@@ -628,3 +565,64 @@ proc ul*(l: seq[string]): Rope =
   for item in l:
     listItems.add(li(item))
   return ul(listItems)
+
+proc setWidth*(r: Rope, i: int): Rope =
+  ## Returns a rope that constrains the passed Rope to be formatted
+  ## within a particular width, as long as the context in which the
+  ## rope's being evaluated has at least that much width available.
+  return Rope(kind: RopeTaggedContainer, tag: "width", contained: r,
+              width: i)
+
+proc setWidth*(s: string, i: int): Rope =
+  ## Returns a rope that constrains the passed string to be formatted
+  ## within a particular width, as long as the context in which the
+  ## rope's being evaluated has at least that much width available.
+  return pre(s).setWidth(i)
+
+proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
+            caption: Rope = nil, columnInfo: seq[ColInfo] = @[]): Rope =
+  ## Generates a Rope that outputs a table. The content parameters
+  ## must be created by tbody(), thead() or tfoot(), or else you will
+  ## get an error from the internals (we do not explicitly check for
+  ## this mistake right now).
+  ##
+  ## For the caption, you *should* provide a caption() object if you
+  ## want it to be styled appropriately, but this one should not error
+  ## if you don't.
+  ##
+  ## The `columnInfo` field can be set by calling `colPcts`
+  ## (currently, we only support percentage based widths, and do not
+  ## support column spans or row spans).
+  ##
+  ## Note that, for various reasons, table style often will not get
+  ## applied the way you might expect. To counter that, We wrapped
+  ## tables in a generic `container()` node.
+  result = container(Rope(kind: RopeTable, tag: "table", tbody: tbody,
+                          thead: thead, tfoot: tfoot, caption: caption,
+                          colInfo: columnInfo))
+
+proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
+  ## This takes a list of column percentages and returns what you need
+  ## to pass to `table()`.
+  ##
+  ## Column widths are determined dynamically when rendering, based on
+  ## the available size that we're asked to render into. The given
+  ## percentage is used to calculate how much space to use for a
+  ## column.
+  ##
+  ## Percents do not need to add up to 100.
+  ##
+  ## If you specify a column's with to be 0, this is taken to be the
+  ## 'default' width, which we calculate by dividing any space not
+  ## allocated to other columns evenly, and giving the same amount to
+  ## each column (rounding down if there's no even division).
+  ##
+  ## However, if there is no room for a default column, we give it a
+  ## minimum size of two characters. There is currently no facility
+  ## for hiding columns. However, any columns that extend to the right
+  ## of the available width will end up truncated.
+  ##
+  ## Specified percents can also go above 100, but you will see
+  ## truncation there as well.
+  for item in pcts:
+    result.add(ColInfo(widthPct: item, span: 1))

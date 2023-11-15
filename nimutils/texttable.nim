@@ -1,14 +1,13 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-# Pretty basic table formatting. Works with fixed width unicode, though
-# I don't factor out non-printable spaces right now, I just count runes.
-
-import rope_base, rope_construct, markdown, unicode, unicodeid, std/terminal
+import rope_base, rope_construct, rope_prerender, rope_styles, markdown,
+       unicode, unicodeid, std/terminal
 
 proc formatCellsAsMarkdownList*(base: seq[seq[string]],
                                 toEmph: openarray[string],
                                 firstCellPrefix = "\n## "): string =
+  ## Deprecated; old code.  Kept for short term due to compatability.
   for row in base:
     result &= "\n"
     if firstCellPrefix != "":
@@ -33,7 +32,7 @@ proc formatCellsAsHtmlTable*(base:            seq[seq[string]],
                              headers:         openarray[string] = [],
                              mToHtml         = true,
                              verticalHeaders = false): string =
-
+  ## Deprecated; old code.  Kept for short term due to compatability.
   if len(base) == 0:
     raise newException(ValueError, "Table is empty.")
 
@@ -108,15 +107,25 @@ proc filterEmptyColumns*(inrows: seq[seq[string]],
   return (newRows, returnedHeaders)
 
 proc instantTable*[T: string|Rope](cells: openarray[T],
-                                   tableCaption = Rope(nil)): Rope =
+        tableCaption = Rope(nil), width = -1, noColor = false,
+        borders = BorderAll, boxStyle = BoxStyleDouble): Rope =
+  ## Given a flat list of items to format into a table, figures out how
+  ## many equal-sized columns fit cleanly into the available width, given
+  ## the text, and formats it all into a table.
   var
-    remainingWidth         = terminalWidth()
+    remainingWidth: int
     numcol                 = 0
     maxWidth               = 0
     row:  seq[Rope]        = @[]
     rows: seq[Rope]        = @[]
   # This gives every column equal width, and assumes space for borders
   # and pad.
+
+  if width <= 0:
+    remainingWidth = terminalWidth() + width
+
+  else:
+    remainingWidth = width
 
   for item in cells:
     let w = item.runeLength()
@@ -140,11 +149,14 @@ proc instantTable*[T: string|Rope](cells: openarray[T],
 
   rows.add(tr(row))
 
-  return table(tbody(rows), caption = tableCaption)
+  result = table(tbody(rows), caption = tableCaption)
+  result = result.setBorders(borders).boxStyle(boxStyle)
+  result = result.setWidth(remainingWidth)
+  if noColor:
+    result = result.noColors()
 
 template instantTableNoHeaders[T: string|Rope](cells: seq[seq[T]],
-                                               tableCaption: Rope):
-         Rope =
+                                               tableCaption: Rope): Rope =
   var
     row:  seq[Rope] = @[]
     rows: seq[Rope] = @[]
@@ -192,17 +204,44 @@ template instantTableVerticalHeaders[T: string|Rope](cells: seq[seq[T]],
 
   table(tbody(rows), caption = tableCaption)
 
+proc quickTable*[T: string|Rope](cells: seq[seq[T]], verticalHeaders = false,
+         noheaders = false, caption = Rope(nil), width = -1, noColor = false,
+         borders = BorderAll, boxStyle = BoxStyleDouble,
+                   colPcts: seq[int] = @[]): Rope =
+  if cells.len() == 0:
+    raise newException(ValueError, "No cells passed")
 
-proc instantTable*[T: string|Rope](cells: seq[seq[T]], verticalHeaders = false,
-                   noheaders = false, caption = Rope(nil)): Rope =
   if noHeaders:
-    return cells.instantTableNoHeaders(caption)
+    result = cells.instantTableNoHeaders(caption)
   elif not verticalHeaders:
-    return cells.instantTableHorizontalHeaders(caption)
+    result = cells.instantTableHorizontalHeaders(caption)
   else:
-    return cells.instantTableVerticalHeaders(caption)
+    result = cells.instantTableVerticalHeaders(caption)
+
+  result.setBorders(borders).boxStyle(boxStyle)
+
+  if cells.len() == 1 and cells[0].len() == 1:
+    # Special treatment for callouts
+    result.fgColor("fandango").bgColor("jazzberry")
+    result.setCasing(CasingIgnore).italic()
+
+  if colPcts.len() != 0:
+    result.colPcts(colPcts)
+
+  if width >= 0:
+    result = result.setWidth(width)
+
+  if noColor:
+    result = result.noColors()
+
 
 template instantTableWithHeaders*(cells: seq[seq[string]], horizontal = true,
                                   caption = Rope(nil)): string =
   ## Deprecated, for compatability with older con4m.
   $(instantTable(cells, horizontal, true, caption))
+
+
+proc textBox*[T: string | Rope](contents: T, width = -1, noColor = false,
+              borders = BorderAll, boxStyle = BoxStyleDouble): Rope =
+  result = quickTable(@[@[contents.center()]], false, false, Rope(nil),
+                         width, noColor, borders, boxStyle)
