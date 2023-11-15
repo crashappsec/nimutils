@@ -81,7 +81,7 @@ subproc_pass_to_stdin(subprocess_t *ctx, char *str, size_t len, bool close_fd)
 	return false;
     }
 
-    sb_init_party_input_buf(&ctx->sb, &ctx->str_stdin, str, len, false,
+    sb_init_party_input_buf(&ctx->sb, &ctx->str_stdin, str, len, true, true,
 			    close_fd);
 
     if (ctx->run) {
@@ -125,7 +125,6 @@ subproc_set_passthrough(subprocess_t *ctx, unsigned char which, bool combine)
 
     return true;
 }
-
 /*
  * This controls whether input from a file descriptor is captured into
  * a string that is available when the process ends.
@@ -230,6 +229,96 @@ int
 subproc_get_pty_fd(subprocess_t *ctx)
 {
     return ctx->pty_fd;
+}
+
+void
+pause_passthrough(subprocess_t *ctx, unsigned char which)
+{
+    /*
+     * Since there's no real consequence to trying to pause a
+     * subscription that doesn't exist, we'll just try to pause every
+     * subscription implied by `which`. Note that if we see stderr, we
+     * try to unsubscribe it from both the parent's stdout and the
+     * parent's stderr; no strong need to care whether they were
+     * combined or not here..
+     */
+
+    if (which & SP_IO_STDIN) {
+	if (ctx->pty_fd) {
+	    sb_pause_route(&ctx->sb, &ctx->parent_stdin, &ctx->subproc_stdout);
+	} else {
+	    sb_pause_route(&ctx->sb, &ctx->parent_stdin, &ctx->subproc_stdin);
+	}
+    }
+    if (which & SP_IO_STDOUT) {
+	sb_pause_route(&ctx->sb, &ctx->subproc_stdout, &ctx->parent_stdout);
+    }
+    if (!ctx->pty_fd && (which & SP_IO_STDERR)) {
+	sb_pause_route(&ctx->sb, &ctx->subproc_stderr, &ctx->parent_stdout);
+	sb_pause_route(&ctx->sb, &ctx->subproc_stderr, &ctx->parent_stderr);	
+    }
+}
+
+void
+resume_passthrough(subprocess_t *ctx, unsigned char which)
+{
+    /*
+     * Since there's no real consequence to trying to pause a
+     * subscription that doesn't exist, we'll just try to pause every
+     * subscription implied by `which`. Note that if we see stderr, we
+     * try to unsubscribe it from both the parent's stdout and the
+     * parent's stderr; no strong need to care whether they were
+     * combined or not here..
+     */
+
+    if (which & SP_IO_STDIN) {
+	if (ctx->pty_fd) {
+	    sb_resume_route(&ctx->sb, &ctx->parent_stdin, &ctx->subproc_stdout);
+	} else {
+	    sb_resume_route(&ctx->sb, &ctx->parent_stdin, &ctx->subproc_stdin);
+	}
+    }
+    if (which & SP_IO_STDOUT) {
+	sb_resume_route(&ctx->sb, &ctx->subproc_stdout, &ctx->parent_stdout);
+    }
+    if (!ctx->pty_fd && (which & SP_IO_STDERR)) {
+	sb_resume_route(&ctx->sb, &ctx->subproc_stderr, &ctx->parent_stdout);
+	sb_resume_route(&ctx->sb, &ctx->subproc_stderr, &ctx->parent_stderr);	
+    }
+}
+
+void
+pause_capture(subprocess_t *ctx, unsigned char which)
+{
+    if (which & SP_IO_STDIN) {
+	sb_pause_route(&ctx->sb, &ctx->parent_stdin, &ctx->capture_stdin);
+    }
+
+    if (which & SP_IO_STDOUT) {
+	sb_pause_route(&ctx->sb, &ctx->subproc_stdout, &ctx->capture_stdout);
+    }
+
+    if ((which & SP_IO_STDERR) && !ctx->pty_fd) {
+	sb_pause_route(&ctx->sb, &ctx->subproc_stderr, &ctx->capture_stdout);
+	sb_pause_route(&ctx->sb, &ctx->subproc_stderr, &ctx->capture_stderr);	
+    }
+}
+
+void
+resume_capture(subprocess_t *ctx, unsigned char which)
+{
+    if (which & SP_IO_STDIN) {
+	sb_resume_route(&ctx->sb, &ctx->parent_stdin, &ctx->capture_stdin);
+    }
+
+    if (which & SP_IO_STDOUT) {
+	sb_resume_route(&ctx->sb, &ctx->subproc_stdout, &ctx->capture_stdout);
+    }
+
+    if ((which & SP_IO_STDERR) && !ctx->pty_fd) {
+	sb_resume_route(&ctx->sb, &ctx->subproc_stderr, &ctx->capture_stdout);
+	sb_resume_route(&ctx->sb, &ctx->subproc_stderr, &ctx->capture_stderr);	
+    }
 }
 
 static void
@@ -521,8 +610,7 @@ termcap_set(struct termios *termcap) {
  * sufficient calls to poll for IP, instead of having it run to
  * completion.
  *
- * If you use this, call subproc_poll() until it returns false,
- * at which point, call subproc_prepare_results().
+ * If you use this, call subproc_poll() until it returns false
  */
 void
 subproc_start(subprocess_t *ctx)
@@ -547,20 +635,6 @@ subproc_poll(subprocess_t *ctx)
 }
 
 /*
- * Call this before querying any results.
- */
-void
-subproc_prepare_results(subprocess_t *ctx)
-{
-    sb_prepare_results(&ctx->sb);
-
-    // Post-run cleanup.
-    if (ctx->use_pty) {
-	tcsetattr(0, TCSANOW, &ctx->saved_termcap);
-    }
-}
-
-/*
  * Spawns a process, and runs it until the process has ended. The
  * process must first be set up with `subproc_init()` and you may
  * configure it with other `subproc_*()` calls before running.
@@ -572,10 +646,16 @@ subproc_run(subprocess_t *ctx)
 {
     subproc_start(ctx);
     sb_operate_switchboard(&ctx->sb, true);
-
-    subproc_prepare_results(ctx);
 }
 
+
+void
+subproc_reset_terminal(subprocess_t *ctx) {
+    // Post-run cleanup.
+    if (ctx->use_pty) {
+       tcsetattr(0, TCSANOW, &ctx->saved_termcap);
+    }
+}
 /*
  * This destroys any allocated memory inside a `subproc` object.  You
  * should *not* call this until you're done with the `sb_result_t`
@@ -589,8 +669,9 @@ subproc_run(subprocess_t *ctx)
 void
 subproc_close(subprocess_t *ctx)
 {
+    subproc_reset_terminal(ctx);
     sb_destroy(&ctx->sb, false);
-
+    
     deferred_cb_t *cbs = ctx->deferred_cbs;
     deferred_cb_t *next;
 
@@ -642,7 +723,8 @@ sp_result_capture(sp_result_t *ctx, char *tag, size_t *outlen)
 char *
 subproc_get_capture(subprocess_t *ctx, char *tag, size_t *outlen)
 {
-    return sp_result_capture(&ctx->sb.result, tag, outlen);
+    sb_get_results(&ctx->sb, &ctx->result);
+    return sp_result_capture(&ctx->result, tag, outlen);
 }
 
 int
@@ -707,6 +789,7 @@ subproc_get_extra(subprocess_t *ctx)
 {
     return sb_get_extra(&ctx->sb);
 }
+
 
 #ifdef SB_TEST
 void

@@ -153,9 +153,9 @@ register_loner(switchboard_t *ctx, party_t *loner)
  * pass in a sockfd that is already open, and has already had listen()
  * called on it.
  *
- * We force this into non-blocking mode; when there's something ready
- * to accept(), we'll get triggered that a read is available. We
- * then accept() for you, and pass that to a callback.
+ * When there's something ready to accept(), we'll get triggered that
+ * a read is available. We then accept() for you, and pass that to a
+ * callback.
  *
  * You can then register the fd connection in the same switchboard if
  * you like. It's not done for you at this level, though.
@@ -184,9 +184,6 @@ sb_init_party_listener(switchboard_t *ctx, party_t *party, int sockfd,
     lobj->accept_cb          = (accept_cb_decl)callback;
     lobj->saved_flags        = fcntl(sockfd, F_GETFL, 0);
 
-    int flags                = lobj->saved_flags | O_NONBLOCK;
-
-    fcntl(sockfd, F_SETFL, flags);
     register_read_fd(ctx, party);
 
     if (stop_when_closed) {
@@ -271,8 +268,15 @@ sb_new_party_fd(switchboard_t *ctx, int fd, int perms,
  */
 void
 sb_init_party_input_buf(switchboard_t *ctx, party_t *party, char *input,
-		     size_t len, bool free, bool close_fd_when_done)
+		size_t len, bool dup, bool free, bool close_fd_when_done)
 {
+    char *to_set = input;
+    
+    if (dup) {
+	free   = true;
+	to_set = (char *)calloc(len + 1, 0);
+	memcpy(to_set, dup, len);
+    }
     party->open_for_read        = true;
     party->open_for_write       = false;
     party->can_read_from_it     = true;
@@ -280,7 +284,7 @@ sb_init_party_input_buf(switchboard_t *ctx, party_t *party, char *input,
     party->party_type           = PT_STRING;
 
     str_src_party_t *sobj       = get_sstr_obj(party);
-    sobj->strbuf                = input;
+    sobj->strbuf                = to_set;
     sobj->len                   = len;
     sobj->free_on_close         = free;
     sobj->close_fd_when_done    = close_fd_when_done;
@@ -289,13 +293,37 @@ sb_init_party_input_buf(switchboard_t *ctx, party_t *party, char *input,
 }
 
 party_t *
-sb_new_party_input_buf(switchboard_t *ctx, char *input, size_t len, bool free,
-    bool close_fd_when_done)
+sb_new_party_input_buf(switchboard_t *ctx, char *input, size_t len,
+		       bool dup, bool free, bool close_fd_when_done)
 {
     party_t *result = (party_t *)calloc(sizeof(party_t), 1);
-    sb_init_party_input_buf(ctx, result, input, len, free, close_fd_when_done);
+    sb_init_party_input_buf(ctx, result, input, len, dup, free,
+			    close_fd_when_done);
 
     return result;
+}
+
+void
+sb_party_input_buf_new_string(party_t *party, char *input, size_t len,
+			      bool dup, bool close_fd_when_done)
+{
+    if (party->party_type != PT_STRING || !party->can_read_from_it) {
+	return;
+    }
+    str_src_party_t *sobj = get_sstr_obj(party);
+    if (sobj->free_on_close && sobj->strbuf) {
+	free(sobj->strbuf);
+    }
+    sobj->len                = len;
+    sobj->close_fd_when_done = close_fd_when_done;
+    
+    if (dup) {
+	sobj->strbuf = (char *)calloc(len + 1, 1);
+	memcpy(sobj->strbuf, input, len);
+	sobj->free_on_close = true;
+    } else {
+	sobj->strbuf = input;
+    }
 }
 
 /*
@@ -558,7 +586,6 @@ sb_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 	return false;
     }
 
-
     if (read_from->party_type == PT_STRING) {
 	if (write_to->party_type != PT_FD) {
 	    return false;
@@ -618,9 +645,155 @@ sb_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 	r_fd_obj->subscribers    = subscription;
     }
 
-
     return true;
 }
+
+/*
+ * Pause the specified routing (unsubscribe), if one is active.
+ * Returns `true` if the subscription was marked as paused.
+ *
+ * This does not consider whether the fds are closed.
+ *
+ * Currently, there's no explicit facility for removing subscriptions.
+ * Just pause it and never unpause it!
+ */
+bool
+sb_pause_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
+{
+    if (read_from == NULL || write_to == NULL) {
+	return false;
+    }
+
+    fd_party_t     *reader = get_fd_obj(read_from);
+    subscription_t *cur    = reader->subscribers;
+
+    while (cur != NULL) {
+	if (cur->subscriber != write_to) {
+	    cur  = cur->next;
+	    continue;
+	}
+	if (cur->paused) {
+	    return false;
+	} else {
+	    cur->paused = true;
+	    return true;
+	}
+    }
+    return false;
+}
+
+/*
+ * Resumes the specified subscription.  Returns `true` if resumption
+ * was successful, and `false` if not, including cases where the
+ * subscription was already active..
+ */
+bool
+sb_resume_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
+{
+    if (read_from == NULL || write_to == NULL) {
+	return false;
+    }
+
+    fd_party_t     *reader = get_fd_obj(read_from);
+    subscription_t *cur    = reader->subscribers;
+
+    while (cur != NULL) {
+	if (cur->subscriber != write_to) {
+	    cur  = cur->next;
+	    continue;
+	}
+	if (cur->paused) {
+	    cur->paused = true;
+	    return true;
+	} else {
+	    return false;
+	}
+    }
+    return false;
+}
+
+/*
+ * Returns true if the subscription is active, and in an unpaused state.
+ */
+bool
+sb_route_is_active(switchboard_t *ctx, party_t *read_from, party_t *write_to)
+{
+    if (read_from == NULL || write_to == NULL) {
+	return false;
+    }
+
+    if (!read_from->open_for_read || !write_to->open_for_write) {
+        return false;
+    }
+    
+    fd_party_t     *reader = get_fd_obj(read_from);
+    subscription_t *cur    = reader->subscribers;
+
+    while (cur != NULL) {
+	if (cur->subscriber != write_to) {
+	    cur  = cur->next;
+	    continue;
+	}
+	return !cur->paused;
+    }
+    return false;
+}
+
+/*
+ * Returns true if the subscription is active, but paused.
+ */
+bool
+sb_route_is_paused(switchboard_t *ctx, party_t *read_from, party_t *write_to)
+{
+    if (read_from == NULL || write_to == NULL) {
+	return false;
+    }
+
+    if (!read_from->open_for_read || !write_to->open_for_write) {
+        return false;
+    }
+    
+    fd_party_t     *reader = get_fd_obj(read_from);
+    subscription_t *cur    = reader->subscribers;
+
+    while (cur != NULL) {
+	if (cur->subscriber != write_to) {
+	    cur  = cur->next;
+	    continue;
+	}
+	return cur->paused;
+    }
+    return false;
+}
+
+/*
+ * Returns true if the subscription is active, whether or not it is
+ * paused.
+ */
+bool
+sb_is_subscribed(switchboard_t *ctx, party_t *read_from, party_t *write_to)
+{
+    if (read_from == NULL || write_to == NULL) {
+	return false;
+    }
+
+    if (!read_from->open_for_read || !write_to->open_for_write) {
+        return false;
+    }
+    
+    fd_party_t     *reader = get_fd_obj(read_from);
+    subscription_t *cur    = reader->subscribers;
+
+    while (cur != NULL) {
+	if (cur->subscriber != write_to) {
+	    cur  = cur->next;
+	    continue;
+	}
+	return true;
+    }
+    return false;
+}
+
 
 /*
  * Initializes a switchboard object, primarily zeroing out the
@@ -844,19 +1017,22 @@ handle_one_read(switchboard_t *ctx, party_t *party)
 
 	while (sublist != NULL) {
 	    party_t *sub = sublist->subscriber;
-	    switch(sub->party_type) {
-	    case PT_FD:
-		publish(ctx, buf, read_result, sub);
-		break;
-	    case PT_STRING:
-		add_data_to_string_out(get_dstr_obj(sub), buf, read_result);
-		break;
-	    case PT_CALLBACK:
-		(*sub->info.cbinfo.callback)(ctx->extra, sub->extra, buf,
-					     (size_t)read_result);
-		break;
-	    default:
-		break;
+
+	    if (!sublist->paused) {
+		switch(sub->party_type) {
+		case PT_FD:
+		    publish(ctx, buf, read_result, sub);
+		    break;
+		case PT_STRING:
+		    add_data_to_string_out(get_dstr_obj(sub), buf, read_result);
+		    break;
+		case PT_CALLBACK:
+		    (*sub->info.cbinfo.callback)(ctx->extra, sub->extra, buf,
+						 (size_t)read_result);
+		    break;
+		default:
+		    break;
+		}
 	    }
 	    sublist = sublist->next;
 	}
@@ -885,7 +1061,7 @@ handle_one_accept(switchboard_t *ctx, party_t *party)
 	if (errno == EINTR || errno == EAGAIN) {
 	    continue;
 	}
-	if (errno == ECONNABORTED || errno == EWOULDBLOCK) {
+	if (errno == ECONNABORTED) {
 	    break;
 	}
 	party->found_errno   = errno;
@@ -1192,11 +1368,9 @@ is_registered_writer(switchboard_t *ctx, party_t *target)
 }
 
 /*
- * Dealloc any memory we're responsible for.  Gets called
- * automatically at the end of sb_operate_switchboard(), but
- * must be invoked manually if you don't use that.
+ * Dealloc any memory we're responsible for.
  *
- * Also note that this does NOT free the switchboard object,
+ * Note that this does NOT free the switchboard object,
  * just any internal data structures.
  */
 void
@@ -1274,18 +1448,22 @@ sb_destroy(switchboard_t *ctx, bool free_parties)
 }
 
 /*
- * Extract results from the switchbaord; does not do any cleanup itself;
- * you will still need to free the switchboard if it's heap alloc'd.
+ * Extract results from the switchbaord.
  */
 void
-sb_prepare_results(switchboard_t *ctx)
+sb_get_results(switchboard_t *ctx, sb_result_t *result)
 {
-    sb_result_t     *cur;
-    str_dst_party_t *strobj;
-    party_t         *party     = ctx->party_loners;  // Look for string outputs.
-    int              capcount  = 0;
-    int              ix        = 0;
+    str_dst_party_t  *strobj;
+    party_t          *party     = ctx->party_loners;  // Look for str outputs.
+    int               capcount  = 0;
+    int               ix        = 0;
 
+    if (result->inited) {
+	return;
+    }
+
+    result->inited = true;
+    
     while (party) {
 	if (party->party_type == PT_STRING && party->can_write_to_it) {
 	    capcount++;
@@ -1293,24 +1471,24 @@ sb_prepare_results(switchboard_t *ctx)
 	party = party->next_loner;
     }
 
-    ctx->result.num_captures    = capcount;
-    ctx->result.captures        = calloc(sizeof(capture_result_t), capcount+1);
+    result->num_captures    = capcount;
+    result->captures        = calloc(sizeof(capture_result_t), capcount+1);
 
     party = ctx->party_loners;
 
     while (party) {
 	if (party->party_type == PT_STRING && party->can_write_to_it) {
-	    capture_result_t *r = ctx->result.captures + ix;
+	    capture_result_t *r = result->captures + ix;
 
 	    strobj = get_dstr_obj(party);
 	    r->tag = strobj->tag;
 	    r->len = strobj->ix;
-
+		
 	    if (strobj->ix) {
-		char *s = (char *)calloc(strobj->len, 1);
-		memcpy(s, strobj->strbuf, strobj->ix);
-		r->contents = s;
+		r->contents = strobj->strbuf;
 
+		strobj->strbuf = 0;
+		strobj->ix     = 0;
 	    } else {
 		r->contents = NULL;
 	    }
@@ -1318,6 +1496,40 @@ sb_prepare_results(switchboard_t *ctx)
 	}
 	party = party->next_loner;
     }
+}
+
+char *
+sb_result_get_capture(sb_result_t *ctx, char *tag, bool caller_borrow)
+{
+    char *result;
+    
+    for (int i = 0; i < ctx->num_captures; i++) {
+	if (!strcmp(ctx->captures[i].tag, tag)) {
+	    result = ctx->captures[i].contents;
+
+	    if (!caller_borrow) {
+		ctx->captures[i].contents = NULL;
+	    }
+	    return result;
+	}
+    }
+    return NULL;
+}
+
+/*
+ * The tags are borrowed, so we don't free. If you call this, then
+ * you're asking to free the capture string copies and the array of
+ * captures, but the actual sb_result_t object wasn't allocated by
+ * this API, so we don't own it and this does not try to free it.
+ */
+void
+sb_result_destroy(sb_result_t *ctx) {
+    for (int i = 0; i < ctx->num_captures; i++) {
+	if(ctx->captures[i].contents) {
+	    free(ctx->captures[i].contents);
+	}
+    }
+    free(ctx->captures);
 }
 
 /*
@@ -1368,22 +1580,4 @@ sb_operate_switchboard(switchboard_t *ctx, bool loop)
 	handle_loop_end(ctx);
     } while(loop);
     return false;
-}
-
-/*
- * Operates a setup switchboard, returning a result and dealing w/
- * memory management on exit.
- */
-sb_result_t *
-sb_automatic_switchboard(switchboard_t *ctx, bool free_party_objects)
-{
-
-    sb_result_t *result = (sb_result_t *)malloc(sizeof(sb_result_t));
-
-    sb_operate_switchboard(ctx, true);
-    sb_prepare_results(ctx);
-    memcpy(result, &ctx->result, sizeof(sb_result_t));
-    sb_destroy(ctx, free_party_objects);
-
-    return result;
 }

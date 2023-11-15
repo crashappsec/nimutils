@@ -61,6 +61,17 @@ when isMainModule:
       print(table(tbody(body), thead = thead(head), caption = cap,
                                        columnInfo = widths))
 
+  proc basic_subproc_tests() =
+    print(h2("Run: /bin/cat /etc/passwd /etc/file_that_doesnt_exist; show output."))
+    let res = runCmdGetEverything("/bin/cat", @["/etc/passwd",
+                                                "/etc/file_that_doesnt_exist"],
+                                  passthrough = true)
+    print(fgColor("PID was:       ", "atomiclime") + em($(res.getPid())))
+    print(fgColor("Exit code was: ", "atomiclime") + em($(res.getExit())))
+    print(fgColor("Stdout was:    ", "atomiclime") + em(pre(res.getStdout())))
+    print(fgColor("Stderr was:    ", "atomiclime") + textRope(res.getStderr()))
+    print(strdump(res.getStderr()))
+
   proc boxTest() =
     print("<h2>Box tests</h2>")
     var
@@ -410,5 +421,6 @@ Oh look, here comes a table!
   info(em("This is a test message."))
   error(italic(underline(("So is this."))))
   nestedTableTest()
+  basic_subproc_tests()
   print(defaultBg(fgColor("Goodbye!!", "jazzberry")))
   quit()

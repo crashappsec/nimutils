@@ -74,6 +74,7 @@ typedef struct sb_heap_t {
 typedef struct subscription_t {
     struct subscription_t *next;
     struct party_t        *subscriber;
+    bool                   paused;
 } subscription_t;
 
 /*
@@ -217,6 +218,7 @@ typedef struct {
 } capture_result_t;
 
 typedef struct {
+    bool              inited;
     int               num_captures;
     capture_result_t *captures;
 } sb_result_t;
@@ -244,7 +246,6 @@ typedef struct switchboard_t {
     size_t            heap_elems;
     void             *extra;
     bool              ignore_running_procs_on_shutdown;
-    sb_result_t       result;
 } switchboard_t;
 
 
@@ -277,6 +278,7 @@ typedef struct {
     party_t         capture_stdout;
     party_t         capture_stderr;
     void            (*startup_callback)(void *);
+    sb_result_t     result;
     struct termios  saved_termcap;
     struct termios *parent_termcap;
     struct termios *child_termcap;
@@ -307,13 +309,13 @@ extern void sb_init_party_listener(switchboard_t *, party_t *, int,
 	 		        accept_cb_t, bool, bool);
 extern party_t * sb_new_party_listener(switchboard_t *, int, accept_cb_t, bool,
 				    bool);
-extern void sb_init_party_fd(switchboard_t *, party_t *, int , int , bool,
-			     bool);
+extern void sb_init_party_fd(switchboard_t *, party_t *, int , int , bool, bool);
 extern party_t *sb_new_party_fd(switchboard_t *, int, int, bool, bool);
-extern void sb_init_party_input_buf(switchboard_t *, party_t *, char *, size_t,
-				 bool, bool);
-extern party_t *sb_new_party_input_buf(switchboard_t *, char *, size_t, bool,
-				    bool);
+extern void sb_init_party_input_buf(switchboard_t *, party_t *, char *,
+				    size_t, bool, bool, bool);
+extern party_t *sb_new_party_input_buf(switchboard_t *, char *, size_t,
+				       bool, bool, bool);
+extern void sb_party_input_buf_new_string(party_t *, char *, size_t, bool, bool);
 extern void sb_init_party_output_buf(switchboard_t *, party_t *, char *,
 				     size_t);
 extern party_t *sb_new_party_output_buf(switchboard_t *, char *, size_t);
@@ -327,13 +329,19 @@ extern void sb_set_extra(switchboard_t *, void *);
 extern void *sb_get_party_extra(party_t *);
 extern void sb_set_party_extra(party_t *, void *);
 extern bool sb_route(switchboard_t *, party_t *, party_t *);
+extern bool sb_pause_route(switchboard_t *, party_t *, party_t *);
+extern bool sb_resume_route(switchboard_t *, party_t *, party_t *);
+extern bool sb_route_is_active(switchboard_t *, party_t *, party_t *);
+extern bool sb_route_is_paused(switchboard_t *, party_t *, party_t *);
+extern bool sb_route_is_subscribed(switchboard_t *, party_t *, party_t *);
 extern void sb_init(switchboard_t *, size_t);
 extern void sb_set_io_timeout(switchboard_t *, struct timeval *);
 extern void sb_clear_io_timeout(switchboard_t *);
 extern void sb_destroy(switchboard_t *, bool);
-extern void sb_prepare_results(switchboard_t *);
 extern bool sb_operate_switchboard(switchboard_t *, bool);
-extern sb_result_t *sb_automatic_switchboard(switchboard_t *, bool);
+extern void sb_get_results(switchboard_t *, sb_result_t *);
+extern char *sb_result_get_capture(sb_result_t *, char *, bool);
+extern void sb_result_destroy(sb_result_t *);
 extern void subproc_init(subprocess_t *, char *, char *[]);
 extern bool subproc_set_envp(subprocess_t *, char *[]);
 extern bool subproc_pass_to_stdin(subprocess_t *, char *, size_t, bool);
@@ -348,7 +356,6 @@ extern bool subproc_set_startup_callback(subprocess_t *, void (*)(void *));
 extern int  subproc_get_pty_fd(subprocess_t *);
 extern void subproc_start(subprocess_t *);
 extern bool subproc_poll(subprocess_t *);
-extern void subproc_prepare_results(subprocess_t *);
 extern void subproc_run(subprocess_t *);
 extern void subproc_close(subprocess_t *);
 extern pid_t subproc_get_pid(subprocess_t *);
@@ -362,6 +369,10 @@ extern void subproc_set_child_termcap(subprocess_t *, struct termios *);
 extern void subproc_set_extra(subprocess_t *, void *);
 extern void *subproc_get_extra(subprocess_t *);
 extern int subproc_get_pty_fd(subprocess_t *);
+extern void pause_passthrough(subprocess_t *, unsigned char);
+extern void resume_passthrough(subprocess_t *, unsigned char);
+extern void pause_capture(subprocess_t *, unsigned char);
+extern void resume_capture(subprocess_t *, unsigned char);
 extern void termcap_get(struct termios *);
 extern void termcap_set(struct termios *);
 extern void termcap_set_raw_mode(struct termios *);

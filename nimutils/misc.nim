@@ -117,5 +117,7 @@ proc bytesToString*(bytes: openarray[byte]): string =
 
 proc bytesToString*(bytes: pointer, l: int): string =
   ## Converts bytes at a memory address to a string.
+  if bytes == nil:
+    return ""
   result = newString(l)
   copyMem(result[0].addr, bytes, l)

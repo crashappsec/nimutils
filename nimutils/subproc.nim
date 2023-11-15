@@ -188,11 +188,6 @@ proc poll*(ctx: var SubProcess): bool {.cdecl, importc: "subproc_poll", nodecl.}
   ##
   ## This returns `true` when called after the process has exited.
 
-proc prepareResults*(ctx: var SubProcess) {.cdecl,
-                     importc: "subproc_prepare_results", nodecl.}
-  ## When manually polling, call this after process exit before
-  ## querying any results, such as data capture.
-
 proc run*(ctx: var SubProcess)  {.cdecl, importc: "subproc_run", nodecl.}
   ## This launches a subprocess, and polls it for IO until the process
   ## ends, and has no waiting data left to read.
@@ -221,6 +216,30 @@ proc setExtra*(ctx: var SubProcess, p: pointer)
 proc getExtra*(ctx: var SubProcess): pointer
     {.cdecl, importc: "subproc_get_extra", nodecl.}
   ## This can be used to retrieve any information set via `setExtra()`.
+
+proc pausePassthrough*(ctx: var SubProcess, which: SpIoKind)
+    {.cdecl, importc: "subproc_pause_passthrough", nodecl.}
+  ## Stops passthrough data from being passed (though pending writes
+  ## may still succeed).
+
+
+proc resumePassthrough*(ctx: var SubProcess, which: SpIoKind)
+    {.cdecl, importc: "subproc_resume_passthrough", nodecl.}
+  ## Resumes passthrough after being paused.  For data that didn't get
+  ## passed during the pause, it will not be seen after the pause
+  ## either.
+  ##
+  ## This allows you to toggle whether input makes it to the
+  ## subprocess, for instance.
+
+proc pauseCapture*(ctx: var SubProcess, which: SpIoKind)
+    {.cdecl, importc: "subproc_pause_capture", nodecl.}
+  ## Stops capture of a stream.  If it's resumed, data published
+  ## during the pause will NOT be added to the capture.
+
+proc resumeCapture*(ctx: var SubProcess, which: SpIoKind)
+    {.cdecl, importc: "subproc_resume_capture", nodecl.}
+  ## Resumes capturing a stream that's been paused.
 
 proc setIoCallback*(ctx: var SubProcess, which: SpIoKind,
                            callback: SubProcCallback): bool
@@ -291,14 +310,12 @@ proc getTaggedValue*(ctx: var SubProcess, tag: cstring): string =
 
 proc getStdin*(ctx: var SubProcess): string =
   ## Retrieve stdin, if it was captured. Must be called after the
-  ## process has completed. If manually polling, you must also have
-  ## called `prepareResults()` first.
+  ## process has completed.
   ctx.getTaggedValue("stdin")
 
 proc getStdout*(ctx: var SubProcess): string =
   ## Retrieve stdout, if it was captured. Must be called after the
-  ## process has completed. If manually polling, you must also have
-  ## called `prepareResults()` first.
+  ## process has completed.
   ##
   ## If you specified combining stdout and stderr, it will be
   ## available here.
@@ -306,8 +323,7 @@ proc getStdout*(ctx: var SubProcess): string =
 
 proc getStderr*(ctx: var SubProcess): string =
   ## Retrieve stdout, if it was captured. Must be called after the
-  ## process has completed. If manually polling, you must also have
-  ## called `prepareResults()` first.
+  ## process has completed.
   ctx.getTaggedValue("stderr")
 
 proc getExitCode*(ctx: var SubProcess, waitForExit = true): int =
@@ -411,6 +427,9 @@ proc runCommand*(exe:  string,
   result.stdout   = subproc.getStdout()
   result.stderr   = subproc.getStderr()
 
+template getStdin*(o: ExecOutput): string =
+  ## Returns any data captured from the child's stdin stream.
+  o.stdin
 template getStdout*(o: ExecOutput): string =
   ## Returns any data captured from the child's stdout stream.
   o.stdout
@@ -420,6 +439,9 @@ template getStderr*(o: ExecOutput): string =
 template getExit*(o: ExecOutput): int =
   ## Returns any data captured, as passed to the child's std input
   o.exitCode
+template getPid*(o: ExecOutput): int =
+  ## Returns the PID from the exited process
+  o.pid
 
 template runInteractiveCmd*(path: string,
                             args: seq[string],
@@ -433,19 +455,20 @@ template runInteractiveCmd*(path: string,
                                 pty = true, waitForExit = ensureExit)
 
 proc runCmdGetEverything*(exe:  string,
-                              args: seq[string],
-                              newStdIn    = "",
-                              closeStdIn  = true,
-                              passthrough = false,
-                              timeoutUsec = 1000000,
-                              ensureExit  = true): ExecOutput =
+                          args: seq[string],
+                          newStdIn    = "",
+                          closeStdIn  = true,
+                          passthrough = false,
+                          timeoutUsec = 1000000,
+                          ensureExit  = true): ExecOutput =
   ## A wrapper for `runCommand` that captures all output from the
   ## process.  This is similar to Nim's `execCmdEx` but allows for
   ## optional passthrough, timeouts, and sending an input string to
   ## stdin.
   return runCommand(exe, args, newStdin, closeStdin, pty = false,
                     passthrough = if passthrough: SpIoAll else: SpIoNone,
-                    timeoutUSec = timeoutUsec, capture = SpIoOutErr, waitForExit = ensureExit)
+                    timeoutUSec = timeoutUsec, capture = SpIoOutErr,
+                                  waitForExit = ensureExit)
 
 proc runPager*(s: string) =
   var

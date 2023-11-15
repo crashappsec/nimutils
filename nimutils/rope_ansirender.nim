@@ -6,7 +6,7 @@ import options, unicode, misc, colortable, rope_construct, rope_base,
 
 from strutils import join, endswith
 
-template ansiReset(): string = "\e[0m"
+template ansiReset(): string = "\x1b[0m"
 
 type AnsiStyleInfo = object
   ansiStart: string
@@ -116,6 +116,8 @@ proc preRenderBoxToAnsiString*(b: TextPlane): string =
     if getShowColor():
       result &= ansiReset()
 
+  result &= ansiReset()
+
 template render(r: Rope, width: int, showLinks: bool, style: FmtStyle,
                 ensureNl: bool): string =
   var toRender: Rope
@@ -205,9 +207,19 @@ proc `$`*(r: Rope, width = -1, ensureNl = false, showLinks = false,
   ## Default rope-to-string output function.
   return r.render(width, showLinks, style, ensureNl)
 
+proc setvbuf*(f: File, buf: pointer, t: cint, s: cint): cint {. importc,
+                                                    header: "<stdio.h>" .}
+
+proc unbufferIo*() =
+  once:
+    discard setvbuf(stdout, nil, cint(2), 0)
+    discard setvbuf(stderr, nil, cint(2), 0)
+    discard setvbuf(stdin, nil, cint(2), 0)
+
 proc print*(s: string, file = stdout, forceMd = false, width = -1,
             ensureNl = true, showLinks = false, style = defaultStyle,
                                          noAutoDetect = false) =
+  unbufferIo()
   ## Much like `echo()`, but more capable in terms of the processing
   ## you can do.
   ##
@@ -253,10 +265,10 @@ proc print*(s: string, file = stdout, forceMd = false, width = -1,
   elif len(s) >= 1 and s[0] == '<':
     toWrite = s.stylizeHtml(width, showLinks, ensureNl, style)
   else:
-    toWrite = $(s.textRope(), width, ensureNl, showLinks, style)
-
+    toWrite = pre(s).render(width, showLinks, style, ensureNl)
   file.write(toWrite)
 
 proc print*(r: Rope, file = stdout, width = -1, ensureNl = true,
             showLinks = false, style = defaultStyle) =
+  unbufferIo()
   file.write(r.render(width, showLinks, style, ensureNl))
