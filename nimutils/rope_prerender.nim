@@ -664,9 +664,6 @@ proc preRenderRow(state: var FmtState, r: Rope): seq[RenderBox] =
       state.totalWidth = width
       cellBoxes = state.preRender(r.cells[i])
 
-    for cell in cellBoxes:
-      cell.tmargin = 0
-      cell.bmargin = 0
     let boxes = state.collapseColumn(cellBoxes)
     rowPlanes.add(state.collapsedBoxToTextPlane(boxes))
 
