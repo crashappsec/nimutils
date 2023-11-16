@@ -355,8 +355,9 @@ when isMainModule:
                   "texttable.nim", "either.nim", "macproc.nim", "pubsub.nim",
                   "sigv4.nim", "unicodeid.nim"]
     mess1.sort()
-    let tbl = instantTable(mess1, h3("Auto-arranged into columns")).
-              noTableBorders().topMargin(2)
+    # The padding to make up for the lost borders.
+    let tbl = instantTable(mess1, h3("Auto-arranged into columns")).lpad(1).
+                                    rpad(1).noBorders().topMargin(2)
 
     print(tbl)
 
@@ -366,7 +367,7 @@ when isMainModule:
                   @["Row 4", "Row 4", "Row 4", "Row 4"]]
 
     let t2 = quickTable(mess2, caption = h3("Table with horizontal header")).
-             topMargin(2).typicalBorders().colPcts([10, 40, 40, 10])
+             topMargin(1).typicalBorders().colPcts([10, 40, 40, 10])
     print(t2)
 
     let t3 = quickTable(mess2, verticalHeaders = true,
@@ -375,7 +376,7 @@ when isMainModule:
 
     let t4 = quickTable(mess2, noheaders = true,
                           caption = h3("Table w/o header")).
-             topMargin(2).boldBorders().typicalBorders()
+             bottomMargin(1).boldBorders().allBorders()
     print(t4)
 
     let
@@ -392,10 +393,10 @@ when isMainModule:
     echo txt.debugWalk()
     print(txt)
 
-    var sometest = callout(center(pre(txt)))
+    var sometest = setWidth(callout(center(pre(txt))), 50)
     #var sometest = container(callout(center(pre(txt))).lpad(10)).lpad(10)
     echo txt.debugWalk()
-    print(sometest, width = -10)
+    print(center(sometest))
 
   proc nestedTableTest() =
     let mdText = """
@@ -438,8 +439,8 @@ Oh look, here comes a table!
   aesGcmTests()
   keyStreamTest()
   dictTests()
-  #when defined(macosx):
-  #  macProcTest()
+  when defined(macosx):
+    macProcTest()
   info(em("This is a test message."))
   error(italic(underline(("So is this."))))
   nestedTableTest()

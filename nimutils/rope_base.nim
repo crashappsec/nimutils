@@ -369,6 +369,8 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
                     bgColor:                inStyle.bgColor,
                     overflow:               inStyle.overFlow,
                     hang:                   inStyle.hang,
+                    lpad:                   instyle.lpad,
+                    rpad:                   instyle.rpad,
                     tmargin:                inStyle.tmargin,
                     bmargin:                inStyle.bmargin,
                     casing:                 inStyle.casing,

@@ -236,5 +236,6 @@ template instantTableWithHeaders*(cells: seq[seq[string]], horizontal = true,
 
 
 proc callOut*[T: string | Rope](contents: T, width = -1, borders = BorderAll,
-                                                     boxStyle = BoxStyleDouble): Rope = result = quickTable(@[@[contents.center()]], false, false, Rope(nil),
+                                                     boxStyle = BoxStyleDouble): Rope =
+    result = quickTable(@[@[contents.center()]], false, false, Rope(nil),
                          width, borders, boxStyle)

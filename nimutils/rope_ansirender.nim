@@ -149,13 +149,13 @@ template render(r: Rope, width: int, showLinks: bool, style: FmtStyle,
   toRender.preRender(width, showLinks, style, outerPad).
            preRenderBoxToAnsiString(noColor)
 
-template stylizeMd*(s: string, width = -1, showLinks = false,
+template stylizeMd*(s: string, width = 0, showLinks = false,
                     ensureNl = true, style = defaultStyle,
                                noColor = false, outerPad = true): string =
   s.htmlStringToRope().
     render(width, showLinks, style, ensureNl, noColor, outerPad)
 
-template stylizeHtml*(s: string, width = -1, showLinks = false,
+template stylizeHtml*(s: string, width = 0, showLinks = false,
                       ensureNl = true, style = defaultStyle,
                                  noColor = false, outerPad = true): string =
   s.htmlStringToRope(false).
@@ -233,7 +233,7 @@ proc withColor*(s: string, fg: string, bg = ""): string =
     result =  s.stylize(ensureNl = false, style = newStyle(fgColor = fg,
                         bgColor = bg))
 
-proc `$`*(r: Rope, width = -1, ensureNl = false, showLinks = false,
+proc `$`*(r: Rope, width = 0, ensureNl = false, showLinks = false,
           style = defaultStyle, noColor = false, outerPad = true): string =
   ## Default rope-to-string output function.
   return r.render(width, showLinks, style, ensureNl, noColor, outerPad)
@@ -247,7 +247,7 @@ proc unbufferIo*() =
     discard setvbuf(stderr, nil, cint(2), 0)
     discard setvbuf(stdin, nil, cint(2), 0)
 
-proc print*(s: string, file = stdout, forceMd = false, width = -1,
+proc print*(s: string, file = stdout, forceMd = false, width = 0,
             ensureNl = true, showLinks = false, style = defaultStyle,
             noAutoDetect = false, noColor = false, outerPad = true) =
   unbufferIo()

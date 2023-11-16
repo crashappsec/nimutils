@@ -167,27 +167,31 @@ var
                                                        lpad = 0, rpad = 0)
 
   styleMap*: Table[string, FmtStyle] = {
-    "container" : newStyle(rpad = 1, lpad = 1, tmargin = 1, bmargin = 1),
+    "container" : newStyle(rpad = 1, lpad = 1),
     "div"       : newStyle(rpad = 1, lpad = 1, bgColor = "none"),
-    "p"         : newStyle(bmargin = 1),
+    "p"         : newStyle(bmargin = 0),
     "basic"     : newStyle(bmargin = 0),
     "h1"        : newStyle(fgColor = "red", bold = BoldOn, align = AlignL,
-                           italic = ItalicOn, casing = CasingUpper,
-                           tmargin = 1, bmargin = 0),
+                          italic = ItalicOn, casing = CasingUpper, tmargin = 2),
     "h2"        : newStyle(fgColor = "lime", bgColor = "darkslategray",
-                  bold = BoldOn, align = AlignL, italic = ItalicOn, tmargin = 2),
-    "h3"        : newStyle(bgColor = "red", fgColor = "white",
-                  italic = ItalicOn, tmargin = 0, casing = CasingUpper),
-    "h4"        : newStyle(bgColor = "red", fgColor = "white", italic = ItalicOn,
+                           tmargin = 1,
+                           bold = BoldOn, align = AlignL, italic = ItalicOn),
+    "h3"        : newStyle(bgColor = "red", fgColor = "white", tmargin = 1,
+                  italic = ItalicOn, bmargin = 0, casing = CasingUpper),
+    "h4"        : newStyle(bgColor = "red", fgColor = "white", tmargin = 1,
+                           italic = ItalicOn, bmargin = 0,
                            underline = UnderlineSingle, casing = CasingTitle),
     "h5"        : newStyle(fgColor = "darkslategray", bgColor = "lime",
-                                     italic = ItalicOn, casing = CasingTitle),
-    "h6"        : newStyle(fgColor = "yellow", bgColor = "blue",
-                           underline = UnderlineSingle, casing = CasingTitle),
-    "ol"        : newStyle(bulletChar = Rune('.'), lpad = 2, align = AlignL),
+                          tmargin = 0, bmargin = 0, italic = ItalicOn,
+                                                 casing = CasingTitle),
+    "h6"        : newStyle(fgColor = "yellow", bgColor = "blue", tmargin = 0,
+                bmargin = 0, underline = UnderlineSingle, casing = CasingTitle),
+    "ol"        : newStyle(bulletChar = Rune('.'), lpad = 2, align = AlignL,
+                           tmargin = 0, bmargin = 0),
     "ul"        : newStyle(bulletChar = Rune(0x2022), lpad = 2,
-                                          align = AlignL), #•
-    "li"        : newStyle(lpad = 1, overflow = OWrap, align = AlignL),
+                           tmargin = 1, bmargin = 1, align = AlignL), #•
+    "li"        : newStyle(lpad = 1, overflow = OWrap, align = AlignL,
+                           tmargin = 0, bmargin = 0),
     "left"      : newStyle(align = AlignL),
     "right"     : newStyle(align = AlignR),
     "center"    : newStyle(align = AlignC),
@@ -200,19 +204,18 @@ var
     "tfoot"     : tableDefault,
     "plain"     : plainStyle,
     "text"      : defaultStyle,
-    "tborder"   : newStyle(tmargin = 0, bmargin = 0, lpad = 1, rpad = 1),
-    "td"        : newStyle(tmargin = 0, overflow = OWrap, align = AlignL,
-                                                   lpad = 1, rpad = 1),
+    "td"        : newStyle(tmargin = 0, bmargin = 0, overflow = OWrap,
+                           align = AlignL, lpad = 1, rpad = 1),
     "th"        : newStyle(bgColor = "black", bold = BoldOn, overflow = OWrap,
-                  casing = CasingUpper, tmargin = 0, fgColor = "lime",
+               casing = CasingUpper, tmargin = 0, bmargin = 0, fgColor = "lime",
                   lpad = 1, rpad = 1, align = AlignC),
-    "tr"        : newStyle(fgColor = "white", bold = BoldOn, lpad = 1, rpad = 1,
-                                      overflow = OWrap, tmargin = 0, bmargin = 0,
+    "tr"        : newStyle(fgColor = "white", bold = BoldOn, lpad = 0, rpad = 0,
+                           overflow = OWrap, tmargin = 0, bmargin = 0,
                            bgColor = "dodgerblue"),
     "tr.even"   : newStyle(fgColor = "white", bgColor = "slategray",
-                            tmargin = 1, overflow = OWrap),
+                            tmargin = 0, overflow = OWrap),
     "tr.odd"    : newStyle(fgColor = "white", bgColor = "steelblue",
-                            tmargin = 1, overflow = OWrap),
+                            tmargin = 0, overflow = OWrap),
     "em"        : newStyle(fgColor = "jazzberry", italic = ItalicOn),
     "italic"    : newStyle(italic = ItalicOn),
     "i"         : newStyle(italic = ItalicOn),
@@ -221,7 +224,8 @@ var
     "strong"    : newStyle(inverse = InverseOn, italic = ItalicOn),
     "code"      : newStyle(inverse = InverseOn, italic = ItalicOn),
     "caption"   : newStyle(bgColor = "black", fgColor = "atomiclime",
-                           align = AlignC, italic = ItalicOn)
+                  lpad = 2, rpad = 3,
+                  tmargin = 0, bmargin = 0, align = AlignC, italic = ItalicOn)
 
     }.toTable()
 
@@ -236,13 +240,13 @@ var
     "container"  : true,
     "basic"      : true,
     "caption"    : true,
+    "code"       : true,
     "p"          : true,
     "div"        : true,
     "ol"         : true,
     "ul"         : true,
     "li"         : true,
     "blockquote" : true,
-    "pre"        : true,
     "q"          : true,
     "small"      : true,
     "td"         : true,
@@ -318,11 +322,15 @@ proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
   ## This layers any new overrides on top of existing values, creating
   ## a third style.
   result         = base.copyStyle()
-  result.lpad    = changes.lpad
-  result.rpad    = changes.rpad
-  result.tmargin = changes.tmargin
-  result.bmargin = changes.bmargin
 
+  if changes.lpad.isSome():
+    result.lpad = changes.lpad
+  if changes.rpad.isSome():
+    result.rpad = changes.rpad
+  if changes.tmargin.isSome():
+    result.tmargin = changes.tmargin
+  if changes.bmargin.isSome():
+    result.bmargin = changes.bmargin
   if changes.textColor.isSome():
     result.textColor = changes.textColor
   if changes.bgColor.isSome():
@@ -497,12 +505,12 @@ proc applyClass*(r: Rope, class: string, recurse = true): Rope {.discardable.} =
   else:
     r.class = class
 
-proc noTableBorders*(r: Rope, recurse = true): Rope {.discardable.} =
+proc noBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ## Overrides a rope's current style to remove any
   ## table borders.
   return r.ropeStyle(newStyle(borders = [BorderNone]), recurse, true)
 
-proc allTableBorders*(r: Rope, recurse = true): Rope {.discardable.} =
+proc allBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ## Overrides a rope's current style to add all
   ## table borders.
   return r.ropeStyle(newStyle(borders = [BorderAll]), recurse, true)
@@ -567,19 +575,25 @@ proc fgColor*(s: string, color: string): Rope {.discardable.} =
   ## so should override other settings (e.g., in a table).
   return pre(s).fgColor(color)
 
-proc topMargin*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
-  ## Add a top margin to a Rope object. This may be ignored if the
+proc topMargin*(r: Rope, n: int): Rope {.discardable.} =
+  ## Add a top margin to a Rope object. This will be ignored if the
   ## rope isn't a 'block' of some sort.
-  return r.ropeStyle(newStyle(tmargin = n), recurse, true)
+  result = r
+  var tableSet = r.search("table", first = true)
+  if tableSet.len() == 1:
+    tableSet[0].ropeStyle(newStyle(tmargin = n), false)
 
 proc topMargin*(s: string, n: int): Rope {.discardable.} =
   ## Adds a top margin to a string.
   return pre(s).topMargin(n)
 
-proc bottomMargin*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
+proc bottomMargin*(r: Rope, n: int): Rope {.discardable.} =
   ## Add a bottom margin to a Rope object. This will be ignored if the
   ## rope isn't a 'block' of some sort.
-  return r.ropeStyle(newStyle(bmargin = n), recurse, true)
+  result = r
+  var tableSet = r.search("table", first = true)
+  if tableSet.len() == 1:
+    tableSet[0].ropeStyle(newStyle(bmargin = n), false)
 
 proc bottomMargin*(s: string, n: int): Rope {.discardable.} =
   ## Adds a bottom margin to a string.
