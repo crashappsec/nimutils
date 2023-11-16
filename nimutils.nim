@@ -355,8 +355,10 @@ when isMainModule:
                   "texttable.nim", "either.nim", "macproc.nim", "pubsub.nim",
                   "sigv4.nim", "unicodeid.nim"]
     mess1.sort()
-    let tbl = instantTable(mess1, h3("Auto-arranged into columns"))
-    print(tbl.noTableBorders().topMargin(2))
+    let tbl = instantTable(mess1, h3("Auto-arranged into columns")).
+              noTableBorders().topMargin(2)
+
+    print(tbl)
 
     var mess2 = @[@["1, 1", "Column 2", "Column 3", "Column 4"],
                   @["Row 2", "Row 2", "Row 2", "Row 2"],
@@ -379,7 +381,7 @@ when isMainModule:
     let
       st  = "This is a test of something I'd really like to know about, " &
             "I think??"
-      txt = textBox(st, 30, true, boxStyle = BoxStyleAscii)
+      txt = nocolors(callout(st, 30, boxStyle = BoxStyleAscii))
       res = txt.search(text = "test")
 
     print(h5("Search results"))
@@ -388,13 +390,12 @@ when isMainModule:
       echo $(s)
 
     echo txt.debugWalk()
-    print(container(txt))
+    print(txt)
 
-    print(textBox(center(pre(txt))), width = -10)
-
-  # TODO!!!  Need to add width() and nocolor(), and nocolor needs to
-  # override any color in the dom underneath it.
-  # Can probably just generate special ColorOff, ColorOn
+    var sometest = callout(center(pre(txt)))
+    #var sometest = container(callout(center(pre(txt))).lpad(10)).lpad(10)
+    echo txt.debugWalk()
+    print(sometest, width = -10)
 
   proc nestedTableTest() =
     let mdText = """
@@ -421,7 +422,10 @@ Oh look, here comes a table!
       @[md(mdText), md(mdText)],
       @[md(mdText), md(mdText)]
     ]
-    print(quickTable(crazyTable, noheaders = true))
+    let toPrint = quickTable(crazyTable, noheaders = true)
+
+    echo toPrint.debugWalk()
+    print(toPrint)
 
   import nimutils/logging
   print(h1("Testing Nimutils functionality."))

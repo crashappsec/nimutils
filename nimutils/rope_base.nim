@@ -1,5 +1,5 @@
-import unicode, options, unicodeid, unicodedb/properties, misc, strutils,
-       random, hexdump
+import unicode, options, unicodeid, unicodedb/properties, misc, strutils
+
 
 const
  defaultTextWidth* {.intdefine.}    = 80
@@ -107,8 +107,7 @@ type
 
   RopeKind* = enum
     RopeAtom, RopeBreak, RopeList, RopeTable, RopeTableRow, RopeTableRows,
-    RopeFgColor, RopeBgColor, RopeLink, RopeTaggedContainer,
-    RopeAlignedContainer
+    RopeFgColor, RopeBgColor, RopeLink, RopeTaggedContainer
 
   BreakKind* = enum
     # For us, a single new line translates to a soft line break that
@@ -125,11 +124,12 @@ type
 
   Rope* = ref object
     ## The core rope object.  Generally should only access via API.
-    next*:       Rope
-    cycle*:      bool
-    id*:         string
-    tag*:        string
-    class*:      string
+    next*:          Rope
+    cycle*:         bool
+    noTextExtract*: bool
+    id*:            string
+    tag*:           string
+    class*:         string
 
     case kind*: RopeKind
     of RopeAtom:
@@ -143,10 +143,9 @@ type
       toHighlight*: Rope
     of RopeList:
       items*: seq[Rope]
-    of RopeTaggedContainer, RopeAlignedContainer:
+    of RopeTaggedContainer:
       contained*: Rope
       width*:      int  # Requested width in columns for a container.
-
     of RopeTable:
       colInfo*: seq[ColInfo]
       thead*:   Rope # RopeTableRows
@@ -178,7 +177,7 @@ proc buildWalk(r: Rope, results: var seq[Rope]) =
   of RopeList:
     for item in r.items:
       item.buildWalk(results)
-  of RopeTaggedContainer, RopeAlignedContainer:
+  of RopeTaggedContainer:
     r.contained.buildWalk(results)
   of RopeTable:
     r.thead.buildWalk(results)
@@ -198,22 +197,28 @@ proc buildWalk(r: Rope, results: var seq[Rope]) =
 proc ropeWalk*(r: Rope): seq[Rope] =
  r.buildWalk(result)
 
-proc search*(r:     Rope,
-             tag:   openarray[string] = [],
-             class: openarray[string] = [],
-             id:    openarray[string] = [],
-             text:  openarray[string] = []): seq[Rope] =
+proc search*(r: Rope,
+             tag   = openarray[string]([]),
+             class = openarray[string]([]),
+             id    = openarray[string]([]),
+             text  = openarray[string]([]),
+             first = false): seq[Rope] =
 
   for item in r.ropeWalk():
     if item.tag in tag or item.class in class or item.id in id:
       result.add(item)
+      if first:
+        return
     elif text.len() != 0 and item.kind == RopeAtom:
       for s in text:
         if s in $(item.text):
           result.add(item)
+          if first:
+            return
           break
 
-proc search*(r: Rope, tag = "", class = "", id = "", text = ""): seq[Rope] =
+proc search*(r: Rope, tag = "", class = "", id = "", text = "",
+             first = false): seq[Rope] =
   var tags, classes, ids, texts: seq[string]
 
   if tag != "":
@@ -227,21 +232,32 @@ proc search*(r: Rope, tag = "", class = "", id = "", text = ""): seq[Rope] =
 
   return r.search(tags, classes, ids, texts)
 
-proc debugWalk*(r: Rope): seq[string] =
+proc debugWalk*(r: Rope): string =
+  var debugId = 0
   if r != nil:
-    for item in r.ropeWalk():
-      var one = "id: "
+    let items = r.ropeWalk()
+    for item in items:
       if item.id == "":
-        item.id = randString(8).hex()
+        item.id = $(debugId)
+        debugId += 1
 
-      one &= item.id & "; tag: "
-      if item.tag == "":
-        one &= "<none>; "
+    for item in r.ropeWalk():
+      var one = "id: " & item.id
+
+      if item.kind == RopeAtom:
+        one &= "; text: " & $(item.text)
       else:
-        one &= item.tag
-      if item.class != "":
-        one &= "class: " & item.class
-      result.add(one)
+        one &= "; tag: "
+        if item.tag == "":
+          one &= "<none>; "
+        else:
+          one &= item.tag
+        if item.class != "":
+          one &= "class: " & item.class
+
+      if item.next != nil:
+        one &= " NEXT = " & item.next.id
+      result &= one & "\n"
 
 let
   BoxStylePlain* =     BoxStyle(horizontal: Rune(0x2500),
@@ -383,22 +399,6 @@ proc `$`*(plane: TextPlane): string =
       else:
         result &= "<<" & $(ch) & ">>"
     result.add('\n')
-
-proc mergeTextPlanes*(dst: var TextPlane, append: TextPlane) =
-  ## Merge two TextPlane objects. Since this type is mainly just the
-  ## output of the pre-renderer and will usually get passed right to a
-  ## renderer without you seeing it, you probably won't need this, but
-  ## its use does span modules, so it's exported.
-  if len(dst.lines) == 0:
-    dst.lines = append.lines
-  elif len(append.lines) != 0:
-    dst.lines[^1].add(append.lines[0])
-    dst.lines &= append.lines[1 .. ^1]
-
-proc mergeTextPlanes*(planes: seq[TextPlane]): TextPlane =
-  result = TextPlane()
-  for plane in planes:
-    result.mergeTextPlanes(plane)
 
 proc getBreakOpps(s: seq[uint32]): seq[int] =
   # Should eventually upgrade this to full Annex 14 at some point.

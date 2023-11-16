@@ -86,26 +86,25 @@ proc preRenderBoxToAnsiString*(b: TextPlane, noColor = false): string =
   # TODO: Add back in unicode underline, etc.
   var
     styleInfo:  AnsiStyleInfo
+    colorStack: seq[bool]
     shouldTitle  = false
     foundNoColor = false
-    colorNest    = 0
 
   for line in b.lines:
-    for ch in line:
+    for i, ch in line:
       if ch > 0x10ffff:
         if ch == StylePop:
           if canColor():
             result &= ansiReset()
         elif ch == StyleColor:
-          if colorNest == 0:
-            foundNoColor = false
-          colorNest += 1
+          colorStack.add(foundNoColor)
+          foundNoColor = false
         elif ch == StyleNoColor:
-          if colorNest == 0:
-            foundNoColor = true
-          colorNest += 1
+          colorStack.add(foundNoColor)
+          foundNoColor = true
         elif ch == StyleColorPop:
-          colorNest -= 1
+          if len(colorStack) != 0:
+            foundNoColor = colorStack.pop()
         else:
           styleInfo = b.ansiStyleInfo(ch)
         if canColor():

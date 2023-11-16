@@ -26,8 +26,8 @@
 # single-threaded assumption until I bring in my lock-free hash
 # tables.
 
-import tables, options, unicodedb/properties, std/terminal, rope_base,
-       rope_styles, unicodeid, unicode, misc
+import tables, options, std/terminal, rope_base, rope_styles, unicodeid,
+       unicode, misc
 
 type
   RenderBoxKind* = enum RbText, RbBoxes
@@ -39,16 +39,16 @@ type
     width*:      int
 
   FmtState = object
-    totalWidth:   int
-    showLinkTarg: bool
-    curStyle:     FmtStyle
-    styleStack:   seq[uint32]
-    colStack:     seq[seq[int]]
-    colorStack:   seq[bool]
-    nextRope:     Rope
-    savedRopes:   seq[Rope]
-    processed:    seq[Rope] # For text items b/c I have a bug :/
-    tableEven:    seq[bool]
+    totalWidth:      int
+    showLinkTarg:    bool
+    curStyle:        FmtStyle
+    styleStack:      seq[uint32]
+    colStack:        seq[seq[int]]
+    colorStack:      seq[bool]
+    tableEven:       seq[bool]
+    curPlane:        TextPlane
+    curContainer:    Rope
+    curTableSep:     Option[RenderBox]
 
 proc `$`*(box: RenderBox): string =
     result &= $(box.contents)
@@ -56,10 +56,6 @@ proc `$`*(box: RenderBox): string =
 
 template styleRunes(state: FmtState, runes: seq[uint32]): seq[uint32] =
   @[state.curStyle.getStyleId()] & runes & @[StylePop]
-
-proc applyCurrentStyleToPlane*(state: FmtState, p: TextPlane) =
-  for i in 0 ..< p.lines.len():
-    p.lines[i] = state.styleRunes(p.lines[i])
 
 template pad(state: FmtState, w: int): seq[uint32] =
   state.styleRunes(uint32(Rune(' ')).repeat(w))
@@ -74,35 +70,42 @@ proc noBoxRequired*(r: Rope): bool =
   ##
   ## However, we DO allow break objects, as they don't require boxing,
   ## so it isn't quite non-breaking text.
+  ##
+  ## This has gotten a bit more complicated with the styling
+  ## API. Previously we relied on the tag being in 'breaking
+  ## styles'. However, with the style API, one can easily set
+  ## properties that change whether a box is implied. So, while we
+  ## still check the list of tags that imply a box, we also check the
+  ## boolean `noTextExtract`.
+  ##
+  ## This boolean isn't meant to be definitive; it's only to be added
+  ## to nodes that will short-circuit text extraction, so that box
+  ## properties get applied, and we don't bother to set it when the
+  ## tag already iplies it.
 
   # This will be used to test containers that may contain some basic
   # content, some not.
 
-  var subItem: Rope
-
-  case r.kind
-  of RopeList, RopeAlignedContainer, RopeTable, RopeTableRow, RopeTableRows:
-    return false
-  of RopeAtom, RopeLink:
+  if r == nil:
     return true
+  if r.tag in breakingStyles or r.noTextExtract:
+    return false
+  case r.kind
+  of RopeList, RopeTable, RopeTableRow, RopeTableRows:
+    return false
+  of RopeAtom:
+    result = true
+  of RopeLink:
+    result = r.toHighlight.noBoxRequired()
   of RopeFgColor, RopeBgColor:
-    # If our contained item is basic, we need to check the
-    # subsequent items too.
-    # Assign to subItem and drop down to the loop below.
-    subItem = r.toColor
+    result = r.toColor.noBoxRequired()
   of RopeBreak:
-    return r.guts == Rope(nil)
+    result = r.guts == Rope(nil)
   of RopeTaggedContainer:
-    if r.tag in breakingStyles:
-      return false
-    subItem = r.contained
+    result = r.contained.noBoxRequired()
 
-  while subItem != Rope(nil):
-    if not subItem.noBoxRequired():
-      return false
-    subItem = subItem.next
-
-  return true
+  if result != false:
+    result = r.next.noBoxRequired()
 
 proc unboxedRunelength*(r: Rope): int =
   ## Returns the approximate display-width of a rope, without
@@ -138,7 +141,9 @@ proc unboxedRunelength*(r: Rope): int =
 
 template runelength*(r: Rope): int = r.unboxedRuneLength()
 
-proc applyAlignment(state: FmtState, box: RenderBox, w: int) =
+proc applyAlignment(state: FmtState, box: RenderBox) =
+  let w = state.totalWidth
+
   for i in 0 ..< box.contents.lines.len():
     let
       toFill =  w - box.contents.lines[i].u32LineLength()
@@ -168,28 +173,33 @@ proc applyAlignment(state: FmtState, box: RenderBox, w: int) =
     else:
       discard
 
-proc applyLeftRightPadding(state: FmtState, box: RenderBox, w: int) =
+proc applyPadding(state: FmtState, box: RenderBox, lpad, rpad: int) =
+  ## When we're applying a container style, the contents are rendered
+  ## to a width calculated after subtracting out the padding.
+  ##
+  ## When this is called, the state object is at the end of applying
+  ## the style, and we're going to go ahead and make sure each line
+  ## is exactly the right width (to the best of our ability due to
+  ## unicode issues), then add the padding on.
   var
-    lpad    = state.curStyle.lpad.getOrElse(0)
-    rpad    = state.curStyle.rpad.getOrElse(0)
     lpadTxt = state.pad(lpad)
     rpadTxt = state.pad(rpad)
-    extra: seq[uint32]
+    w       = state.totalWidth
+    toFill: int
 
   for i in 0 ..< len(box.contents.lines):
-    var toFill = (w - box.contents.lines[i].u32LineLength())
-    extra = state.pad(toFill)
-    box.contents.lines[i] = lpadTxt & box.contents.lines[i] & rpadTxt & extra
-    # There's a bug if this is needed.
-    box.contents.lines[i] = box.contents.lines[i].truncateToWidth(w)
+    toFill = (w - box.contents.lines[i].u32LineLength())
 
-proc alignAndPad(state: FmtState, box: RenderBox) =
-  let
-    lpad    = state.curStyle.lpad.getOrElse(0)
-    rpad    = state.curStyle.rpad.getOrElse(0)
+    if toFill < 0:
+      box.contents.lines[i] = box.contents.lines[i].truncateToWidth(w)
+    elif toFill > 0:
+      box.contents.lines[i] = box.contents.lines[i] & state.pad(toFill)
 
-  state.applyAlignment(box, state.totalWidth - (lpad - rpad))
-  state.applyLeftRightPadding(box, state.totalWidth)
+    box.contents.lines[i] = lpadTxt & box.contents.lines[i] & rpadTxt
+
+proc wrapTextPlane(p: TextPlane, lineStart, lineEnd: seq[uint32]) =
+  for i in 0 ..< p.lines.len():
+    p.lines[i] = lineStart & p.lines[i] & lineEnd
 
 proc collapseColumn(state: FmtState, boxes: seq[RenderBox]): RenderBox =
   ## Combine renderboxes at the same level into one renderbox.  These
@@ -280,70 +290,14 @@ proc getNewStartStyle(state: FmtState, r: Rope,
   if styleChange:
     return some(newStyle)
 
-template boxContent(state: var FmtState, style: FmtStyle, symbol: untyped,
-                    code: untyped) =
-  state.pushStyle(style)
-
-  let
-    lpad     = style.lpad.getOrElse(0)
-    rpad     = style.rpad.getOrElse(0)
-    p        = lpad + rpad
-
-  state.totalWidth -= p
+template addStyleMarkers(code: untyped) =
+  let style = state.getNewStartStyle(r, "").getOrElse(state.curStyle)
+  state.curPlane.addRunesToExtraction(@[state.curStyle.getStyleId()])
   code
-  state.totalWidth += p
+  state.curPlane.addRunesToExtraction(@[StylePop])
 
-  for item in symbol:
-    if style.tmargin.isSome():
-      item.tmargin = style.tmargin.get()
-    if style.bmargin.isSome():
-      item.bmargin = style.bmargin.get()
-
-  let collapsed = state.collapseColumn(symbol)
-  state.alignAndPad(collapsed)
-  state.popStyle()
-
-  symbol = @[collapsed]
-
-template fmtBox(styleTweak: Option[FmtStyle], code: untyped) =
-  var style: FmtStyle
-
-  if styleTweak.isSome():
-    style = state.curStyle.mergeStyles(styleTweak.get())
-  else:
-    style = state.curStyle
-  state.boxContent(style, result, code)
-
-template taggedBox(tag: string, code: untyped) =
-  let
-    styleOpt   = state.getNewStartStyle(r, tag)
-    style      = styleOpt.getOrElse(state.curStyle)
-    lpad       = style.lpad.getOrElse(0)
-    rpad       = style.rpad.getOrElse(0)
-    p          = lpad + rpad
-
-  state.pushStyle(style)
-
-  state.totalWidth -= p
-  code
-  state.totalWidth += p
-  for item in result:
-    if style.tmargin.isSome():
-      item.tmargin = style.tmargin.get()
-    if style.bmargin.isSome():
-      item.bmargin = style.bmargin.get()
-
-  let collapsed = state.collapseColumn(result)
-  state.alignAndPad(collapsed)
-  state.popStyle()
-
-  result = @[collapsed]
-
-template withStyle(tag: string, code: untyped) =
-  let
-    styleOpt   = state.getNewStartStyle(nil, tag)
-    style      = styleOpt.getOrElse(state.curStyle)
-
+template withRopeStyle(code: untyped) =
+  let style = state.getNewStartStyle(r, "").getOrElse(state.curStyle)
   state.pushStyle(style)
   code
   state.popStyle()
@@ -351,21 +305,53 @@ template withStyle(tag: string, code: untyped) =
 template withWidth(w: int, code: untyped) =
   let oldWidth = state.totalWidth
 
-  if w < oldwidth:
+  if w < 0:
+    w = 0
+  elif w < oldwidth:
     state.totalWidth = w
 
   code
 
   state.totalWidth = oldWidth
 
+template flushCurPlane(boxvar: untyped) =
+  if state.curPlane.lines.len() != 0:
+    state.curPlane.wrapToWidth(state.curStyle, state.totalWidth)
+    boxvar.add(RenderBox(contents: state.curPlane,
+                         tmargin:  state.curStyle.tmargin.getOrElse(0),
+                         bmargin:  state.curStyle.tmargin.getOrElse(0),
+                         width:    state.totalWidth))
+    state.curPlane = TextPlane(lines: @[])
 
-template standardBox(code: untyped) =
-  taggedBox("", code)
+template enterContainer(boxvar, code: untyped) =
+  flushCurPlane(boxvar)
+  let savedContainer = state.curContainer
+  state.curContainer = r
+  code
+  state.curContainer = savedContainer
+
+template applyContainerStyle(boxvar: untyped, code: untyped) =
+  var
+    style = state.getNewStartStyle(r, r.tag).getOrElse(state.curStyle)
+    lpad  = style.lpad.getOrElse(0)
+    rpad  = style.rpad.getOrElse(0)
+    w     = state.totalWidth - lpad - rpad
+    collapsed: RenderBox
+
+  state.pushStyle(style)
+  withWidth(w):
+    code
+    flushCurPlane(boxvar)
+    collapsed = state.collapseColumn(boxvar)
+    state.applyAlignment(collapsed)
+    state.applyPadding(collapsed, lpad, rpad)
+
+  state.popStyle()
+  boxvar = @[collapsed]
 
 proc preRender*(state: var FmtState, r: Rope): seq[RenderBox]
 
 proc preRenderUnorderedList(state: var FmtState, r: Rope): seq[RenderBox] =
-  standardBox:
     let
       bulletChar = state.curStyle.bulletChar.getOrElse(Rune(0x2022))
       bullet     = state.styleRunes(@[uint32(bulletChar)])
@@ -380,7 +366,7 @@ proc preRenderUnorderedList(state: var FmtState, r: Rope): seq[RenderBox] =
       subedWidth = false
 
     for n, item in r.items:
-      var oneItem = state.preRender(item)[0]
+      var oneItem  = state.preRender(item)[0]
 
       for i in 0 ..< oneItem.contents.lines.len():
         if i == 0:
@@ -409,7 +395,6 @@ proc toNumberBullet(state: FmtState, n, maxdigits: int): seq[uint32] =
   result = pad & state.styleRunes(result)
 
 proc preRenderOrderedList(state: var FmtState, r: Rope): seq[RenderBox] =
-  standardBox:
     var
       hangPrefix:  seq[uint32]
       maxDigits  = 0
@@ -471,7 +456,6 @@ proc getGenericBorder(state: var FmtState, colWidths: seq[int],
                       style: FmtStyle, horizontal: Rune,
                       leftBorder: Rune, rightBorder: Rune,
                       sep: Rune): RenderBox =
-  withStyle("tborder"):
     let
       useLeft  = style.useLeftBorder.getOrElse(false)
       useRight = style.useRightBorder.getOrElse(false)
@@ -485,8 +469,7 @@ proc getGenericBorder(state: var FmtState, colWidths: seq[int],
 
     for i, width in colWidths:
       for j in 0 ..< width:
-        withStyle("table"):
-          plane.lines[0].add(uint32(horizontal))
+        plane.lines[0].add(uint32(horizontal))
       if useSep and i != len(colWidths) - 1:
         plane.lines[0].add(uint32(sep))
 
@@ -509,10 +492,9 @@ proc getBottomBorder(state: var FmtState, s: BoxStyle): RenderBox =
            s.horizontal, s.lowerLeft, s.lowerRight, s.bottomT)
 
 proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
-  taggedBox("table"):
-   taggedBox("tborder"):
     var
       colWidths: seq[int]
+      savedSep  = state.curTableSep
       boxStyle  = state.curStyle.boxStyle.getOrElse(DefaultBoxStyle)
 
     if r.colInfo.len() != 0:
@@ -542,8 +524,29 @@ proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
       for i, width in colWidths:
         if width < 2:
           colWidths[i] = 2
+    else:
+      let rows = r.search("tr", first = true)
+      if len(rows) != 0:
+        let
+          row = rows[0]
+          pct = 100 div len(row.cells)
+        for i in 0 ..< len(row.cells):
+          colWidths.add(pct)
 
     state.pushTableWidths(state.percentToActualColumns(colWidths))
+
+    var
+      topBorder = state.getTopBorder(boxStyle)
+      midBorder = state.getHorizontalSep(boxStyle)
+      lowBorder = state.getBottomBorder(boxStyle)
+
+    if state.curStyle.useTopBorder.getOrElse(false):
+      result = @[topBorder]
+
+    if state.curStyle.useHorizontalSeparator.getOrElse(false):
+      state.curTableSep = some(midBorder)
+    else:
+      state.curTableSep = none(RenderBox)
 
     if r.thead != Rope(nil):
       result &= state.preRender(r.thead)
@@ -552,30 +555,16 @@ proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
     if r.tfoot != Rope(nil):
       result &= state.preRender(r.tfoot)
 
-    var
-      topBorder = state.getTopBorder(boxStyle)
-      midBorder = state.getHorizontalSep(boxStyle)
-      lowBorder = state.getBottomBorder(boxStyle)
-
-    if state.curStyle.useHorizontalSeparator.getOrElse(false):
-      var newBoxes: seq[RenderBox]
-
-      for i, item in result:
-        newBoxes.add(item)
-        if (i + 1) != len(result):
-          newBoxes.add(midBorder)
-
-      result = newBoxes
+    state.curTableSep = savedSep
 
     if state.curStyle.useBottomBorder.getOrElse(false):
-      result.add(lowBorder)
-
-    if state.curStyle.useTopBorder.getOrElse(false):
-      result = @[topBorder] & result
+        result.add(lowBorder)
 
     state.popTableWidths()
     if r.caption != Rope(nil):
       result &= state.preRender(r.caption)
+
+
 
 proc emptyTableCell(state: var FmtState): seq[RenderBox] =
   var styleId: uint32
@@ -650,51 +639,38 @@ proc adjacentCellsToRow(state: var FmtState, cells: seq[TextPlane],
 
 proc preRenderRow(state: var FmtState, r: Rope): seq[RenderBox] =
   # This is the meat of the table implementation.
-  # 1) If the table colWidths array is 0, then we need to
-  #    set it based on our # of columns.
-  # 2) Pre-render the individual cells to the required width.
+  #
+  # 1) Pre-render the individual cells to the required width.
   #    This will return a seq[RenderBox]
-  # 3) Flatten into a TextPlane.
-  # 4) Combine the textplanes horizontally, adding vertical borders.
+  # 2) Flatten into a TextPlane.
+  # 3) Combine the textplanes horizontally, adding vertical borders.
   #
   # This will result in our table being one TextPlane in a single
   # RenderBox.
-  var tag = if state.tableEven[^1]: "tr.even" else: "tr.odd"
+  var
+    tag        = if state.tableEven[^1]: "tr.even" else: "tr.odd"
+    widths     = state.colStack[^1]
+    savedWidth = state.totalWidth
+    cellBoxes: seq[RenderBox]
+    rowPlanes: seq[TextPlane]
 
-  taggedBox(tag):
-    var
-      widths = state.colStack[^1]
 
-    # Step 1, make sure col widths are right
-    if widths.len() == 0:
-      state.popTableWidths()
-      let pct = 100 div len(r.cells)
-      for i in 0 ..< len(r.cells):
-        widths.add(pct)
-      widths = state.percentToActualColumns(widths)
-      state.pushTableWidths(widths)
+  # This loop does steps 1-2
+  for i, width in widths:
+    # Pre-render the cell.
+    if i >= len(r.cells):
+      cellBoxes = state.emptyTableCell()
+    else:
+      state.totalWidth = width
+      cellBoxes = state.preRender(r.cells[i])
 
-    var
-      cellBoxes: seq[RenderBox]
-      rowPlanes: seq[TextPlane]
-      savedWidth = state.totalWidth
+    for cell in cellBoxes:
+      cell.tmargin = 0
+      cell.bmargin = 0
+    let boxes = state.collapseColumn(cellBoxes)
+    rowPlanes.add(state.collapsedBoxToTextPlane(boxes))
 
-    # This loop does steps 2-3
-    for i, width in widths:
-      # Step 2, pre-render the cell.
-      if i >= len(r.cells):
-        cellBoxes = state.emptyTableCell()
-      else:
-        state.totalWidth = width
-        cellBoxes = state.preRender(r.cells[i])
-
-      for cell in cellBoxes:
-        cell.tmargin = 0
-        cell.bmargin = 0
-      let boxes = state.collapseColumn(cellBoxes)
-      rowPlanes.add(state.collapsedBoxToTextPlane(boxes))
-
-  # Step 4, Combine the cells horizontally into a single RbText
+  # Step 3, Combine the cells horizontally into a single RbText
   # object. This involves adding any vertical borders, and filling
   # in any blank lines if individual cells span multiple lines.
   let resPlane     = state.adjacentCellsToRow(rowPlanes, widths)
@@ -702,10 +678,15 @@ proc preRenderRow(state: var FmtState, r: Rope): seq[RenderBox] =
   state.totalWidth = savedWidth
 
 proc preRenderRows(state: var FmtState, r: Rope): seq[RenderBox] =
-  # Each row returns a single item.
+  # Each row returns a single item. # We need to make sure to combine
+  # rows properly; if there's a horizontal border in the state,
+  # we add it after all but the last row.
   state.tableEven.add(false)
-  for item in r.cells:
+  for i, item in r.cells:
     result &= state.preRender(item)
+    if i != r.cells.len() - 1 and state.curTableSep.isSome():
+      result &= state.curTableSep.get()
+
     state.tableEven.add(not state.tableEven.pop())
   discard state.tableEven.pop()
 
@@ -726,198 +707,124 @@ template addRunesToExtraction(extraction: TextPlane,
                               runes:      seq[uint32]) =
   extraction.addRunesToExtraction(cast[seq[Rune]](runes))
 
-template subextract(subExtractField: untyped) =
-  state.extractText(subExtractField, extract)
+proc taggedContainerStartsBox(r: Rope): bool =
+  if r.tag in breakingStyles or r.noTextExtract:
+    return true
 
-template addStyledText(code: untyped) =
-  extract.addRunesToExtraction(@[state.curStyle.getStyleId()])
-  code
-  extract.addRunesToExtraction(@[StylePop])
+proc preRenderAtom(state: var FmtState, r: Rope) =
+  withRopeStyle:
+    addStyleMarkers:
+      state.curPlane.addRunesToExtraction(r.text)
 
-proc extractText(state: var FmtState, r: Rope, extract: TextPlane) =
-  var cur: Rope = r
-  while cur != nil:
-    if r in state.processed:
-      return
-    state.processed.add(r)
-    case cur.kind
-    of RopeAtom:
-      let styleOpt = state.getNewStartStyle(cur)
-      state.pushStyle(styleOpt.get(state.curStyle))
-      addStyledText(extract.addRunesToExtraction(cur.text))
-      state.popStyle()
-    of RopeLink:
-      let urlRunes = if state.showLinkTarg:
-                       @[Rune('(')] & cur.url.toRunes() & @[Rune(')')]
-                     else:
-                       @[]
+proc preRenderLink(state: var FmtState, r: Rope) =
+  if not r.noBoxRequired():
+    raise newException(ValueError, "Only styled text is allowed in links")
 
-      subextract(cur.toHighlight)
-      addStyledText(extract.addRunestoExtraction(urlRunes))
-    else:
-      if not cur.noBoxRequired():
-        state.savedRopes.add(state.nextRope)
-        state.nextRope = cur
-        return
-      case cur.kind
-      of RopeFgColor:
-        let tweak = FmtStyle(textColor: some(cur.color))
-        let style = state.curStyle.mergeStyles(tweak)
-        state.pushStyle(style)
-        subextract(r.toColor)
-        state.popStyle()
-      of RopeBgColor:
-        let tweak = FmtStyle(bgColor: some(cur.color))
-        state.pushStyle(state.curStyle.mergeStyles(tweak))
-        addStyledText(subextract(cur.toColor))
-        state.popStyle()
-      of RopeBreak:
-        # For now, we don't care about kind of break.
-        extract.lines.add(@[])
-      of RopeTaggedContainer:
-        case cur.tag
-        of "width":
-          withWidth(cur.width):
-            subextract(cur.contained)
-        of "colors":
-          extract.addRunesToExtraction(@[StyleColor])
-          subextract(cur.contained)
-          extract.addRunesToExtraction(@[StyleColorPop])
-        of "nocolors":
-          extract.addRunesToExtraction(@[StyleNoColor])
-          subextract(cur.contained)
-          extract.addRunesToExtraction(@[StyleColorPop])
-        else:
-          let styleOpt = state.getNewStartStyle(cur)
-          state.pushStyle(styleOpt.getOrElse(state.curStyle))
-          subextract(cur.contained)
-          state.popStyle()
-      else:
-        assert false
-
-    cur = cur.next
-
-proc extractText(state: var FmtState, r: Rope): TextPlane =
-  result = TextPlane(lines: @[@[]])
-  state.extractText(r, result)
-
-proc preRenderTextBox(state: var FmtState, p: seq[TextPlane]): seq[RenderBox] =
-  state.boxContent(state.curStyle, result):
-    var merged = p.mergeTextPlanes()
-    merged.wrapToWidth(state.curStyle, state.totalWidth)
-    result = @[RenderBox(contents: merged, width: state.totalWidth)]
-
-template planesToBox() =
-  if len(consecutivePlanes) != 0:
-    result &= state.preRenderTextBox(consecutivePlanes)
-    consecutivePlanes = @[]
-
-proc preRenderAligned(state: var FmtState, r: Rope): seq[RenderBox] =
-  var tweak: Option[FmtStyle]
-
-  case r.tag[0]
-  of 'l':
-    tweak = some(FmtStyle(alignStyle: some(AlignL)))
-  of 'c':
-    tweak = some(FmtStyle(alignStyle: some(AlignC)))
-  of 'r':
-    tweak = some(FmtStyle(alignStyle: some(AlignR)))
-  of 'j':
-    tweak = some(FmtStyle(alignStyle: some(AlignJ)))
-  of 'f':
-    tweak = some(FmtStyle(alignStyle: some(AlignF)))
-  else:
-    discard
-
-  fmtBox(tweak):
-    result = state.preRender(r.contained)
-
-proc preRenderBreak(state: var FmtState, r: Rope): seq[RenderBox] =
-  standardBox:
-    result = state.preRender(r.guts)
-
-proc preRenderTagged(state: var FmtState, r: Rope): seq[RenderBox] =
-  case r.tag
-  of "width":
-    withWidth(r.width):
-      result = state.preRender(r.contained)
-  of "colors":
-    result = state.preRender(r.contained)
-    result[0].contents.lines[0] = @[StyleColor] &
-      result[0].contents.lines[0]
-
-    result[0].contents.lines[^1] = @[StyleColorPop] &
-      result[0].contents.lines[^1]
-  of "nocolors":
-    result = state.preRender(r.contained)
-    result[0].contents.lines[0] = @[StyleNoColor] &
-      result[0].contents.lines[0]
-
-    result[0].contents.lines[^1] = @[StyleColorPop] &
-      result[0].contents.lines[^1]
-  else:
-    standardBox:
-      result = state.preRender(r.contained)
-
-proc preRenderColor(state:  var FmtState, r: Rope): seq[RenderBox] =
-  standardBox:
-    result = state.preRender(r.toColor)
+  discard state.preRender(r.toHighlight)
+  if state.showLinkTarg:
+    withRopeStyle:
+      addStyleMarkers:
+        let runes = @[Rune('(')] & r.url.toRunes() & @[Rune(')')]
+        addStyleMarkers:
+          state.curPlane.addRunesToExtraction(runes)
 
 proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
-  ## This version of prerender returns a COLUMN of boxes of one single
-  ## width.  But generally, there should only be one item in the
-  ## column when possible, which itself should consist of one
-  ## TextPlane item.
-  ##
-  ## The exception to that is RopeTableRows, which leaves it to
-  ## RopeTable to do the combination.
+  # This is the actual main worker for rendering. Generally, these
+  # ropes are trees that may be concatenated, so we need to go down
+  # first, and then over.
+  #
+  # When individual pieces of a tree have text, that text gets
+  # extracted, and is 'formatted' based on the style of the active
+  # style (as determined by parent containers). This basically means
+  # keeping track of the style and injecting start/end markers.
+  #
+  # Instead of injecting markers only when styles change, we currenly
+  # make life easy on ourselves, and wrap each text atom in
+  # markers. It's much easier to reason about this way.
+  #
+  # Every time we hit a box boundary, we commit the current text
+  # extraction (a TextPlane) and shove it in a RenderBox.
+  #
+  # Note that, because of contatenation that can link in above us, it
+  # would take some accounting for a node to know for sure whether
+  # it's going to be the last thing to write into a TextPlane, so we
+  # always check when we enter a container to see if we need to
+  # render, before we switch the active style.
 
-  var
-    consecutivePlanes: seq[TextPlane]
-    curRope = r
+  if r == nil:
+    return
 
-  while curRope != nil:
-    if curRope.noBoxRequired():
-      let textBox = state.extractText(curRope)
-      consecutivePlanes.add(textBox)
+  case r.kind
+  of RopeAtom:
+    state.preRenderAtom(r)
+  of RopeLink:
+    state.preRenderLink(r)
+  of RopeFgColor, RopeBgColor:
+    withRopeStyle:
+      result = state.preRender(r.toColor)
+  of RopeBreak:
+    if r.guts != nil:
+      # It's a <p> or similar, so a box.
+      result.enterContainer:
+        result &= state.preRender(r.guts)
     else:
-      planesToBox()
-
-      case curRope.kind
-      of RopeList:
-        if curRope.tag == "ul":
-          result &= state.preRenderUnorderedList(curRope)
+      state.curPlane.lines.add(@[])
+  of RopeTaggedContainer:
+    case r.tag
+    of "width":
+      # This is not going to be a tagged container forever.
+      withWidth(r.width):
+        result.enterContainer:
+          result &= state.preRender(r.contained)
+    of "colors":
+      # Also will stop being a tagged container.
+      let tmp = state.preRender(r.contained)
+      for item in tmp:
+        item.contents.wrapTextPlane(@[StyleColor], @[StyleColorPop])
+      if state.curPlane.lines.len() > 1 or
+        (state.curPlane.lines.len() != 0 and
+         len(state.curPlane.lines[0]) != 0):
+        state.curPlane.wrapTextPlane(@[StyleColor], @[StyleColorPop])
+      result &= tmp
+    of "nocolors":
+      # Also will stop being a tagged container.
+      let tmp = state.preRender(r.contained)
+      for item in tmp:
+        item.contents.wrapTextPlane(@[StyleNoColor], @[StyleColorPop])
+      if state.curPlane.lines.len() > 1 or
+        (state.curPlane.lines.len() != 0 and
+         len(state.curPlane.lines[0]) != 0):
+        state.curPlane.wrapTextPlane(@[StyleNoColor], @[StyleColorPop])
+      result &= tmp
+    else:
+      if r.taggedContainerStartsBox():
+        result.enterContainer:
+          applyContainerStyle(result):
+            result &= state.preRender(r.contained)
+      else:
+        withRopeStyle:
+          result &= state.preRender(r.contained)
+  of RopeList:
+    result.enterContainer:
+      applyContainerStyle(result):
+        if r.tag == "ul":
+          result &= state.preRenderUnorderedList(r)
         else:
-          result &= state.preRenderOrderedList(curRope)
-      of RopeTable:
-        result &= state.preRenderTable(curRope)
-      of RopeTableRow:
-        result &= state.preRenderRow(curRope)
-      of RopeTableRows:
-        result &= state.preRenderRows(curRope)
-      of RopeAlignedContainer:
-        result &= state.preRenderAligned(curRope)
-      of RopeBreak:
-        result &= state.preRenderBreak(curRope)
-      of RopeTaggedContainer:
-        result &= state.preRenderTagged(curRope)
-      of RopeFgColor, RopeBgColor:
-        result &= state.preRenderColor(curRope)
-      else:
-        discard
+          result &= state.preRenderOrderedList(r)
+  of RopeTable:
+    result.enterContainer:
+      applyContainerStyle(result):
+        result &= state.preRenderTable(r)
+  of RopeTableRow:
+    result.enterContainer:
+      applyContainerStyle(result):
+        result &= state.preRenderRow(r)
+  of RopeTableRows:
+    result.enterContainer:
+      applyContainerStyle(result):
+        result &= state.preRenderRows(r)
 
-    while curRope != nil:
-      if state.nextRope != nil:
-        curRope        = state.nextRope
-        state.nextRope = state.savedRopes.pop()
-      else:
-        curRope = curRope.next
-      if curRope in state.processed:
-        continue
-      else:
-        break
-
-  planesToBox()
+  result &= state.preRender(r.next)
 
 proc preRender*(r: Rope, width = -1, showLinkTargets = false,
                 style = defaultStyle, outerPad = true): TextPlane =
@@ -934,38 +841,21 @@ proc preRender*(r: Rope, width = -1, showLinkTargets = false,
   ## until this becomes a problem in the real world, we'll just
   ## leave it.
 
-  var
-    state = FmtState(curStyle: style.mergeStyles(defaultStyle),
-                     showLinkTarg: showLinkTargets)
-    strip = false
-
+  var state = FmtState(curStyle: style.mergeStyles(defaultStyle),
+                       showLinkTarg: showLinkTargets,
+                       curPlane: TextPlane(lines: @[]))
   if width <= 0:
     state.totalWidth = terminalWidth() + width
   else:
     state.totalWidth = width
 
-  if state.totalWidth <= 0:
-    state.totalWidth = defaultTextWidth
+  var preRenderBoxes = state.preRender(r)
 
-  if r.noBoxRequired():
-    state.totalWidth = r.unboxedRuneLength() + 1
-    strip            = true
+  # If we had text linked at the end that started after the last container
+  # closed, then we will need to get that in here.
+  preRenderBoxes.applyContainerStyle:
+    discard # Nothing needs doing though.
 
-  let preRender = state.collapseColumn(state.preRender(r))
+  let preRender = state.collapseColumn(preRenderBoxes)
   result        = state.collapsedBoxToTextPlane(preRender, outerPad)
   result.width  = state.totalWidth
-
-  if strip:
-    var n            = len(result.lines)
-    result.softBreak = true
-
-    while n != 0:
-      n -= 1
-      result.lines[n] = result.lines[n].stripSpacesButNotFormattersFromEnd()
-      if result.lines[n].u32LineLength() != 0:
-        break
-    while len(result.lines) != 0:
-      if result.lines[^1].u32LineLength() == 0:
-        result.lines = result.lines[0 ..< ^1]
-      else:
-        break

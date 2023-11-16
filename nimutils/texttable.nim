@@ -106,9 +106,9 @@ proc filterEmptyColumns*(inrows: seq[seq[string]],
 
   return (newRows, returnedHeaders)
 
-proc instantTable*[T: string|Rope](cells: openarray[T],
-        tableCaption = Rope(nil), width = -1, noColor = false,
-        borders = BorderAll, boxStyle = BoxStyleDouble): Rope =
+proc instantTable*[T: string|Rope](cells: openarray[T], tableCaption = Rope(nil),
+                                    width = -1, borders = BorderAll,
+                                    boxStyle = BoxStyleDouble): Rope =
   ## Given a flat list of items to format into a table, figures out how
   ## many equal-sized columns fit cleanly into the available width, given
   ## the text, and formats it all into a table.
@@ -152,8 +152,6 @@ proc instantTable*[T: string|Rope](cells: openarray[T],
   result = table(tbody(rows), caption = tableCaption)
   result = result.setBorders(borders).boxStyle(boxStyle)
   result = result.setWidth(remainingWidth)
-  if noColor:
-    result = result.noColors()
 
 template instantTableNoHeaders[T: string|Rope](cells: seq[seq[T]],
                                                tableCaption: Rope): Rope =
@@ -167,7 +165,7 @@ template instantTableNoHeaders[T: string|Rope](cells: seq[seq[T]],
     rows.add(tr(row))
     row = @[]
 
-  table(tbody(rows), thead(@[]), caption = tableCaption)
+  colors(table(tbody(rows), thead(@[]), caption = tableCaption))
 
 template instantTableHorizontalHeaders[T: string|Rope](cells: seq[seq[T]],
                                                     tableCaption: Rope): Rope =
@@ -205,34 +203,30 @@ template instantTableVerticalHeaders[T: string|Rope](cells: seq[seq[T]],
   table(tbody(rows), caption = tableCaption)
 
 proc quickTable*[T: string|Rope](cells: seq[seq[T]], verticalHeaders = false,
-         noheaders = false, caption = Rope(nil), width = -1, noColor = false,
+         noheaders = false, caption = Rope(nil), width = -1,
          borders = BorderAll, boxStyle = BoxStyleDouble,
                    colPcts: seq[int] = @[]): Rope =
   if cells.len() == 0:
     raise newException(ValueError, "No cells passed")
 
   if noHeaders:
-    result = cells.instantTableNoHeaders(caption)
+    result = colors(cells.instantTableNoHeaders(caption))
   elif not verticalHeaders:
-    result = cells.instantTableHorizontalHeaders(caption)
+    result = colors(cells.instantTableHorizontalHeaders(caption))
   else:
-    result = cells.instantTableVerticalHeaders(caption)
+    result = colors(cells.instantTableVerticalHeaders(caption))
 
   result.setBorders(borders).boxStyle(boxStyle)
 
   if cells.len() == 1 and cells[0].len() == 1:
-    # Special treatment for callouts
-    result.fgColor("fandango").bgColor("jazzberry")
-    result.setCasing(CasingIgnore).italic()
+    # Special treatment for callouts.
+    result.setClass("callout", recurse = true)
 
   if colPcts.len() != 0:
     result.colPcts(colPcts)
 
   if width >= 0:
     result = result.setWidth(width)
-
-  if noColor:
-    result = result.noColors()
 
 
 template instantTableWithHeaders*(cells: seq[seq[string]], horizontal = true,
@@ -241,7 +235,6 @@ template instantTableWithHeaders*(cells: seq[seq[string]], horizontal = true,
   $(instantTable(cells, horizontal, true, caption))
 
 
-proc textBox*[T: string | Rope](contents: T, width = -1, noColor = false,
-              borders = BorderAll, boxStyle = BoxStyleDouble): Rope =
-  result = quickTable(@[@[contents.center()]], false, false, Rope(nil),
-                         width, noColor, borders, boxStyle)
+proc callOut*[T: string | Rope](contents: T, width = -1, borders = BorderAll,
+                                                     boxStyle = BoxStyleDouble): Rope = result = quickTable(@[@[contents.center()]], false, false, Rope(nil),
+                         width, borders, boxStyle)

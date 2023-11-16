@@ -101,7 +101,7 @@ proc refCopy*(dst: var Rope, src: Rope) =
       l.add(sub)
     dst.items = l
 
-  of RopeTaggedContainer, RopeAlignedContainer:
+  of RopeTaggedContainer:
     var sub: Rope = Rope()
     refCopy(sub, src.contained)
     dst.contained = sub
@@ -244,6 +244,10 @@ proc extractColumnInfo(n: HtmlNode): seq[ColInfo] =
 
     result.add(ColInfo(span: span, widthPct: pct))
 
+proc noTextExtract(r: Rope): Rope =
+  r.noTextExtract = true
+  result          = r
+
 proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
   case n.kind
   of HtmlDocument:
@@ -268,19 +272,19 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
           continue
         result.items.add(item.htmlTreeToRope(pre))
     of "right":
-      result = Rope(kind: RopeAlignedContainer, tag: "right",
+      result = Rope(kind: RopeTaggedContainer, tag: "right",
                     contained: n.descend())
     of "center":
-      result = Rope(kind: RopeAlignedContainer, tag: "center",
+      result = Rope(kind: RopeTaggedContainer, tag: "center",
                     contained: n.descend())
     of "left":
-      result = Rope(kind: RopeAlignedContainer, tag: "left",
+      result = Rope(kind: RopeTaggedContainer, tag: "left",
                     contained: n.descend())
     of "justify":
-      result = Rope(kind: RopeAlignedContainer, tag: "justify",
+      result = Rope(kind: RopeTaggedContainer, tag: "justify",
                     contained: n.descend())
     of "flush":
-      result = Rope(kind: RopeAlignedContainer, tag: "flush",
+      result = Rope(kind: RopeTaggedContainer, tag: "flush",
                     contained: n.descend())
     of "thead", "tbody", "tfoot":
       result = Rope(kind:  RopeTableRows, tag: n.contents)
@@ -496,8 +500,8 @@ proc tr*(l: seq[Rope]): Rope =
 
 basicTagGen(["h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div",
              "container", "code", "ins", "del", "kbd", "mark", "small", "sub",
-             "sup", "colors", "nocolors", "width", "title", "em", "strong",
-             "caption", "td", "th", "text", "plain", "deffmt"])
+             "sup", "width", "title", "em", "strong", "caption", "td", "th",
+             "text", "plain", "deffmt"])
 
 tagGenRename("p",   "paragraph")
 tagGenRename("q",   "quote")
@@ -571,13 +575,13 @@ proc setWidth*(r: Rope, i: int): Rope =
   ## within a particular width, as long as the context in which the
   ## rope's being evaluated has at least that much width available.
   return Rope(kind: RopeTaggedContainer, tag: "width", contained: r,
-              width: i)
+              width: i, noTextExtract: true)
 
 proc setWidth*(s: string, i: int): Rope =
   ## Returns a rope that constrains the passed string to be formatted
   ## within a particular width, as long as the context in which the
   ## rope's being evaluated has at least that much width available.
-  return pre(s).setWidth(i)
+  result = noTextExtract(pre(s)).setWidth(i)
 
 proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
             caption: Rope = nil, columnInfo: seq[ColInfo] = @[]): Rope =
@@ -605,6 +609,9 @@ proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
   ## This takes a list of column percentages and returns what you need
   ## to pass to `table()`.
   ##
+  ## You can alternately call colPcts() on an existing rope object where
+  ## no pcts had been applied before.
+  ##
   ## Column widths are determined dynamically when rendering, based on
   ## the available size that we're asked to render into. The given
   ## percentage is used to calculate how much space to use for a
@@ -626,3 +633,30 @@ proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
   ## truncation there as well.
   for item in pcts:
     result.add(ColInfo(widthPct: item, span: 1))
+
+proc colors*(r: Rope, removeNested = true): Rope =
+  ## Unless no-color is off, use coloring for this item, when
+  ## available. The renderer determines what this means.
+  ##
+  ## This is specifically meant for the terminal, where this gets
+  ## interpreted as "don't show any ansi codes at all".
+  ##
+  ## This does NOT suspend other style processing.
+  result = Rope(kind: RopeTaggedContainer, tag: "colors", contained: r)
+  if removeNested:
+    for item in r.search("nocolors"):
+      item.tag = "colors"
+
+proc nocolors*(r: Rope, removeNested = true): Rope =
+  ## Explicitly turns off any coloring for this item. However, this is
+  ## loosely interpreted; on a terminal it will also turn off any other
+  ## ansi codes being used.
+  ##
+  ## This is specifically meant for the terminal, where this gets
+  ## interpreted as "don't show any ansi codes at all".
+  ##
+  ## This does NOT suspend other style processing.
+  result = Rope(kind: RopeTaggedContainer, tag: "nocolors", contained: r)
+  if removeNested:
+    for item in r.search("colors"):
+      item.tag = "nocolors"
