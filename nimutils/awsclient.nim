@@ -1,3 +1,8 @@
+## Hopefully this will die before too long; I intend to instead wrap a
+## library from AWS.
+##
+## This is some third-party thing that (barely) crosses the line into
+## acceptable.
 #[
   # AwsClient
 

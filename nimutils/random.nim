@@ -1,7 +1,10 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022, 2023, Crash Override, Inc.
 
-import std/sysrand, openssl, strutils
+import std/sysrand, openssl, misc
+
+# This used to be in here.
+export bytesToString
 
 template secureRand*[T](): T =
   ## Returns a uniformly distributed random value of any _sized_ type without
@@ -13,6 +16,8 @@ template secureRand*[T](): T =
   cast[T](randBytes)
 
 proc randInt*(): int =
+  ## Returns a uniformly distributed integer across 63 bits... meaning
+  ## it is guaranteed to be positive.
   return secureRand[int] and (not (1 shl 63))
 
 # I'm hitting what seems to be a nim 2.0 bug w/ urandom() to a
@@ -22,28 +27,10 @@ proc randInt*(): int =
 proc RAND_bytes(p: pointer, i: cint): cint {.cdecl, dynlib: DLLUtilName,
                                               importc.}
 
-proc bytesToString*(b: ptr UncheckedArray[char], l: int): string =
-  for i in 0 ..< l:
-    result.add(b[i])
-
-template bytesToString*(b: ptr char, l: int): string =
-  bytesToString(cast[ptr UncheckedArray[char]](b), l)
-
 proc randString*(l: int): string =
   ## Get a random binary string of a particular length.
-  var b = cast[ptr char](alloc(l))
+  var b = cast[pointer](alloc(l))
 
   discard RAND_bytes(b, cint(l))
-  result = bytesToString(cast[ptr UncheckedArray[char]](b), l)
+  result = bytesToString(b, l)
   dealloc(b)
-
-template randStringHex*(l: int): string =
-  randString(l).toHex().toLowerAscii()
-
-when isMainModule:
-  import strutils
-  echo secureRand[uint64]()
-  echo secureRand[int32]()
-  echo secureRand[float]()
-  echo secureRand[array[6, byte]]()
-  echo randString(12).toHex()

@@ -6,67 +6,8 @@ const badNonceError =  "GCM nonces should be exactly 12 bytes. If " &
 
 {.emit: """
 // This is just a lot easier to do in straight C.
-// We're going to assume headers aren't available and declare what we use.
-
-#include <limits.h>
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-
-#ifndef EVP_CTRL_GCM_GET_TAG
-#define EVP_CIPHER_CTX void
-#define EVP_CTRL_GCM_GET_TAG 0x10
-#define EVP_CTRL_GCM_SET_TAG 0x11
-#endif
-
-typedef void *GCM128_CONTEXT;
-
-extern int EVP_EncryptUpdate(void *ctx, unsigned char *out,
-                             int *outl, const unsigned char *in, int inl);
-extern int EVP_EncryptFinal(EVP_CIPHER_CTX *ctx, unsigned char *out,
-                             int *outl);
-extern int EVP_CIPHER_CTX_ctrl(EVP_CIPHER_CTX *ctx, int type, int arg,
-                                   void *ptr);
-extern int EVP_EncryptInit_ex2(EVP_CIPHER_CTX *ctx, const void *type,
-                              const unsigned char *key, const unsigned char *iv,
-                              void *params);
-extern int EVP_CipherInit_ex2(EVP_CIPHER_CTX *ctx, const void *type,
-                       const unsigned char *key, const unsigned char *iv,
-                       int enc, void *params);
-extern int EVP_DecryptUpdate(EVP_CIPHER_CTX *ctx, unsigned char *out,
-                             int *outl, const unsigned char *in, int inl);
-extern int EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx, unsigned char *outm,
-                               int *outl);
-extern int EVP_DecryptInit_ex(EVP_CIPHER_CTX *ctx, void *type,
-                              void *impl, const unsigned char *key,
-                              const unsigned char *iv);
-
-extern int bswap_64(int);
-
-typedef struct gcm_ctx {
-  EVP_CIPHER_CTX *aes_ctx;
-  int            num_ops;
-  char           *msg;
-  int            mlen;
-  char           *aad;
-  int            alen;
-  uint8_t        nonce[12];
-} gcm_ctx_t;
-
-typedef struct gcm_ctx_for_nonce_bump {
-  EVP_CIPHER_CTX *aes_ctx;
-  int            num_ops;
-  char           *msg;
-  int            mlen;
-  char           *aad;
-  int            alen;
-  uint32_t       highnonce;
-  uint64_t       lownonce;
-} nonce_ctx_t;
-
-extern char *
-chex(void *ptr, unsigned int len, unsigned int start_offset,
-     unsigned int width);
+// We assume we don't have full headers; nimugcm.h is a slimmed down version.
+#include "nimugcm.h"
 
 static void bump_nonce(nonce_ctx_t *ctx) {
   #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -170,7 +111,6 @@ N_CDECL(int, do_gcm_decrypt)(gcm_ctx_t *ctx, void *tocast) {
     return 0;
 }
 
-
 """.}
 
 {.pragma: lcrypto, cdecl, dynlib: DLLUtilName, importc.}
@@ -202,7 +142,7 @@ type
   AesCtx* = object
     aesCtx: EVP_CIPHER_CTX
 
-  GcmCtx* {.importc: "gcm_ctx_t".} = object
+  GcmCtx* {.importc: "gcm_ctx_t", header: "nimugcm.h" .} = object
     aes_ctx:  EVP_CIPHER_CTX
     num_ops:  cint
     msg:      cstring
@@ -236,6 +176,7 @@ template getCipher(mode: string, key: string): EVP_CIPHER =
     raise newException(ValueError, "AES keys must be 16, 24 or 32 bytes.")
 
 proc initAesPRP*(ctx: var AesCtx, key: string) =
+  ## This sets a key for an AES context.
   ctx.aesCtx = EVP_CIPHER_CTX_new()
 
   let cipher = getCipher("ECB", key)
@@ -243,6 +184,8 @@ proc initAesPRP*(ctx: var AesCtx, key: string) =
   discard EVP_EncryptInit_ex(ctx.aesCtx, cipher, nil, cstring(key), nil)
 
 proc aesPrp*(ctx: AesCtx, input: string): string =
+  ## This is for using AES a a basic PRP (pseudo-random permutation).
+  ## Only use this interface if you know what you're doing.
   var i: cint
   if len(input) != 16:
     raise newException(ValueError, "The AES PRP operates on 16 byte strings.")
@@ -252,6 +195,10 @@ proc aesPrp*(ctx: AesCtx, input: string): string =
                                cint(16))
 
 proc aesBrb*(ctx: AesCtx, input: string): string =
+  ## This is for using AES a a basic PRP (pseudo-random permutation).
+  ## Only use this interface if you know what you're doing.
+  ##
+  ## Specifically, this is the inverse of the primary permutation.
   var i: cint
   if len(input) != 16:
     raise newException(ValueError, "The AES BRB operates on 16 byte strings.")
@@ -262,6 +209,11 @@ proc aesBrb*(ctx: AesCtx, input: string): string =
 
 proc gcmInitEncrypt*(ctx: var GcmCtx, key: string, nonce = ""):
             string {.discardable} =
+  ## Initialize authenticated encryption using AES-GCM. Nonces are
+  ## (intentionally) constrained to always be 12 bytes, and if you do
+  ## not pass in a nonce, you will get a random value.
+  ##
+  ## The nonce used is always returned.
 
   ctx.aesCtx = EVP_CIPHER_CTX_new()
   let cipher = getCipher("GCM", key)
@@ -283,10 +235,18 @@ proc gmacInit*(ctx: var GcmCtx, key: string, nonce = ""):
   return gcmInitEncrypt(ctx, key, nonce)
 
 proc aesPrfOneShot*(key: string, outlen: int, start: string = ""): string =
+  ## This runs AES as a pseudo-random function with a fixed-size (16
+  ## byte) input yielding an output of the length specified (in
+  ## bytes).
+  ##
+  ## The `start` parameter is essentially the nonce; do not reuse it.
+  ##
+  ## This is an `expert mode` interface.
+
   var
     ctx:    AesCtx
     nonce:  pointer = nil
-    outbuf: ptr char = cast[ptr char](alloc(outlen))
+    outbuf: pointer = alloc(outlen)
 
   ctx.aesCtx = EVP_CIPHER_CTX_new()
 
@@ -307,6 +267,14 @@ proc aesPrfOneShot*(key: string, outlen: int, start: string = ""): string =
 
 proc aesCtrInPlaceOneshot*(key: string, instr: pointer, l: cint,
                            start: string = "") =
+  ## This also is an `expert mode` interface, don't use counter mode
+  ## unless you know exactly what you're doing. GCM mode is more
+  ## appropriate.
+  ##
+  ## This runs counter mode, modifying a buffer in-place.
+  ##
+  ## The final parameter is a nonce.
+
   var
     ctx:    AesCtx
     nonce:  pointer = nil
@@ -326,9 +294,17 @@ proc aesCtrInPlaceOneshot*(key: string, instr: pointer, l: cint,
     raise newException(IoError, "Could not generate keystream")
 
 proc aesCtrInPlaceOneshot*(key, instr: string, start: string = "") =
+  ## This also is an `expert mode` interface, don't use counter mode
+  ## unless you know exactly what you're doing. GCM mode is more
+  ## appropriate.
+  ##
+  ## This runs counter mode, modifying a buffer in-place.
+  ##
+  ## The final parameter is a nonce.
   aesCtrInPlaceOneshot(key, addr instr[0], cint(instr.len()), start)
 
 proc gcmInitDecrypt*(ctx: var GcmCtx, key: string) =
+  ## Initializes the decryption side of GCM.
 
   ctx.aesCtx = EVP_CIPHER_CTX_new()
   let cipher = getCipher("GCM", key)
@@ -336,6 +312,8 @@ proc gcmInitDecrypt*(ctx: var GcmCtx, key: string) =
   EVP_DecryptInit_ex2(ctx.aesCtx, cipher, cstring(key), nil, nil)
 
 proc gcmEncrypt*(ctx: var GcmCtx, msg: string, aad = ""): string =
+  ## GCM-encrypts a single message in a session, using the
+  ## state setup by gcmEncryptInit()
   var outbuf: ptr char = cast[ptr char](alloc(len(msg) + 16))
 
   ctx.aad  = cstring(aad)
@@ -350,17 +328,27 @@ proc gcmEncrypt*(ctx: var GcmCtx, msg: string, aad = ""): string =
   dealloc(outbuf)
 
 proc gmac*(ctx: var GcmCtx, msg: string): string =
+  ## Runs the GMAC message authentication code algorithm on a single
+  ## message, for a session set up via gcmInitEncrypt().  This is the
+  ## same as passing a null message, but providing additional data to
+  ## authenticate.
+  ##
+  ## The receiver should always use gcmDecrypt() to validate.
   return gcmEncrypt(ctx, msg = "", aad = msg)
 
 proc gcmGetNonce*(ctx: var GcmCtx): string =
+  ## Returns the sessions nonce.
   for i, ch in ctx.nonce:
     result.add(char(ctx.nonce[i]))
 
 proc gmacGetNonce*(ctx: var GcmCtx): string =
+  ## Returns the sessions nonce.
   return gcmGetNonce(ctx)
 
 proc gcmDecrypt*(ctx: var GcmCtx, msg: string, nonce: string,
                     aad = ""): Option[string] =
+  ## Performs validation and decryption of an encrypted message for a session
+  ## initialized via `gcmInitDecrypt()`
   if len(msg) < 16:
     raise newException(ValueError, "Invalid GCM Ciphertext (too short)")
 
@@ -383,48 +371,3 @@ proc gcmDecrypt*(ctx: var GcmCtx, msg: string, nonce: string,
 
   result = some(bytesToString(outbuf, len(msg) - 16))
   dealloc(outbuf)
-
-when isMainModule:
-  import strutils, hexdump
-
-  var
-    encCtx: GcmCtx
-    decCtx: GcmCtx
-    nonce:  string
-    ct:     string
-    pt    = "This is a test between disco and death"
-    key   = "0123456789abcdef"
-  gcmInitEncrypt(encCtx, key)
-  gcmInitDecrypt(decCtx, key)
-
-  echo "Initial pt: ", pt
-
-  for i in 1 .. 3:
-    ct    = encCtx.gcmEncrypt(pt)
-    nonce = encCtx.gcmGetNonce()
-    pt    = decCtx.gcmDecrypt(ct, nonce).get("<error>")
-
-    echo "Nonce: ", nonce.toHex().toLowerAscii()
-    echo "CT: "
-    echo strDump(ct)
-    echo "Decrypted: ", pt
-
-  echo "Keystream test: "
-
-  let
-    stream1 = aesPrfOneShot(key, 200)
-    stream2 = aesPrfOneShot(key, 200)
-
-  echo stream1.toHex()
-  assert len(stream1) == 200
-  assert stream1 == stream2
-
-  let text = "This is a test, yo, dawg"
-
-  aesCtrInPlaceOneshot(key, text)
-
-  echo "Covered dog: ", text.hex()
-
-  aesCtrInPlaceOneshot(key, text)
-
-  echo text

@@ -1,7 +1,12 @@
-import unicode, tables, options, unicodeid, unicodedb/properties, misc
+import unicode, options, unicodeid, unicodedb/properties, misc, strutils
+
+
 const
  defaultTextWidth* {.intdefine.}    = 80
  bareMinimumColWidth* {.intdefine.} = 2
+ StyleColorPop*                     = 0xfffffffd'u32
+ StyleColor*                        = 0xfffffffd'u32
+ StyleNoColor*                      = 0xfffffffe'u32
  StylePop*                          = 0xffffffff'u32
 
 type
@@ -41,7 +46,6 @@ type
     # For centering, if spaces do not divide evenly, we add the
     # single extra space to the right.
 
-
   BorderOpts* = enum
     BorderNone         = 0,
     BorderTop          = 1,
@@ -54,6 +58,10 @@ type
     BorderAll          = 8
 
   FmtStyle* = ref object  # For terminal formatting.
+    ## Style objects are all expressed as deltas from a currently
+    ## active style. When combining styles (with `mergeStyle()`),
+    ## anything that is a `some()` object will take priority,
+    ## replacing any set value.
     textColor*:              Option[string]
     bgColor*:                Option[string]
     overflow*:               Option[OverflowPreference]
@@ -69,8 +77,6 @@ type
     italic*:                 Option[bool]
     underlineStyle*:         Option[UnderlineStyle]
     bulletChar*:             Option[Rune]
-    minTableColWidth*:       Option[int]   # Currently not used.
-    maxTableColWidth*:       Option[int]   # Currently not used.
     useTopBorder*:           Option[bool]
     useBottomBorder*:        Option[bool]
     useLeftBorder*:          Option[bool]
@@ -81,6 +87,12 @@ type
     alignStyle*:             Option[AlignStyle]
 
   BoxStyle* = ref object
+    ## This data structure specifies what Unicode characters to use
+    ## for different styles of box. Generally, you should not need to
+    ## do anything custom, as we provide all the standard options in
+    ## the unicode set. Some of them (particularly the dashed ones)
+    ## are not universally provided, so should be avoided if you're
+    ## not providing some sort of accomidation.
     horizontal*: Rune
     vertical*:   Rune
     upperLeft*:  Rune
@@ -95,8 +107,7 @@ type
 
   RopeKind* = enum
     RopeAtom, RopeBreak, RopeList, RopeTable, RopeTableRow, RopeTableRows,
-    RopeFgColor, RopeBgColor, RopeLink, RopeTaggedContainer,
-    RopeAlignedContainer
+    RopeFgColor, RopeBgColor, RopeLink, RopeTaggedContainer
 
   BreakKind* = enum
     # For us, a single new line translates to a soft line break that
@@ -106,16 +117,19 @@ type
     BrSoftLine, BrHardLine, BrParagraph, BrPage
 
   ColInfo* = object
+    ## Currently, we only support percents, so this object is more
+    ## a placeholder than anything.
     span*:     int
     widthPct*: int
 
   Rope* = ref object
-    next*:       Rope
-    cycle*:      bool
-    tag*:        string
-    id*:         string
-    class*:      string
-    width*:      int       # Requested width in columns for a container
+    ## The core rope object.  Generally should only access via API.
+    next*:          Rope
+    cycle*:         bool
+    noTextExtract*: bool
+    id*:            string
+    tag*:           string
+    class*:         string
 
     case kind*: RopeKind
     of RopeAtom:
@@ -129,8 +143,9 @@ type
       toHighlight*: Rope
     of RopeList:
       items*: seq[Rope]
-    of RopeTaggedContainer, RopeAlignedContainer:
+    of RopeTaggedContainer:
       contained*: Rope
+      width*:      int  # Requested width in columns for a container.
     of RopeTable:
       colInfo*: seq[ColInfo]
       thead*:   Rope # RopeTableRows
@@ -147,6 +162,102 @@ type
     lines*:     seq[seq[uint32]]
     width*:     int # Advisory.
     softBreak*: bool
+
+proc buildWalk(r: Rope, results: var seq[Rope]) =
+  if r == nil:
+    return
+
+  results.add(r)
+
+  case r.kind
+  of RopeBreak:
+    r.guts.buildWalk(results)
+  of RopeLink:
+    r.toHighlight.buildWalk(results)
+  of RopeList:
+    for item in r.items:
+      item.buildWalk(results)
+  of RopeTaggedContainer:
+    r.contained.buildWalk(results)
+  of RopeTable:
+    r.thead.buildWalk(results)
+    r.tbody.buildWalk(results)
+    r.tfoot.buildWalk(results)
+    r.caption.buildWalk(results)
+  of RopeTableRow, RopeTableRows:
+    for item in r.cells:
+      item.buildWalk(results)
+  of RopeFgColor, RopeBgColor:
+    r.toColor.buildWalk(results)
+  else:
+    discard
+
+  r.next.buildWalk(results)
+
+proc ropeWalk*(r: Rope): seq[Rope] =
+ r.buildWalk(result)
+
+proc search*(r: Rope,
+             tag   = openarray[string]([]),
+             class = openarray[string]([]),
+             id    = openarray[string]([]),
+             text  = openarray[string]([]),
+             first = false): seq[Rope] =
+
+  for item in r.ropeWalk():
+    if item.tag in tag or item.class in class or item.id in id:
+      result.add(item)
+      if first:
+        return
+    elif text.len() != 0 and item.kind == RopeAtom:
+      for s in text:
+        if s in $(item.text):
+          result.add(item)
+          if first:
+            return
+          break
+
+proc search*(r: Rope, tag = "", class = "", id = "", text = "",
+             first = false): seq[Rope] =
+  var tags, classes, ids, texts: seq[string]
+
+  if tag != "":
+    tags.add(tag)
+  if class != "":
+    classes.add(tag)
+  if id != "":
+    ids.add(ids)
+  if text != "":
+    texts.add(text)
+
+  return r.search(tags, classes, ids, texts)
+
+proc debugWalk*(r: Rope): string =
+  var debugId = 0
+  if r != nil:
+    let items = r.ropeWalk()
+    for item in items:
+      if item.id == "":
+        item.id = $(debugId)
+        debugId += 1
+
+    for item in r.ropeWalk():
+      var one = "id: " & item.id
+
+      if item.kind == RopeAtom:
+        one &= "; text: " & $(item.text)
+      else:
+        one &= "; tag: "
+        if item.tag == "":
+          one &= "<none>; "
+        else:
+          one &= item.tag
+        if item.class != "":
+          one &= "class: " & item.class
+
+      if item.next != nil:
+        one &= " NEXT = " & item.next.id
+      result &= one & "\n"
 
 let
   BoxStylePlain* =     BoxStyle(horizontal: Rune(0x2500),
@@ -226,12 +337,40 @@ let
                                 bottomT:    Rune(0x253b),
                                 leftT:      Rune(0x2523),
                                 rightT:     Rune(0x252b))
-
+  BoxStyleAsterisk*  = BoxStyle(horizontal: Rune('*'),
+                                vertical:   Rune('*'),
+                                upperLeft:  Rune('*'),
+                                upperRight: Rune('*'),
+                                lowerLeft:  Rune('*'),
+                                lowerRight: Rune('*'),
+                                cross:      Rune('*'),
+                                topT:       Rune('*'),
+                                bottomT:    Rune('*'),
+                                leftT:      Rune('*'),
+                                rightT:     Rune('*'))
+  BoxStyleAscii*     = BoxStyle(horizontal: Rune('-'),
+                                vertical:   Rune('|'),
+                                upperLeft:  Rune('/'),
+                                upperRight: Rune('\\'),
+                                lowerLeft:  Rune('\\'),
+                                lowerRight: Rune('/'),
+                                cross:      Rune('+'),
+                                topT:       Rune('-'),
+                                bottomT:    Rune('-'),
+                                leftT:      Rune('|'),
+                                rightT:     Rune('|'))
 
 proc copyStyle*(inStyle: FmtStyle): FmtStyle =
+  ## Produces a full copy of a style. This is primarily used
+  ## during the rendering process, but can be used to start
+  ## with a known style to create another style, without
+  ## modifying the original style directly.
   result = FmtStyle(textColor:              inStyle.textColor,
                     bgColor:                inStyle.bgColor,
                     overflow:               inStyle.overFlow,
+                    hang:                   inStyle.hang,
+                    lpad:                   instyle.lpad,
+                    rpad:                   instyle.rpad,
                     tmargin:                inStyle.tmargin,
                     bmargin:                inStyle.bmargin,
                     casing:                 inStyle.casing,
@@ -241,8 +380,6 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
                     italic:                 inStyle.italic,
                     underlineStyle:         inStyle.underlineStyle,
                     bulletChar:             inStyle.bulletChar,
-                    minTableColWidth:       inStyle.minTableColWidth,
-                    maxTableColWidth:       inStyle.maxTableColWidth,
                     useTopBorder:           inStyle.useTopBorder,
                     useBottomBorder:        inStyle.useBottomBorder,
                     useLeftBorder:          inStyle.useLeftBorder,
@@ -256,7 +393,7 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
 let DefaultBoxStyle* = BoxStyleDouble
 
 proc `$`*(plane: TextPlane): string =
-  # This is more intended for rebugging.
+  ## Produce a debug representation of a TextPlane object.
   for line in plane.lines:
     for ch in line:
       if ch <= 0x10ffff:
@@ -264,18 +401,6 @@ proc `$`*(plane: TextPlane): string =
       else:
         result &= "<<" & $(ch) & ">>"
     result.add('\n')
-
-proc mergeTextPlanes*(dst: var TextPlane, append: TextPlane) =
-  if len(dst.lines) == 0:
-    dst.lines = append.lines
-  elif len(append.lines) != 0:
-    dst.lines[^1].add(append.lines[0])
-    dst.lines &= append.lines[1 .. ^1]
-
-proc mergeTextPlanes*(planes: seq[TextPlane]): TextPlane =
-  result = TextPlane()
-  for plane in planes:
-    result.mergeTextPlanes(plane)
 
 proc getBreakOpps(s: seq[uint32]): seq[int] =
   # Should eventually upgrade this to full Annex 14 at some point.
@@ -345,6 +470,12 @@ proc getBreakOpps(s: seq[uint32]): seq[int] =
     result = result[0 ..< ^1]
 
 proc stripSpacesButNotFormatters*(input: seq[uint32]): seq[uint32] =
+  ## Given a sequence of 32-bit integers that contains a combination of
+  ## runes and formatting markers, strips white space off both sides,
+  ## but without removing any formatting markers.
+  ##
+  ## While subsequent format markers *can* be elided, we haven't
+  ## bothered yet.
   for i, ch in input:
     if ch > 0x10ffff:
       result.add(ch)
@@ -353,6 +484,8 @@ proc stripSpacesButNotFormatters*(input: seq[uint32]): seq[uint32] =
       return
 
 proc stripSpacesButNotFormattersFromEnd*(input: seq[uint32]): seq[uint32] =
+  ## Same as `stripSpacesButNotFormatters`, but does only removes
+  ## white space from the end.
   var n = len(input)
   while n > 0:
     n -= 1
@@ -446,6 +579,10 @@ proc ensureFormattingIsPerLine(plane: var TextPlane) =
       plane.lines[i] &= @[StylePop]
 
 proc wrapToWidth*(plane: var TextPlane, style: FmtStyle, w: int) =
+  ## Wraps the text that's already laid out in a TextPlane object,
+  ## using the given overflow strategy. Generally, this should
+  ## probably only be used internally; see `truncateToWidth()` for
+  ## something that will operate on UTF-32 (arrays of codepoints).
   # First, we're going to do a basic wrap, without regard to style
   # indicators. But then we want each line to have the correct stack
   # state, so we'll go back through and figure out when we need to add

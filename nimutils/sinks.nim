@@ -3,7 +3,7 @@
 
 import streams, tables, options, os, strutils, std/[net, uri, httpclient],
        s3client, pubsub, misc, random, encodings, std/tempfiles,
-       parseutils, unicodeid, openssl, file, std/asyncfutures
+       parseutils, openssl, file, std/asyncfutures
 
 const defaultLogSearchPath = @["/var/log/", "~/.log/", "."]
 
@@ -411,7 +411,7 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   if uri.scheme == "https":
     context = newContext(verifyMode = CVerifyPeer)
     if pinnedCert != "":
-      discard context.context.SSL_CTX_load_verify_file(pinnedCert)
+      discard context.context.SSL_CTX_load_verify_file(cstring(pinnedCert))
     client  = newHttpClient(sslContext=context, timeout=timeout)
   else:
     if "disallow_http" in cfg.params:

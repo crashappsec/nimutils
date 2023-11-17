@@ -1,15 +1,13 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-# Pretty basic table formatting. Works with fixed width unicode, though
-# I don't factor out non-printable spaces right now, I just count runes.
-
-import rope_construct, rope_ansirender, markdown, unicode, std/terminal,
-       unicodeid
+import rope_base, rope_construct, rope_prerender, rope_styles, markdown,
+       unicode, unicodeid, std/terminal
 
 proc formatCellsAsMarkdownList*(base: seq[seq[string]],
                                 toEmph: openarray[string],
                                 firstCellPrefix = "\n## "): string =
+  ## Deprecated; old code.  Kept for short term due to compatability.
   for row in base:
     result &= "\n"
     if firstCellPrefix != "":
@@ -34,7 +32,7 @@ proc formatCellsAsHtmlTable*(base:            seq[seq[string]],
                              headers:         openarray[string] = [],
                              mToHtml         = true,
                              verticalHeaders = false): string =
-
+  ## Deprecated; old code.  Kept for short term due to compatability.
   if len(base) == 0:
     raise newException(ValueError, "Table is empty.")
 
@@ -79,6 +77,7 @@ proc filterEmptyColumns*(inrows: seq[seq[string]],
                          headings: openarray[string],
                          emptyVals = ["", "None", "<em>None</em>", "[]"]):
  (seq[seq[string]], seq[string]) =
+  ## Deprecated. From the pre-rope days.
   var
     columnHasValues: seq[bool]
     returnedHeaders: seq[string]
@@ -107,19 +106,29 @@ proc filterEmptyColumns*(inrows: seq[seq[string]],
 
   return (newRows, returnedHeaders)
 
-proc instantTable*(cells: seq[string], html = false): string =
+proc instantTable*[T: string|Rope](cells: openarray[T], tableCaption = Rope(nil),
+                                    width = -1, borders = BorderAll,
+                                    boxStyle = BoxStyleDouble): Rope =
+  ## Given a flat list of items to format into a table, figures out how
+  ## many equal-sized columns fit cleanly into the available width, given
+  ## the text, and formats it all into a table.
   var
-    remainingWidth         = terminalWidth()
+    remainingWidth: int
     numcol                 = 0
     maxWidth               = 0
-    row:  seq[string]      = @[]
-    rows: seq[seq[string]]
-
+    row:  seq[Rope]        = @[]
+    rows: seq[Rope]        = @[]
   # This gives every column equal width, and assumes space for borders
   # and pad.
 
+  if width <= 0:
+    remainingWidth = terminalWidth() + width
+
+  else:
+    remainingWidth = width
+
   for item in cells:
-    let w = item.strip().runeLength()
+    let w = item.runeLength()
     if  w > maxWidth:
       maxWidth = w
 
@@ -129,25 +138,104 @@ proc instantTable*(cells: seq[string], html = false): string =
 
   for i, item in cells:
     if i != 0 and i mod numcol == 0:
-      rows.add(row)
+      rows.add(tr(row))
       row = @[]
-    row.add(item.strip())
+    row.add(td(item))
 
   var n = len(cells)
   while n mod numcol != 0:
-    row.add("")
+    row.add(td(""))
     n = n + 1
 
-  rows.add(row)
+  rows.add(tr(row))
 
-  result = rows.formatCellsAsHtmlTable()
+  result = table(tbody(rows), caption = tableCaption)
+  result = result.setBorders(borders).boxStyle(boxStyle)
+  result = result.setWidth(remainingWidth)
 
-  if not html:
-    result = result.stylizeHtml()
+template instantTableNoHeaders[T: string|Rope](cells: seq[seq[T]],
+                                               tableCaption: Rope): Rope =
+  var
+    row:  seq[Rope] = @[]
+    rows: seq[Rope] = @[]
 
-proc instantTableWithHeaders*(cells: seq[seq[string]]): string =
-  let
-    headers = cells[0]
-    rest    = cells[1 .. ^1]
+  for cellrow in cells:
+    for item in cellrow:
+      row.add(td(item))
+    rows.add(tr(row))
+    row = @[]
 
-  return rest.formatCellsAsHtmlTable(headers).stylizeHtml()
+  colors(table(tbody(rows), thead(@[]), caption = tableCaption))
+
+template instantTableHorizontalHeaders[T: string|Rope](cells: seq[seq[T]],
+                                                    tableCaption: Rope): Rope =
+  var
+    row:  seq[Rope] = @[]
+    rows: seq[Rope] = @[]
+
+  for i, cellrow in cells:
+    if i == 0:
+      for item in cellrow:
+        row.add(th(item))
+    else:
+      for item in cellrow:
+        row.add(td(item))
+    rows.add(tr(row))
+    row = @[]
+
+  table(tbody(rows), caption = tableCaption)
+
+template instantTableVerticalHeaders[T: string|Rope](cells: seq[seq[T]],
+                                                     tableCaption: Rope): Rope =
+  var
+    row:  seq[Rope] = @[]
+    rows: seq[Rope] = @[]
+
+  for cellrow in cells:
+    for i, item in cellrow:
+      if i == 0:
+        row.add(th(item))
+      else:
+        row.add(td(item))
+    rows.add(tr(row))
+    row = @[]
+
+  table(tbody(rows), caption = tableCaption)
+
+proc quickTable*[T: string|Rope](cells: seq[seq[T]], verticalHeaders = false,
+         noheaders = false, caption = Rope(nil), width = -1,
+         borders = BorderAll, boxStyle = BoxStyleDouble,
+                   colPcts: seq[int] = @[]): Rope =
+  if cells.len() == 0:
+    raise newException(ValueError, "No cells passed")
+
+  if noHeaders:
+    result = colors(cells.instantTableNoHeaders(caption))
+  elif not verticalHeaders:
+    result = colors(cells.instantTableHorizontalHeaders(caption))
+  else:
+    result = colors(cells.instantTableVerticalHeaders(caption))
+
+  result.setBorders(borders).boxStyle(boxStyle)
+
+  if cells.len() == 1 and cells[0].len() == 1:
+    # Special treatment for callouts.
+    result.setClass("callout", recurse = true)
+
+  if colPcts.len() != 0:
+    result.colPcts(colPcts)
+
+  if width >= 0:
+    result = result.setWidth(width)
+
+
+template instantTableWithHeaders*(cells: seq[seq[string]], horizontal = true,
+                                  caption = Rope(nil)): string =
+  ## Deprecated, for compatability with older con4m.
+  $(instantTable(cells, horizontal, true, caption))
+
+
+proc callOut*[T: string | Rope](contents: T, width = -1, borders = BorderAll,
+                                                     boxStyle = BoxStyleDouble): Rope =
+    result = quickTable(@[@[contents.center()]], false, false, Rope(nil),
+                         width, borders, boxStyle)

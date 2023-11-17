@@ -1,88 +1,60 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import os, streams, misc, posix, file
-
-{.emit: """
-// Also have had this code sitting around forever and did not want to take
-// the time to port it to Nim.
-
-#include <sys/types.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdbool.h>
-
-extern bool read_one(int fd, void *buf, size_t nbytes);
-extern bool write_data(int fd, NCSTRING buf, NI nbytes);
-
-bool
-lock_file(char *lfpath, int max_attempts) {
-    int   attempt, fd, result;
-    pid_t pid;
+import os, file, posix, misc, subproc
 
 
-    for (attempt = 0;  attempt < max_attempts;  attempt++) {
-        if ((fd = open(lfpath, O_RDWR | O_CREAT | O_EXCL, S_IRWXU)) == -1) {
-            if (errno != EEXIST) {
-                return false;
-            }
-            if ((fd = open(lfpath, O_RDONLY)) == -1) {
-                return false;
-            }
+proc flock*(fd: cint, flags: cint): cint {.discardable, importc,
+                                           header: "<sys/file.h>".}
+proc fdopen*(fd: cint, mode: cstring): File {.importc, header: "<stdio.h>".}
 
-            result = read_one(fd, &pid, sizeof(pid));
-            close(fd);
-            if (result) {
-                if (pid == getpid()) {
-                    return 1;
-                }
-                if (kill(pid, 0) == -1) {
-                    if (errno != ESRCH) {
-                        return false;
-                    }
-                    attempt--;
-                    unlink(lfpath);
-                    continue;
-                }
-            }
-            sleep(1);
-            continue;
-        }
+type OsErrRef = ref OsError
 
-        pid = getpid();
-        if (!write_data(fd, &pid, sizeof(pid))) {
-            close(fd);
-            return false;
-        }
-        close(fd);
-        attempt--;
-        }
+proc obtainLockFile*(fname: string, writeLock = false, timeout: int64 = 5000,
+                                                oflags: cint = 0): cint =
+  ## Obtains a lock on a file, returning the file descriptor associated
+  ## with it. Unlock via `unlockFd()`
+  var
+    lockflags: cint
+    openflags = oflags
+    fullpath  = fname.resolvePath()
 
-    /* If we've made it to here, three attempts have been made and the
-     * lock could not be obtained. Return an error code indicating
-     * failure to obtain the requested lock.
-     */
-    return false;
-}
-""".}
+  if timeout >= 0:
+    lockflags = 4
+  if writeLock:
+    lockflags = lockflags or 2
+    if (openflags and 3) == 0:
+      openflags = openflags or 2 # Go ahead and open RDWR
+  else:
+    lockflags = lockflags or 1
+    openflags = openflags and not 2
 
-## This is the raw wrapping of the C func; `obtainLockFile()` accepts
-## nim-native data types.
-proc fLockFile*(fname: cstring, maxAttempts: cint):
-              bool {.importc: "lock_file".}
-proc obtainLockFile*(fname: string, maxAttempts = 5): bool {.inline.} =
-  return fLockFile(cstring(fname), cint(maxAttempts))
+  result = open(cstring(fullpath), openflags)
+
+  if result == -1:
+    raise OsErrRef(errorCode: errno)
+  var
+    endtime: uint64 = if timeout < 0:
+                        0xffffffffffffffff
+                      else:
+                        unixTimeInMs() + uint64(timeout)
+    sleepdur = 16
+
+  while flock(result, lockflags) != 0:
+    if unixTimeInMs() > endTime:
+      raise newException(IoError, "Timeout when trying to attain file lock " &
+        "for " & fullpath)
+    sleep(sleepdur)
+    sleepdur = sleepdur shl 1
+
+proc unlockFd*(fd: cint) =
+  ## Releases a file lock.
+  flock(fd, 8)
 
 proc writeViaLockFile*(loc:    string,
                        output: string,
-                       release     = true,
-                       maxAttempts = 5,
-                      ): bool =
+                       release   = true,
+                       timeoutMs = 5000): cint =
   ## This uses an advisory lock to perform a read of the file, and
   ## then releases the lock at the end, unless release == false.
   ##
@@ -94,28 +66,17 @@ proc writeViaLockFile*(loc:    string,
   ## process ends.
 
   let
-    resolvedLoc = resolvePath(loc)
-    dstParts    = splitPath(resolvedLoc)
-    lockFile    = joinPath(dstParts.head, "." & dstParts.tail)
+    fd = loc.obtainLockFile(writelock = true, timeout = timeoutMs)
 
-  if lockFile.obtainLockFile(maxAttempts):
-    try:
-      let f = newFileStream(resolvedLoc, fmWrite)
-      if f == nil:
-        return false
-      f.write(output)
-      f.close()
-      return true
-    finally:
-      if release:
-        try:
-          removeFile(lockFile)
-        except:
-          discard
+  rawFdWrite(fd, cstring(output), csize_t(output.len()))
+  if release:
+    fd.unlockFd()
+    discard fd.close()
+    return 0
   else:
-    return true
+    return fd
 
-proc readViaLockFile*(loc: string, release = true, maxAttempts = 5): string =
+proc readViaLockFile*(loc: string, timeoutMs = 5000): string =
   ## This uses an advisory lock to perform a read of the file, and
   ## then releases the lock at the end, unless release == false.
   ##
@@ -128,31 +89,26 @@ proc readViaLockFile*(loc: string, release = true, maxAttempts = 5): string =
   ## still running and hasn't released it.
 
   let
-    resolvedLoc = resolvePath(loc)
-    dstParts    = splitPath(resolvedLoc)
-    lockFile    = joinPath(dstParts.head, "." & dstParts.tail)
+    fd = loc.obtainLockFile(timeout = timeoutMs)
+    f  = fdopen(fd, "r")
 
-  if lockFile.obtainLockFile(maxAttempts):
-    try:
-      let f = newFileStream(resolvedLoc)
-      if f == nil:
-        raise newException(ValueError, "Couldn't open file")
-      result = f.readAll()
-      f.close()
-      return
-    finally:
-      if release:
-        try:
-          removeFile(lockFile)
-        except:
-          discard
+  result = f.readAll()
+  fd.unlockFd()
+
+proc unlock*(f: var File) =
+  ## Releases a file lock.
+  f.getFileHandle().unlockFd()
+
+proc lock*(f: var File, writelock = false, blocking = true) =
+  ## Gets a file lock from a File object.
+  var opts: cint = 0
+
+  if writelock:
+    opts = 2
   else:
-    raise newException(IOError, "Couldn't obtain lock file")
+    opts = 1
 
-proc releaseLockFile*(loc: string) =
-  let
-    resolvedLoc = resolvePath(loc)
-    dstParts    = splitPath(resolvedLoc)
-    lockFile    = joinPath(dstParts.head, "." & dstParts.tail)
+  if blocking:
+    opts = opts and 4
 
-  removeFile(lockFile)
+  flock(f.getFileHandle(), opts)

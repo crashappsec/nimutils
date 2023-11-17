@@ -3,7 +3,75 @@
 
 import os, posix, strutils, posix_utils
 
-proc getMyAppPath(): string {.importc.}
+when hostOs == "macosx":
+  {.emit: """
+#include <unistd.h>
+#include <libproc.h>
+
+   char *c_get_app_fname(char *buf) {
+     proc_pidpath(getpid(), buf, PROC_PIDPATHINFO_MAXSIZE); // 4096
+     return buf;
+   }
+   """.}
+
+  proc cGetAppFilename(x: cstring): cstring {.importc: "c_get_app_fname".}
+
+  proc betterGetAppFileName(): string =
+    var x: array[4096, byte]
+
+    return $(cGetAppFilename(cast[cstring](addr x[0])))
+
+elif hostOs == "linux":
+  {.emit: """
+#include <unistd.h>
+
+   char *c_get_app_fname(char *buf) {
+   char proc_path[128];
+   snprintf(proc_path, 128, "/proc/%d/exe", getpid());
+   readlink(proc_path, buf, 4096);
+   return buf;
+   }
+   """.}
+
+  proc cGetAppFilename(x: cstring): cstring {.importc: "c_get_app_fname".}
+
+  proc betterGetAppFileName(): string =
+    var x: array[4096, byte]
+
+    return $(cGetAppFilename(cast[cstring](addr x[0])))
+else:
+  template betterGetAppFileName(): string = getAppFileName()
+
+when hostOs == "macosx":
+  proc getMyAppPath*(): string {.exportc.} =
+    ## Returns the proper location of the running executable on disk,
+    ## resolving any file system links.
+    let name = betterGetAppFileName()
+
+    if "_CHALK" notin name:
+      return name
+    let parts = name.split("_CHALK")[0 .. ^1]
+
+    for item in parts:
+      if len(item) < 3:
+        return name
+      case item[0 ..< 3]
+      of "HM_":
+        result &= "#"
+      of "SP_":
+        result &= " "
+      of "SL_":
+        result &= "/"
+      else:
+        return name
+      if len(item) > 3:
+        result &= item[3 .. ^1]
+    echo "getMyAppPath() = ", result
+else:
+  proc getMyAppPath*(): string {.exportc.} =
+    ## Returns the proper location of the running executable on disk,
+    ## resolving any file system links.
+    betterGetAppFileName()
 
 proc tildeExpand(s: string): string {.inline.} =
   var homedir = getHomeDir()
@@ -23,7 +91,8 @@ proc tildeExpand(s: string): string {.inline.} =
 proc resolvePath*(inpath: string): string =
   ## This first does tilde expansion (e.g., ~/file or ~viega/file),
   ## and then normalizes the path, and expresses it as an absolute
-  ## path.  The Nim os utilities don't do the tilde expansion.
+  ## path. The Nim os utilities don't do the tilde expansion, for
+  ## some unfathomable reasons.
 
   # First, resolve tildes, as Nim doesn't seem to have an API call to
   # do that for us.
@@ -42,12 +111,16 @@ proc resolvePath*(inpath: string): string =
   return cur.normalizedPath().absolutePath()
 
 proc tryToLoadFile*(fname: string): string =
+  ## A wrapper around readFile that returns an empty string if a file
+  ## cannot be read.
   try:
     return readFile(fname)
   except:
     return ""
 
 proc tryToWriteFile*(fname: string, contents: string): bool =
+  ## A wrapper around writeFile that returns `true` if the file was
+  ## successfully written, and `false` otherwise.
   try:
     writeFile(fname, contents)
     return true
@@ -55,6 +128,9 @@ proc tryToWriteFile*(fname: string, contents: string): bool =
     return false
 
 proc tryToCopyFile*(fname: string, dst: string): bool =
+  ## A wrapper around copyFile that returns `true` if the file was
+  ## successfully copied, and `false` otherwise.
+
   try:
     copyFile(fname, dst)
     return true
@@ -62,6 +138,11 @@ proc tryToCopyFile*(fname: string, dst: string): bool =
     return false
 
 template withWorkingDir*(dir: string, code: untyped) =
+  ## Changes the working directory of a process to the given
+  ## directory, thens runs a block of code.
+  ##
+  ## When the code block is exited in any way, the original working
+  ## directory is restored.
   let
     toRestore = getCurrentDir()
 
@@ -80,21 +161,38 @@ const
   S_IXALL = S_IXUSR or S_IXGRP or S_IXOTH
 
 template isFile*(info: Stat): bool =
+  ## Test a posix stat object to see if it represents a regulat file.
   (info.st_mode and S_IFMT) == S_IFREG
 
 template hasUserExeBit*(info: Stat): bool =
+  ## Test a stat object to see if it's user-executable.
+  ## See `isExecutable()` for more complete testing.
   (info.st_mode and S_IXUSR) != 0
 
 template hasGroupExeBit*(info: Stat): bool =
+  ## Test a stat object to see if it's group-executable.
+  ## See `isExecutable()` for more complete testing.
   (info.st_mode and S_IXGRP) != 0
 
 template hasOtherExeBit*(info: Stat): bool =
+  ## Test a stat object to see if it's executable by others.
+  ## See `isExecutable()` for more complete testing.
   (info.st_mode and S_IXOTH) != 0
 
 template hasAnyExeBit*(info: Stat): bool =
+  ## Test for any of the executable bits being set.
+  ## See `isExecutable()` for more complete testing.
   (info.st_mode and S_IXALL) != 0
 
 proc isExecutable*(path: string): bool =
+  ## Tests to see if the current process has permissions to run the
+  ## file at the given location, and that the file is a valid
+  ## executable.
+  ##
+  ## Note that, since this operates on a path instead of a file
+  ## descriptor, there could be a TOCTOU bug. However, you'll learn
+  ## about that when you then try to execute, so not the end of the
+  ## world!
   try:
     let info = stat(path)
 
@@ -126,6 +224,12 @@ proc isExecutable*(path: string): bool =
 proc findAllExePaths*(cmdName:    string,
                       extraPaths: seq[string] = @[],
                       usePath                 = true): seq[string] =
+  ## This looks for valid executables of the given name that the
+  ## current process has permission to execute. Generally, when
+  ## multiple items are returned, you should want to run the first
+  ## returned item (which you can do via `findExePath()`). However,
+  ## this gives you the option to fall back on other executables if
+  ## something goes wrong (if they're present, of course).
   ##
   ## The priority here is to the passed command name, but if and only
   ## if it is a path; we're assuming that they want to try to run
@@ -138,11 +242,11 @@ proc findAllExePaths*(cmdName:    string,
   ##
   ## If all else fails, we search the PATH environment variable.
   ##
-  ## Note that we don't check for permissions problems (including
-  ## not-executable), and we do not open the file, so there's the
-  ## chance of the executable going away before we try to run it.
+  ## Note that we don't check for all possible issues that could cause
+  ## something not to run, and there's the chance of the executable
+  ## going away before we try to run it.
   ##
-  ## The point is, the caller should eanticipate failure.
+  ## The point is, the caller should anticipate failure.
   let
     (mydir, me) = getMyAppPath().splitPath()
   var
@@ -164,6 +268,20 @@ proc findAllExePaths*(cmdName:    string,
     if potential.isExecutable():
       result.add(potential)
 
+proc findExePath*(cmdName:    string,
+                  extraPaths: seq[string] = @[],
+                  usePath                 = true): string =
+  ## This looks for valid executables of the given name that the
+  ## current process has permission to execute. It returns the first
+  ## matching executable, using the priority rulles described in
+  ## `findAllExePaths()`.
+  ##
+  ## If no executables are found, this returns the empty string.
+
+  let options = cmdName.findAllExePaths(extraPaths, usePath)
+  if len(options) != 0:
+    return options[0]
+
 {.emit: """
 #include <unistd.h>
 #include <stdio.h>
@@ -184,6 +302,8 @@ proc do_read_link(s: cstring, p: pointer): void {.cdecl,importc,nodecl.}
 proc get_path_max*(): cint {.cdecl,importc,nodecl.}
 
 proc readLink*(s: string): string =
+  ## A wrapper for the posix `readlink` call that also resolves any
+  ## relative paths in the result.
   var v = newStringOfCap(int(get_path_max()));
   do_read_link(cstring(s), addr s[0])
   result = resolvePath(v)
@@ -194,6 +314,9 @@ proc getAllFileNames*(dir: string,
                       followFileLinks = false,
                       yieldDirs       = false,
                       followDirLinks  = false): seq[string] =
+  ## This is a slightly more sane API for scanning for file names than the
+  ## one provided in the nim standard API, primarily in that it is a single
+  ## consistent API whether you scan recursively or not.
   var kind: PathComponent
 
   if yieldFileLinks and followFileLinks:
@@ -240,7 +363,7 @@ proc getAllFileNames*(dir: string,
       continue
     let fullpath = joinPath(dir, filename)
     var statbuf: Stat
-    if lstat(fullPath, statbuf) < 0:
+    if lstat(cstring(fullPath), statbuf) < 0:
       continue
     elif S_ISLNK(statbuf.st_mode):
       if dirExists(fullpath):
