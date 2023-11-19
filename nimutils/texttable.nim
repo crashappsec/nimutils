@@ -59,7 +59,7 @@ proc instantTable*[T: string|Rope](cells: openarray[T], title = Rope(nil),
   result.setBorders(borders).boxStyle(boxStyle).colPcts(pcts)
   result = result.setWidth(remainingWidth)
   
-proc instantTable*[T: string|Rope](cells: openarray[T], title = "",
+proc instantTable*[T: string|Rope](cells: openarray[T], title: string,
                                    caption = "", width = 0,
                                    borders = defaultBorderStyle(),
                                    boxStyle = defaultBoxStyle()): Rope =
