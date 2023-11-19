@@ -68,7 +68,7 @@ when isMainModule:
                                   passthrough = true)
     print(fgColor("PID was:       ", "atomiclime") + em($(res.getPid())))
     print(fgColor("Exit code was: ", "atomiclime") + em($(res.getExit())))
-    print(fgColor("Stdout was:    ", "atomiclime") + em(pre(res.getStdout())))
+    print(fgColor("Stdout was:    ", "atomiclime") + code(res.getStdout()))
     print(fgColor("Stderr was:    ", "atomiclime") + text(res.getStderr()))
     print(strdump(res.getStderr()))
 
@@ -361,12 +361,14 @@ when isMainModule:
     print(tbl)
 
     var mess2 = @[@["1, 1", "Column 2", "Column 3", "Column 4"],
-                  @["Row 2", "Row 2", "Row 2", "Row 2"],
-                  @["Row 3", "Row 3", "Row 3", "Row 3"],
-                  @["Row 4", "Row 4", "Row 4", "Row 4"]]
+                  @["Row 2", "has some medium length strings", "This has one string that's pretty long, but the rest are short. But this one is really long. I mean, really long, long enough to drive the other column into oblivion.", "Row 2"],
+                  @["Row 3", "has some medium length strings", "Row 3", "Row 3"],
+                  @["Row 4", "has some medium length strings", "Row 4", "Row 4"]]
 
-    let t2 = quickTable(mess2, caption = h2("Table with horizontal header")).
-             tpad(1).typicalBorders().colPcts([10, 40, 40, 10])
+    let
+      wi = [(12, true), (40, false), (0, false), (12, true)]
+      t2 = quickTable(mess2, caption = h2("Table with horizontal header")).
+             tpad(1).typicalBorders().colWidths(wi)
     print(t2)
 
     let t3 = quickTable(mess2, verticalHeaders = true,

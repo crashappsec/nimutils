@@ -50,12 +50,12 @@ type
     BorderNone         = 0,
     BorderTop          = 1,
     BorderBottom       = 2,
-    BorderLeft         = 3,
-    BorderRight        = 4,
-    HorizontalInterior = 5,
-    VerticalInterior   = 6,
-    BorderTypical      = 7,
-    BorderAll          = 8
+    BorderLeft         = 4,
+    BorderRight        = 8,
+    HorizontalInterior = 16,
+    VerticalInterior   = 32,
+    BorderTypical      = 64,
+    BorderAll          = 128
 
   FmtStyle* = ref object  # For terminal formatting.
     ## Style objects are all expressed as deltas from a currently
@@ -117,10 +117,10 @@ type
     BrSoftLine, BrHardLine, BrParagraph, BrPage
 
   ColInfo* = object
-    ## Currently, we only support percents, so this object is more
-    ## a placeholder than anything.
-    span*:     int
-    widthPct*: int
+    ## Spans are not yet implemented.
+    span*:   int
+    wValue*: int
+    absVal*: bool
 
   Rope* = ref object
     ## The core rope object.  Generally should only access via API.
@@ -371,8 +371,8 @@ let
                                 bottomT:    Rune(0x2569),
                                 leftT:      Rune(0x2560),
                                 rightT:     Rune(0x2563))
-  BoxStyleDash* =      BoxStyle(horizontal: Rune(0x2554),
-                                vertical:   Rune(0x2556),
+  BoxStyleDash* =      BoxStyle(horizontal: Rune(0x2504),
+                                vertical:   Rune(0x2506),
                                 upperLeft:  Rune(0x250c),
                                 upperRight: Rune(0x2510),
                                 lowerLeft:  Rune(0x2514),
@@ -382,8 +382,8 @@ let
                                 bottomT:    Rune(0x2534),
                                 leftT:      Rune(0x251c),
                                 rightT:     Rune(0x2524))
-  BoxStyleDash2* =     BoxStyle(horizontal: Rune(0x2558),
-                                vertical:   Rune(0x255a),
+  BoxStyleDash2* =     BoxStyle(horizontal: Rune(0x2508),
+                                vertical:   Rune(0x250a),
                                 upperLeft:  Rune(0x250c),
                                 upperRight: Rune(0x2510),
                                 lowerLeft:  Rune(0x2514),

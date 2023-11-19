@@ -151,14 +151,6 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
     if align != AlignIgnore:
       result.alignStyle = some(align)
 
-const
-  c0Pink   = "hotpink"      # The true color is jazzberry
-  c0Purple = "mediumpurple" # True color is fandango
-  c0Green  = "atomiclime"
-  c0BG     = "darkslategray"
-  c0Text   = "white"
-  c0Inv    = "gainsboro"
-
 let
   plainStyle*   = FmtStyle(
     textColor: some(""), bgColor: some(""), overflow: some(OWrap),
@@ -168,28 +160,30 @@ let
     italic: some(false), underlineStyle: some(UnderlineIgnore),
     useTopBorder: some(true), useLeftBorder: some(true),
     useRightBorder: some(true), useVerticalSeparator: some(false),
-    useHorizontalSeparator: some(false), boxStyle: some(BoxStyleDouble),
+    useHorizontalSeparator: some(false), boxStyle: some(BoxStylePlain),
     alignStyle: some(AlignIgnore))
+
 var
   defaultStyle* = plainStyle
   styleMap* = {
       "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow= OWrap),
       "basic"     : newStyle(bpad = 0),
-      "h1"        : newStyle(align = AlignL, italic = ItalicOn, tpad = 2, lpad = 1,
-                             fgColor = "jazzberry", bgColor = "gray"),
+      "h1"        : newStyle(align = AlignL, italic = ItalicOn, tpad = 2,
+                             lpad = 1, fgColor = "jazzberry", bgColor = "gray"),
       "h2"        : newStyle(lpad = 1, rpad = 1, tpad = 1, align = AlignL,
-                              italic = ItalicOn, bgColor = "gray", fgColor="lime"),
+                              italic = ItalicOn, bgColor = "gray",
+                              fgColor="lime"),
       "h3"        : newStyle(italic = ItalicOn, tpad = 1, bpad = 0, lpad = 1,
-                                                                 rpad = 1, bgColor = "gray", fgColor="violet"),
+                             rpad = 1, bgColor = "gray", fgColor="violet"),
       "h4"        : newStyle(italic = ItalicOn, lpad = 1, rpad = 1, tpad = 0,
                              fgColor = "gray", bgColor="jazzberry",
                              underline = UnderlineSingle, casing = CasingTitle),
       "h5"        : newStyle(lpad = 1, rpad = 1, tpad = 0, bpad = 0,
-                                                        fgColor = "gray", bgColor="lime",
+                             fgColor = "gray", bgColor="lime",
                              italic = ItalicOn, underline = UnderlineSingle,
                              casing = CasingTitle),
       "h6"        : newStyle(lpad = 1, rpad = 1, tpad = 0, bpad = 0,
-                                                        fgColor = "gray", bgColor="violet",                                                        
+                             fgColor = "gray", bgColor="violet",
                              underline = UnderlineSingle, casing = CasingTitle),
       "ol"        : newStyle(bulletChar = Rune('.'), lpad = 3, align = AlignL,
                              tpad = 1, bpad = 1),
@@ -204,7 +198,7 @@ var
       "flush"     : newStyle(align = AlignF),
       "table"     : newStyle(borders = [BorderTypical], tpad = 1, bpad = 1,
                              lpad = 1, rpad = 1, bgColor = "royalblue",
-                                              fgColor = "grey"),
+                             fgColor = "grey"),
       "thead"     : newStyle(overflow = OWrap, tpad = 0, bpad = 0,
                              lpad = 0, rpad = 0),
       "tbody"     : newStyle(overflow = OWrap, tpad = 0, bpad = 0,
@@ -233,8 +227,8 @@ var
       "strong"    : newStyle(inverse = InverseOn, italic = ItalicOn),
       "code"      : newStyle(lpad = 2, rpad = 2, tpad = 1, bpad = 1),
       "caption"   : newStyle(tpad = 1, bpad = 0, align = AlignC,
-                                              bgColor = "black",
-                             fgColor = "tomato", italic = ItalicOn)
+                             bgColor = "black", fgColor = "tomato",
+                             italic = ItalicOn)
     }.toTable()
     
   perClassStyles* = {
@@ -355,7 +349,6 @@ proc repr*(r: Rope): string =
   r.repr(info)
   return info.str
 
-
 # I'd love for each style is going to get one unique ID that we can
 # look up in both directions. Currently this won't work in a
 # multi-threaded world, but I'm going to soon migrate it to my
@@ -470,6 +463,15 @@ proc isContainer*(r: Rope): bool =
   of RopeTaggedContainer:
     return false
 
+template defaultBoxStyle*(): BoxStyle =
+  if "table" in styleMap:
+    styleMap["table"].boxStyle.get(BoxStylePlain)
+  else:
+    BoxStylePlain
+  
+template defaultBorderStyle*(): BorderOpts =
+  BorderTypical
+
 template setDefaultStyle*(style: FmtStyle) =
   ## This call allows you to set the default starting style, which is
   ## applied whenever you call a routine that formats (such as
@@ -562,19 +564,41 @@ proc ropeStyle*(r:     Rope,
     else:
       perIdStyles[item.id] = style
 
-proc colPcts*(r: Rope, pcts: openarray[int]): Rope {.discardable.} =
+proc colWidths*(r: Rope, info: seq[ColInfo]): Rope {.discardable.} =
   if r == nil:
     return
-
-  var info: seq[ColInfo]
-  for item in pcts:
-    info.add(ColInfo(span: 1, widthPct: item))
 
   for item in r.search(tags = ["table"]):
     item.colInfo = info
 
   return r
+  
+proc colWidths*(r: Rope, vals: openarray[(int, bool)]): Rope {.discardable.} =
+  var info: seq[ColInfo]
 
+  for (n, b) in vals:
+    info.add(ColInfo(span: 0, wValue: n, absVal: b))
+    
+  return r.colWidths(info)
+  
+proc colAbs*(r: Rope, pcts: openarray[int]): Rope {.discardable.} =
+  var info: seq[ColInfo]
+  for item in pcts:
+    info.add(ColInfo(span: 1, wValue: item, absVal: true))
+
+  return r.colWidths(info)
+
+proc colPcts*(r: Rope, pcts: openarray[int]): Rope {.discardable.} =
+  if r == nil:
+    return
+
+  var info: seq[ColInfo]
+  
+  for item in pcts:
+    info.add(ColInfo(span: 1, wValue: item))
+
+  return r.colWidths(info)
+  
 proc applyClass*(r: Rope, class: string, recurse = true): Rope {.discardable.} =
   if r == nil:
     return
@@ -929,6 +953,14 @@ proc installTheme*(tagStyles:   var Table[string, FmtStyle],
   styleMap       = tagStyles
   perClassStyles = classStyles
 
+const
+  c0Pink   = "jazzberry" 
+  c0Purple = "fandango"
+  c0Green  = "atomiclime"
+  c0BG     = "darkslategray"
+  c0Text   = "white"
+  c0Inv    = "gainsboro"
+
 proc useCrashTheme*() =
   var
     tableDefault  = newStyle(overflow = OWrap, tpad = 0, bpad = 0,
@@ -967,9 +999,9 @@ proc useCrashTheme*() =
       "center"    : newStyle(align = AlignC),
       "justify"   : newStyle(align = AlignJ),
       "flush"     : newStyle(align = AlignF),
-      "table"     : newStyle(borders = [BorderAll], tpad = 1, bpad = 1,
+      "table"     : newStyle(borders = [BorderTypical], tpad = 1, bpad = 1,
                              lpad = 1, rpad = 1, fgColor = c0Text,
-                             bgColor = c0Pink),
+                             bgColor = c0Pink, boxStyle = BoxStyleDash2),
       "thead"     : tableDefault,
       "tbody"     : tableDefault,
       "tfoot"     : tableDefault,
@@ -984,8 +1016,8 @@ proc useCrashTheme*() =
                            fgColor = c0Green, lpad = 1, rpad = 1, align = AlignC),
       "tr"        : newStyle(bold = BoldOn, lpad = 0, rpad = 0,
                              overflow = OWrap, tpad = 0, bpad = 0),
-      "tr.even"   : newStyle(bgColor = c0Purple, lpad = 0, rpad = 0),
-      "tr.odd"    : newStyle(bgColor = "fandango", lpad = 0, rpad = 0),
+      "tr.even"   : newStyle(bgColor = "mediumpurple", lpad = 0, rpad = 0),
+      "tr.odd"    : newStyle(bgColor = c0Purple, lpad = 0, rpad = 0),
       "em"        : newStyle(inverse = InverseOn),
       "italic"    : newStyle(italic = ItalicOn),
       "i"         : newStyle(italic = ItalicOn),
@@ -1006,3 +1038,4 @@ proc useCrashTheme*() =
     }.toTable()
 
   installTheme(tagStyles, classStyles)
+  

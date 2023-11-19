@@ -3,10 +3,9 @@
 
 # TODO:
 #
-# 1) Support column spans.
-#
-# 2) Support absolute column sizes (right now if specified it's pct, and
-#    if it's not every column is sized evenly).
+# Currently, we don't support column spans.
+# Everything else on my original wishlist is here now though.
+
 
 import tables, options, std/terminal, rope_base, rope_styles, unicodeid,
        unicode, misc
@@ -89,7 +88,14 @@ proc noBoxRequired*(r: Rope): bool =
   if result != false:
     result = r.next.noBoxRequired()
 
-proc unboxedRunelength*(r: Rope): int =
+proc unboxedRuneLength(r: Rope, results: var int) =
+  if r != nil:
+    if r.kind == RopeAtom:
+      results += cast[seq[uint32]](r.text).u32LineLength()
+    r.genericRopeWalk(unboxedRuneLength, results)
+    r.next.unboxedRuneLength(results)
+    
+proc unboxedRuneLength*(r: Rope): int =
   ## Returns the approximate display-width of a rope, without
   ## considering the size of 'box' we're going to try to fit it into.
   ##
@@ -101,25 +107,8 @@ proc unboxedRunelength*(r: Rope): int =
   ## we do our best, but stick to expected values provided in the
   ## Unicode standard. But there may occasionally be length
   ## calculation issues due to local fonts, etc.
-
-  if r == Rope(nil):
-    return 0
-  case r.kind
-  of RopeAtom:
-    return cast[seq[uint32]](r.text).u32LineLength() +
-                             r.next.unboxedRuneLength()
-  of RopeLink:
-
-    result = r.url.runeLength() + r.toHighlight.unboxedRuneLength() +
-             r.next.unboxedRuneLength()
-  of RopeTaggedContainer:
-    if r.tag in breakingStyles:
-      return 0
-    result = r.contained.unBoxedRuneLength() + r.next.unboxedRuneLength()
-  of RopeFgColor, RopeBgColor:
-    result = r.toColor.unBoxedRuneLength() + r.next.unboxedRuneLength()
-  else:
-    return 0
+  r.unboxedRuneLength(result)
+  
 
 template runelength*(r: Rope): int = r.unboxedRuneLength()
 
@@ -401,25 +390,6 @@ proc preRenderOrderedList(state: var FmtState, r: Rope): seq[RenderBox] =
     if subedWidth:
       state.totalWidth += hangPrefix.len()
 
-proc percentToActualColumns(state: var FmtState, pcts: seq[int]): seq[int] =
-  if len(pcts) == 0: return
-
-  let style    = state.curStyle
-  var overhead = 0
-
-  if style.useLeftBorder.getOrElse(false):
-    overhead += 1
-  if style.useRightBorder.getOrElse(false):
-    overhead += 1
-  if style.useVerticalSeparator.getOrElse(false):
-    overhead += (len(pcts) - 1)
-
-  let availableWidth = state.totalWidth - overhead
-
-  for item in pcts:
-    var colwidth = (item * availableWidth) div 100
-    result.add(if colwidth == 0: 1 else: colwidth)
-
 proc getGenericBorder(state: var FmtState, colWidths: seq[int],
                       style: FmtStyle, horizontal: Rune,
                       leftBorder: Rune, rightBorder: Rune,
@@ -455,50 +425,127 @@ proc getBottomBorder(state: var FmtState, s: BoxStyle): seq[uint32] =
   result = state.getGenericBorder(state.colStack[^1], state.curStyle,
            s.horizontal, s.lowerLeft, s.lowerRight, s.bottomT)
 
+proc getAvailableSpace(state: var FmtState, r: Rope): int =
+  result = state.totalWidth
+  if state.curStyle.useLeftBorder.getOrElse(false):
+    result -= 1
+  if state.curStyle.useRightBorder.getOrElse(false):
+    result -= 1  
+  if state.curStyle.useVerticalSeparator.getOrElse(false):
+    result -= (len(r.colInfo) - 1)
+  
+proc calculateColumnWidths(state: var FmtState, r: Rope): seq[int] =
+  # Percent is treated as a percent of AVAILABLE column width, meaning
+  # after border overhead is removed.
+  var
+    toDivide  = state.getAvailableSpace(r)
+    numFlex   = 0
+    pctAlloc  = 0
+
+  for i, item in r.colInfo:
+    if item.wValue == 0 and not item.absVal:
+        result.add(0)
+        numFlex += 1
+    elif item.absVal:
+      result.add(item.wValue)
+      toDivide -= item.wValue
+    else:
+      pctAlloc += item.wValue
+      result.add((item.wValue * toDivide) div 100)
+      toDivide -= result[i]
+
+  if numFlex > 0 and toDivide >= 0:
+    let
+      perCol = toDivide div numFlex
+
+    for i, item in r.colInfo:
+      if item.wValue == 0 and not item.absVal:
+        result[i] = perCol
+
+proc guessColWidths(state: var FmtState, r: Rope) =
+  # We could do more processing to do a better job. For now, what we do is:
+  #
+  # 1) Give every column four cells. If that's not available there'll be
+  #    some cropping, but oh well.
+  #
+  # 2) Look at the rune length of the cell, ignoring newlines. If
+  #    there's enough room for each column to get at least this many
+  #    characters (assuming the 4 they already got, plus both borders
+  #    and 2 chars of pad), then we will assign enough for the widest
+  #    line plus pad.
+  #
+  # 3) For other columns, We give out width proportional to the total
+  #    num of chars in each column.
+  # 4) Anything available at the end is evenly distributed.
+  
+  var
+    maxWidths:   seq[int]
+    totalWidths: seq[int]
+    rows:        seq[Rope]
+    maxSeen   = -1
+    sum       = 0
+    total: int
+    available: int
+
+  if r.thead != nil:
+    rows &= r.thead.cells
+  if r.tbody != nil:
+    rows &= r.tbody.cells
+  if r.tfoot != nil:
+    rows &= r.tfoot.cells
+
+  for row in rows:
+    for i, cell in row.cells:
+      if i > maxSeen:
+        maxWidths.add(0)
+        totalWidths.add(0)
+        r.colInfo.add(ColInfo(wValue: 4, absVal: true))
+        maxSeen += 1
+        available -= 4
+
+      let l = cell.unboxedRuneLength()
+      if l > maxWidths[i]:
+        maxWidths[i] = l
+      totalWidths[i] += l
+
+  available += state.getAvailableSpace(r)
+
+  if len(maxWidths) == 1:
+    r.colInfo[0] = ColInfo(span: 0, wValue: 0, absVal: false)
+    return
+
+  var smallThreshold = (available div maxWidths.len()) - 4
+
+  for i, width in maxWidths:
+    if (width - 4) <= smallThreshold:
+      r.colInfo[i] = ColInfo(wValue: width + 4, absVal: true)
+      available -= (width - 4)
+    else:
+      sum += totalWidths[i]
+
+  if available <= 0:
+    return
+
+  for i, width in maxWidths:
+    if (width - 4) > smallThreshold:
+      let w = ((totalWidths[i] * 100) div sum) - 4
+      r.colInfo[i] = ColInfo(wValue: w, absVal: true)
+      available -= r.colInfo[i].wValue
+
+  if available > 0:
+    for i in 0 ..< available:
+      r.colInfo[i mod maxWidths.len()].wValue += 1
+      
 proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
     var
       colWidths: seq[int]
       savedSep  = state.curTableSep
       boxStyle  = state.curStyle.boxStyle.getOrElse(DefaultBoxStyle)
 
-    if r.colInfo.len() != 0:
-      var
-        sum:              int
-        defaultWidthCols: int
-
-      for item in r.colInfo:
-        for i in 0 ..< item.span:
-          colWidths.add(item.widthPct)
-          if item.widthPct == 0:
-            defaultWidthCols += 1
-          else:
-            sum += item.widthPct
-
-      # If sum < 100 then we divide remaining width equally.
-      if defaultWidthCols != 0 and sum < 100:
-        let defaultWidth = (100 - sum) div defaultWidthCols
-
-        if defaultWidth > 0:
-          for i, width in colWidths:
-            if width == 0:
-              colWidths[i] = defaultWidth
-
-      # For anything still 0 or 1, we set it to a minimum width of 2. It
-      # might result in us getting cropped.
-      for i, width in colWidths:
-        if width < 2:
-          colWidths[i] = 2
-    else:
-      let rows = r.search("tr", first = true)
-      if len(rows) != 0:
-        let
-          row = rows[0]
-          pct = 100 div len(row.cells)
-        for i in 0 ..< len(row.cells):
-          colWidths.add(pct)
-
-    # Mutate to be widths; above this point it was percentages.
-    colWidths = state.percentToActualColumns(colWidths)
+    if r.colInfo.len() == 0:
+      state.guessColWidths(r)
+          
+    colWidths = state.calculateColumnWidths(r)
     
     state.pushTableWidths(colWidths)
 
@@ -812,7 +859,8 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
       var rowTag = if state.tableEven[^1]: "tr.even" else: "tr.odd"
       if rowTag in styleMap:
         for item in r.cells:
-          item.tweak = styleMap[rowTag]
+          if item != nil:
+            item.tweak = styleMap[rowTag]
       applyContainerStyle(result):
         result &= state.preRenderRow(r)
         r.tag = "tr"
@@ -877,4 +925,3 @@ proc preRender*(r: Rope, width = -1, showLinkTargets = false,
   result.width  = state.totalWidth
   for item in r.ropeWalk():
     item.processed = false
-  

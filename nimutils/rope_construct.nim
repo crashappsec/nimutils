@@ -225,6 +225,7 @@ template descend(n: HtmlNode): Rope =
   n.doDescend(pre)
 
 proc extractColumnInfo(n: HtmlNode): seq[ColInfo] =
+  # This only extracts % at this point.
   for item in n.children:
     var
       span: int
@@ -242,7 +243,7 @@ proc extractColumnInfo(n: HtmlNode): seq[ColInfo] =
     if pct < 0:
       pct = 0
 
-    result.add(ColInfo(span: span, widthPct: pct))
+    result.add(ColInfo(span: span, wValue: pct))
 
 proc noTextExtract(r: Rope): Rope =
   r.noTextExtract = true
@@ -419,6 +420,7 @@ template html*(s: string): Rope =
 template markdown*(s: string): Rope =
   ## An alias for htmlStringToRope, with markdown always true.
   s.htmlStringToRope(markdown = true)
+  
 macro basicTagGen(ids: static[openarray[string]]): untyped =
   result = newStmtList()
 
@@ -437,12 +439,12 @@ macro basicTagGen(ids: static[openarray[string]]): untyped =
           else:
             return Rope(kind: RopeTaggedContainer, tag: `strNode`,
                         contained: r)
-        proc `idNode`*(s: string): Rope =
+        proc `idNode`*(s: string, pre = true): Rope =
           ## Turn a string into a rope, styled with this tag.
           if s == "":
             return Rope(nil)
           else:
-            return `idNode`(s.textRope(pre = false))
+            return `idNode`(s.textRope(pre))
     result.add(decl)
 
 macro tagGenRename(id: static[string], rename: static[string]): untyped =
@@ -459,29 +461,11 @@ macro tagGenRename(id: static[string], rename: static[string]): untyped =
         ## take priority for the node itself.
         return Rope(kind: RopeTaggedContainer, tag: `strNode`,
                     contained: r)
-      proc `idNode`*(s: string): Rope =
+      proc `idNode`*(s: string, pre = true): Rope =
         ## Turn a string into a rope, styled with this tag.
-        return `idNode`(s.textRope(pre = false))
+        return `idNode`(s.textRope(pre))
   result.add(decl)
-
-macro hidTagGen(ids: static[openarray[string]]): untyped =
-  result = newStmtList()
-
-  for id in ids:
-    let
-      strNode = newLit(id)
-      hidNode = newIdentNode("html" & id)
-      decl    = quote do:
-        proc `hidNode`*(s: string): string =
-          ## Encode the given string in this HTML tag. This does not
-          ## make any attempt to escape contents, and thus should
-          ## generally should only be used as a last resort; prefer
-          ## the interface that returns Rope objects instead (which
-          ## would not have issues with text escaping).
-          return "<" & `strNode` & ">" & s & "</" & `strNode` & ">"
-
-    result.add(decl)
-
+  
 macro trSetGen(ids: static[openarray[string]]): untyped =
   result = newStmtList()
 
@@ -504,30 +488,6 @@ proc tr*(l: seq[Rope]): Rope =
   ## Pass this to thead(), tbody() or tfoot() only.
   return Rope(kind: RopeTableRow, tag: "tr", cells: l)
 
-basicTagGen(["h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div",
-             "code", "ins", "del", "kbd", "mark", "small", "sub", "sup",
-             "width", "title", "em", "strong", "caption", "td", "th",
-             "text", "plain"])
-
-tagGenRename("p",   "paragraph")
-tagGenRename("q",   "quote")
-tagGenRename("u",   "unstructured")
-tagGenRename("var", "variable")
-
-trSetGen(["thead", "tbody", "tfoot"])
-
-hidTagGen(["a", "abbr", "address", "article", "aside", "b", "base", "bdi",
-           "bdo", "blockquote", "br", "caption", "center", "cite", "code",
-           "col", "colgroup", "data", "datalist", "dd", "details", "dfn",
-           "dialog", "dl", "dt", "em", "embed", "fieldset", "figcaption",
-           "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
-           "header", "hr", "i", "ins", "kbd", "label", "legend", "li",
-           "link", "main", "mark", "menu", "meta", "meter", "nav", "ol",
-           "optgroup", "output", "p", "param", "pre", "progress", "q", "s",
-           "samp", "search", "section", "select", "span", "strong", "style",
-           "sub", "summary", "sup", "table", "tbody", "td", "tfoot",
-           "th", "thead", "title", "tr", "u", "ul", "text", "plain"])
-
 proc pre*(r: Rope): Rope =
   ## This is generally a no-op on a rope object; pre-formatting
   ## happens when text is initially imported. If you add special
@@ -541,47 +501,19 @@ proc pre*(s: string): Rope =
   ## any styling you choose to apply to that tag.
   return pre(s.textRope(pre = true))
 
-proc atom*(s: string): Rope =
-  ## Text rope with absolutely no formatting at all.
+proc atom*(s: string, pre = true): Rope =
+  ## Text rope with absolutely no formatting at all, other than the
+  ## choice of leaving newlines intact or not (default is to do so).
   if s == "":
     return Rope(nil)
   else:
-    return s.textRope()
-
-proc ol*(l: seq[Rope]): Rope =
-  ## Taking a list of li() Ropes, returns a Rope for an ordered (i.e.,
-  ## numbered) list. Currently, there is no way to change the
-  ## numbering style, or to continue numbering from previous lists.
-  return Rope(kind: RopeList, tag: "ol", items: l)
-
-proc ol*(l: seq[string]): Rope =
-  ## Taking a list of strings, it creates a rope for an ordered list.
-  ## The list items are automatically wrapped in li() nodes, but are
-  ## otherwise unprocessed.
-  var listItems: seq[Rope]
-  for item in l:
-    listItems.add(li(item))
-  return ol(listItems)
-
-proc ul*(l: seq[Rope]): Rope =
-  ## Taking a list of li() Ropes, returns a Rope for an unordered
-  ## (i.e., bulleted) list.
-  return Rope(kind: RopeList, tag: "ul", items: l)
+    return s.textRope(pre)
 
 proc ensureNewline*(r: Rope): Rope {.discardable.} =
   ## Used to wrap terminal output when ensureNl is true, but the
   ## content is not enclosed in a basic block. This is done using
   ## a special 'basic' tag.
   return Rope(kind: RopeTaggedContainer, tag: "basic", contained: r)
-
-proc ul*(l: seq[string]): Rope =
-  ## Taking a list of strings, it creates a rope for a bulleted list.
-  ## The list items are automatically wrapped in li() nodes, but are
-  ## otherwise unprocessed.
-  var listItems: seq[Rope]
-  for item in l:
-    listItems.add(li(item))
-  return ul(listItems)
 
 proc setWidth*(r: Rope, i: int): Rope =
   ## Returns a rope that constrains the passed Rope to be formatted
@@ -629,6 +561,11 @@ proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
                           thead: thead, tfoot: tfoot, caption: caption,
                           colInfo: columnInfo))
 
+
+proc colPcts*(input: openarray[(int, bool)]): seq[ColInfo] =
+  for (v, b) in input:
+    result.add(ColInfo(span: 0, wValue: v, absVal: b))
+    
 proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
   ## This takes a list of column percentages and returns what you need
   ## to pass to `table()`.
@@ -656,7 +593,7 @@ proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
   ## Specified percents can also go above 100, but you will see
   ## truncation there as well.
   for item in pcts:
-    result.add(ColInfo(widthPct: item, span: 1))
+    result.add(ColInfo(wValue: item, span: 1))
 
 proc colors*(r: Rope, removeNested = true): Rope =
   ## Unless no-color is off, use coloring for this item, when
@@ -684,3 +621,44 @@ proc nocolors*(r: Rope, removeNested = true): Rope =
   if removeNested:
     for item in r.search("colors"):
       item.tag = "nocolors"
+      
+basicTagGen(["h1", "h2", "h3", "h4", "h5", "h6",
+             "li", "blockquote", "div", "code", "ins", "del", "kbd", "mark",
+             "small", "sub", "sup", "width", "title", "em", "strong",
+             "caption", "td", "th", "text", "plain"])
+
+tagGenRename("p",   "paragraph")
+tagGenRename("q",   "quote")
+tagGenRename("u",   "unstructured")
+tagGenRename("var", "variable")
+trSetGen(["thead", "tbody", "tfoot"])
+
+proc ol*(l: seq[Rope]): Rope =
+  ## Taking a list of li() Ropes, returns a Rope for an ordered (i.e.,
+  ## numbered) list. Currently, there is no way to change the
+  ## numbering style, or to continue numbering from previous lists.
+  return Rope(kind: RopeList, tag: "ol", items: l)
+
+proc ol*(l: seq[string]): Rope =
+  ## Taking a list of strings, it creates a rope for an ordered list.
+  ## The list items are automatically wrapped in li() nodes, but are
+  ## otherwise unprocessed.
+  var listItems: seq[Rope]
+  for item in l:
+    listItems.add(li(item))
+  return ol(listItems)
+
+proc ul*(l: seq[Rope]): Rope =
+  ## Taking a list of li() Ropes, returns a Rope for an unordered
+  ## (i.e., bulleted) list.
+  return Rope(kind: RopeList, tag: "ul", items: l)
+
+proc ul*(l: seq[string]): Rope =
+  ## Taking a list of strings, it creates a rope for a bulleted list.
+  ## The list items are automatically wrapped in li() nodes, but are
+  ## otherwise unprocessed.
+  var listItems: seq[Rope]
+  for item in l:
+    listItems.add(li(item))
+  return ul(listItems)
+
