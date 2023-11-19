@@ -151,7 +151,6 @@ type
       width*:      int  # Requested width in columns for a container.
     of RopeTable:
       colInfo*: seq[ColInfo]
-      numCols*: int
       thead*:   Rope # RopeTableRows
       tbody*:   Rope # RopeTableRows
       tfoot*:   Rope # RopeTableRows
