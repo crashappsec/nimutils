@@ -355,9 +355,8 @@ when isMainModule:
                   "texttable.nim", "either.nim", "macproc.nim", "pubsub.nim",
                   "sigv4.nim", "unicodeid.nim"]
     mess1.sort()
-    # The padding to make up for the lost borders.
-    let tbl = instantTable(mess1, h3("Auto-arranged into columns")).lpad(1).
-                                    rpad(1).noBorders().topMargin(2)
+    let tbl = instantTable(mess1, h2("Auto-arranged into columns")).
+                           noBorders().tpad(2)
 
     print(tbl)
 
@@ -366,37 +365,30 @@ when isMainModule:
                   @["Row 3", "Row 3", "Row 3", "Row 3"],
                   @["Row 4", "Row 4", "Row 4", "Row 4"]]
 
-    let t2 = quickTable(mess2, caption = h3("Table with horizontal header")).
-             topMargin(1).typicalBorders().colPcts([10, 40, 40, 10])
+    let t2 = quickTable(mess2, caption = h2("Table with horizontal header")).
+             tpad(1).typicalBorders().colPcts([10, 40, 40, 10])
     print(t2)
 
     let t3 = quickTable(mess2, verticalHeaders = true,
-                       caption = h3("Table with vertical header"))
+                       caption = h2("Table with vertical header"))
     print(t3.typicalBorders())
 
     let t4 = quickTable(mess2, noheaders = true,
-                          caption = h3("Table w/o header")).
-             bottomMargin(1).boldBorders().allBorders()
+                          caption = h2("Table w/o header")).
+             bpad(1).boldBorders().allBorders()
     print(t4)
 
+  proc calloutTest() =
     let
       st  = "This is a test of something I'd really like to know about, " &
             "I think??"
-      txt = nocolors(callout(st, 30, boxStyle = BoxStyleAscii))
+      txt = nocolors(callout(st, boxStyle = BoxStyleAscii))
       res = txt.search(text = "test")
 
-    print(h5("Search results"))
-    for item in res:
-      var s: seq[Rune] = item.text
-      echo $(s)
-
-    echo txt.debugWalk()
     print(txt)
 
-    var sometest = setWidth(callout(center(pre(txt))), 50)
-    #var sometest = container(callout(center(pre(txt))).lpad(10)).lpad(10)
-    echo txt.debugWalk()
-    print(center(sometest))
+    var sometest = container(callout(center(pre(txt)))).lpad(10).rpad(10)
+    print(center(sometest), width = -30)
 
   proc nestedTableTest() =
     let mdText = """
@@ -420,12 +412,10 @@ Oh look, here comes a table!
 - This bullet will be long enough that it can show how we wrap bulleted text intelligently.
 """
     let crazyTable = @[
-      @[md(mdText), md(mdText)],
-      @[md(mdText), md(mdText)]
+      @[markdown(mdText), markdown(mdText)],
+      @[markdown(mdText), markdown(mdText)]
     ]
     let toPrint = quickTable(crazyTable, noheaders = true)
-
-    echo toPrint.debugWalk()
     print(toPrint)
 
   import nimutils/logging
@@ -439,12 +429,23 @@ Oh look, here comes a table!
   aesGcmTests()
   keyStreamTest()
   dictTests()
-  when defined(macosx):
-    macProcTest()
+  #when defined(macosx):
+  #  macProcTest()
   info(em("This is a test message."))
   error(italic(underline(("So is this."))))
   nestedTableTest()
   basic_subproc_tests()
   instantTableTests()
+  calloutTest()
+  
+  var baddie = h1("hello") + fgColor(atom("Sup,"), "lime") + atom(" dawg!")
+  print(baddie)
+
+  print h1("Heading 1")
+  print h2("Heading 2")
+  print h3("Heading 3")
+  print h4("Heading 4")
+  print h5("Heading 5")
+  print h6("Heading 6")
   print(defaultBg(fgColor("Goodbye!!", "jazzberry")))
-  quit()
+quit()

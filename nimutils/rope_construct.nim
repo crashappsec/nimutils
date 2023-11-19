@@ -416,7 +416,7 @@ template html*(s: string): Rope =
   ## from the underlying library, but it may not map to what you want.
   s.htmlStringToRope(markdown = false)
 
-template md*(s: string): Rope =
+template markdown*(s: string): Rope =
   ## An alias for htmlStringToRope, with markdown always true.
   s.htmlStringToRope(markdown = true)
 macro basicTagGen(ids: static[openarray[string]]): untyped =
@@ -432,11 +432,17 @@ macro basicTagGen(ids: static[openarray[string]]): untyped =
           ## Apply the style at the point of a rope node.  Sub-nodes
           ## may override this, but at the time applied, it will
           ## take priority for the node itself.
-          return Rope(kind: RopeTaggedContainer, tag: `strNode`,
-                      contained: r)
+          if r == nil:
+            return r
+          else:
+            return Rope(kind: RopeTaggedContainer, tag: `strNode`,
+                        contained: r)
         proc `idNode`*(s: string): Rope =
           ## Turn a string into a rope, styled with this tag.
-          return `idNode`(s.textRope(pre = false))
+          if s == "":
+            return Rope(nil)
+          else:
+            return `idNode`(s.textRope(pre = false))
     result.add(decl)
 
 macro tagGenRename(id: static[string], rename: static[string]): untyped =
@@ -499,9 +505,9 @@ proc tr*(l: seq[Rope]): Rope =
   return Rope(kind: RopeTableRow, tag: "tr", cells: l)
 
 basicTagGen(["h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div",
-             "container", "code", "ins", "del", "kbd", "mark", "small", "sub",
-             "sup", "width", "title", "em", "strong", "caption", "td", "th",
-             "text", "plain", "deffmt"])
+             "code", "ins", "del", "kbd", "mark", "small", "sub", "sup",
+             "width", "title", "em", "strong", "caption", "td", "th",
+             "text", "plain"])
 
 tagGenRename("p",   "paragraph")
 tagGenRename("q",   "quote")
@@ -534,6 +540,13 @@ proc pre*(s: string): Rope =
   ## it does also add a `pre` container node, which will pick up
   ## any styling you choose to apply to that tag.
   return pre(s.textRope(pre = true))
+
+proc atom*(s: string): Rope =
+  ## Text rope with absolutely no formatting at all.
+  if s == "":
+    return Rope(nil)
+  else:
+    return s.textRope()
 
 proc ol*(l: seq[Rope]): Rope =
   ## Taking a list of li() Ropes, returns a Rope for an ordered (i.e.,
@@ -574,14 +587,25 @@ proc setWidth*(r: Rope, i: int): Rope =
   ## Returns a rope that constrains the passed Rope to be formatted
   ## within a particular width, as long as the context in which the
   ## rope's being evaluated has at least that much width available.
-  return Rope(kind: RopeTaggedContainer, tag: "width", contained: r,
-              width: i, noTextExtract: true)
+  let w = Rope(kind: RopeTaggedContainer, tag: "width", contained: r,
+               width: i, noTextExtract: true)
+  result = Rope(kind: RopeTaggedContainer, tag: "div", contained: w,
+                noTextExtract: true)
 
 proc setWidth*(s: string, i: int): Rope =
   ## Returns a rope that constrains the passed string to be formatted
   ## within a particular width, as long as the context in which the
   ## rope's being evaluated has at least that much width available.
   result = noTextExtract(pre(s)).setWidth(i)
+
+proc container*(r: Rope): Rope =
+  ## Returns a container with no formatting info; will inherit whatever.
+  result = Rope(kind: RopeTaggedContainer, tag: "", contained: r,
+                noTextExtract: true)
+  
+proc container*(s: string): Rope =
+  ## Returns a container with no formatting info; will inherit whatever.
+  result = container(atom(s))
 
 proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
             caption: Rope = nil, columnInfo: seq[ColInfo] = @[]): Rope =

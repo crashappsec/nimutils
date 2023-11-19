@@ -68,8 +68,8 @@ type
     hang*:                   Option[int]
     lpad*:                   Option[int]
     rpad*:                   Option[int]
-    tmargin*:                Option[int]
-    bmargin*:                Option[int]
+    tpad*:                   Option[int]
+    bpad*:                   Option[int]
     casing*:                 Option[TextCasing]
     bold*:                   Option[bool]
     inverse*:                Option[bool]
@@ -130,6 +130,9 @@ type
     id*:            string
     tag*:           string
     class*:         string
+    style*:         FmtStyle  # Cached 
+    tweak*:         FmtStyle  # temporary
+    processed*:     bool
 
     case kind*: RopeKind
     of RopeAtom:
@@ -163,59 +166,153 @@ type
     width*:     int # Advisory.
     softBreak*: bool
 
+proc `$`*(s: FmtStyle): string =
+  if s == nil:
+    return "<none>"
+  if s.textColor.isSome():
+    result &= "fg=" & s.textColor.get() & "; "
+  if s.bgColor.isSome():
+    result &= "bg=" & s.bgColor.get() & "; "
+  if s.overflow.isSome():
+    case s.overflow.get()
+    of OIgnore:
+      discard
+    of OTruncate:
+      result &= "truncate; "
+    of ODots:
+      result &= "dot truncate; "
+    of Overflow:
+      result &= "nowrap; "
+    of OWrap:
+      result &= "wrap; "
+    of OHardWrap:
+      result &= "hard wrap; "
+    of OIndentWrap:
+      result &= "wrap indent=" & $(s.hang.getOrElse(0)) & "; "
+  if s.lpad.isSome() or s.rpad.isSome() or s.tpad.isSome() or
+     s.bpad.isSome():
+    result &= "pads: l=" & $(s.lpad.get(0)) & "; r=" & $(s.rpad.get(0))
+    result &= " ;t=" & $(s.tpad.get(0)) & " ;b=" & $(s.bpad.get(0)) & "; "
+  if s.casing.isSome():
+    case s.casing.get()
+    of CasingIgnore:
+      discard
+    of CasingAsIs:
+      result &= "casing=asis; "
+    of CasingLower:
+      result &= "casing=lower; "
+    of CasingUpper:
+      result &= "casing=upper; "
+    of CasingTitle:
+      result &= "casing=title; "
+  if s.bold.isSome():
+    case s.bold.get()
+    of true:
+      result &= "bold=y; "
+    else:
+      result &= "bold=n; "
+  if s.inverse.isSome():
+    case s.inverse.get()
+    of true:
+      result &= "inverse=y; "
+    else:
+      result &= "inverse=n; "
+  if s.strikethrough.isSome():
+    case s.strikethrough.get()
+    of true:
+      result &= "strikethru=y; "
+    else:
+      result &= "strikethru=n; "
+  if s.italic.isSome():
+    case s.italic.get()
+    of true:
+      result &= "italic=y; "
+    else:
+      result &= "italic=n; "
+  if s.underlineStyle.isSome():
+    case s.underlineStyle.get()
+    of UnderlineSingle:
+      result &= "uline=yes; "
+    of UnderlineDouble:
+      result &= "uline=double; "
+    of UnderlineNone:
+      result &= "uline=no; "
+    else:
+      discard
+  if s.alignStyle.isSome():
+    case s.alignStyle.get()
+    of AlignL:
+      result &= "align=left; "
+    of AlignR:
+      result &= "align=right; "      
+    of AlignC:
+      result &= "align=center; "      
+    of AlignJ:
+      result &= "align=justify; "      
+    of AlignF:
+      result &= "align=flush; "
+    else:
+      discard
+    
+template genericRopeWalk*(r: Rope, someFunc: untyped, someData: untyped) =
+  # This doesn't invoke r.next so that the caller can do things after 
+  # descending but before calling the next item.
+  if r != nil:
+    case r.kind
+    of RopeBreak:
+      r.guts.somefunc(someData)
+    of RopeLink:
+      r.toHighlight.somefunc(someData)
+    of RopeList:
+      for item in r.items:
+        item.somefunc(someData)
+    of RopeTaggedContainer:
+      r.contained.somefunc(someData)
+    of RopeTable:
+      r.thead.somefunc(someData)
+      r.tbody.somefunc(someData)
+      r.tfoot.somefunc(someData)
+      r.caption.somefunc(someData)
+    of RopeTableRow, RopeTableRows:
+      for item in r.cells:
+        item.somefunc(someData)
+    of RopeFgColor, RopeBgColor:
+      r.toColor.somefunc(someData)
+    else:
+      discard
+
 proc buildWalk(r: Rope, results: var seq[Rope]) =
-  if r == nil:
-    return
-
-  results.add(r)
-
-  case r.kind
-  of RopeBreak:
-    r.guts.buildWalk(results)
-  of RopeLink:
-    r.toHighlight.buildWalk(results)
-  of RopeList:
-    for item in r.items:
-      item.buildWalk(results)
-  of RopeTaggedContainer:
-    r.contained.buildWalk(results)
-  of RopeTable:
-    r.thead.buildWalk(results)
-    r.tbody.buildWalk(results)
-    r.tfoot.buildWalk(results)
-    r.caption.buildWalk(results)
-  of RopeTableRow, RopeTableRows:
-    for item in r.cells:
-      item.buildWalk(results)
-  of RopeFgColor, RopeBgColor:
-    r.toColor.buildWalk(results)
-  else:
-    discard
-
-  r.next.buildWalk(results)
+  # Probably should rewrite to use a stack; this could get called
+  # on some big ropes.
+  if r != nil:
+    results.add(r)  
+    r.genericRopeWalk(buildWalk, results)
+    r.next.buildWalk(results)    
 
 proc ropeWalk*(r: Rope): seq[Rope] =
  r.buildWalk(result)
 
 proc search*(r: Rope,
-             tag   = openarray[string]([]),
-             class = openarray[string]([]),
-             id    = openarray[string]([]),
-             text  = openarray[string]([]),
-             first = false): seq[Rope] =
+             tags    = openarray[string]([]),
+             classes = openarray[string]([]),
+             ids     = openarray[string]([]),
+             text    = openarray[string]([]),
+             first   = false): seq[Rope] =
 
   for item in r.ropeWalk():
-    if item.tag in tag or item.class in class or item.id in id:
+    if item.tag != "" and len(tags) != 0 and item.tag in tags:
       result.add(item)
-      if first:
-        return
+    elif item.class != "" and len(classes) != 0 and item.class in classes:
+      result.add(item)
+    elif item.id != "" and len(ids) != 0 and item.id in ids:
+      result.add(item)
     elif text.len() != 0 and item.kind == RopeAtom:
       for s in text:
         if s in $(item.text):
           result.add(item)
-          if first:
-            return
           break
+    if result.len() == 1 and first:
+      return
 
 proc search*(r: Rope, tag = "", class = "", id = "", text = "",
              first = false): seq[Rope] =
@@ -232,32 +329,13 @@ proc search*(r: Rope, tag = "", class = "", id = "", text = "",
 
   return r.search(tags, classes, ids, texts)
 
-proc debugWalk*(r: Rope): string =
-  var debugId = 0
-  if r != nil:
-    let items = r.ropeWalk()
-    for item in items:
-      if item.id == "":
-        item.id = $(debugId)
-        debugId += 1
+proc searchOne*(r: Rope, tags = @[""], class = @[""], id = @[""], text = @[""]):
+              Option[Rope] =
+  let preResult = r.search(tags, class, id, text, true)
 
-    for item in r.ropeWalk():
-      var one = "id: " & item.id
-
-      if item.kind == RopeAtom:
-        one &= "; text: " & $(item.text)
-      else:
-        one &= "; tag: "
-        if item.tag == "":
-          one &= "<none>; "
-        else:
-          one &= item.tag
-        if item.class != "":
-          one &= "class: " & item.class
-
-      if item.next != nil:
-        one &= " NEXT = " & item.next.id
-      result &= one & "\n"
+  if len(preResult) == 1:
+    return some(preResult[0])
+  
 
 let
   BoxStylePlain* =     BoxStyle(horizontal: Rune(0x2500),
@@ -371,8 +449,8 @@ proc copyStyle*(inStyle: FmtStyle): FmtStyle =
                     hang:                   inStyle.hang,
                     lpad:                   instyle.lpad,
                     rpad:                   instyle.rpad,
-                    tmargin:                inStyle.tmargin,
-                    bmargin:                inStyle.bmargin,
+                    tpad:                   inStyle.tpad,
+                    bpad:                   inStyle.bpad,
                     casing:                 inStyle.casing,
                     bold:                   inStyle.bold,
                     inverse:                inStyle.inverse,

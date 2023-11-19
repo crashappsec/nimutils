@@ -2,11 +2,12 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import unicode, tables, rope_base, rope_construct, options, random, hexdump
+import unicode, tables, rope_base, rope_construct, options, random, hexdump,
+       strutils
 
 proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
                lpad = -1, rpad = -1, casing = CasingIgnore,
-               tmargin = -1, bmargin = -1, bold = BoldIgnore,
+               tpad = -1, bpad = -1, bold = BoldIgnore,
                inverse = InverseIgnore, strikethru = StrikeThruIgnore,
                italic = ItalicIgnore, underline = UnderlineIgnore,
                bulletChar = Rune(0x0000), borders: openarray[BorderOpts] = [],
@@ -70,10 +71,10 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
       result.lpad = some(lpad)
     if rpad >= 0:
       result.rpad = some(rpad)
-    if tmargin >= 0:
-      result.tmargin = some(tmargin)
-    if bmargin >= 0:
-      result.bmargin = some(bmargin)
+    if tpad >= 0:
+      result.tpad = some(tpad)
+    if bpad >= 0:
+      result.bpad = some(bpad)
     if casing != CasingIgnore:
       result.casing = some(casing)
     case bold
@@ -150,10 +151,18 @@ proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
     if align != AlignIgnore:
       result.alignStyle = some(align)
 
-var
-  plainStyle    = FmtStyle(
+const
+  c0Pink   = "hotpink"      # The true color is jazzberry
+  c0Purple = "mediumpurple" # True color is fandango
+  c0Green  = "atomiclime"
+  c0BG     = "darkslategray"
+  c0Text   = "white"
+  c0Inv    = "gainsboro"
+
+let
+  plainStyle*   = FmtStyle(
     textColor: some(""), bgColor: some(""), overflow: some(OWrap),
-    lpad: some(0), rpad: some(0), tmargin: some(0), bmargin: some(0),
+    lpad: some(0), rpad: some(0), tpad: some(0), bpad: some(0),
     casing: some(CasingIgnore), bold: some(false), hang: some(2),
     inverse: some(false), strikethrough: some(false),
     italic: some(false), underlineStyle: some(UnderlineIgnore),
@@ -161,80 +170,79 @@ var
     useRightBorder: some(true), useVerticalSeparator: some(false),
     useHorizontalSeparator: some(false), boxStyle: some(BoxStyleDouble),
     alignStyle: some(AlignIgnore))
-
+var
   defaultStyle* = plainStyle
-  tableDefault  = newStyle(overflow = OWrap, tmargin = 0, bmargin = 0,
-                                                       lpad = 0, rpad = 0)
-
-  styleMap*: Table[string, FmtStyle] = {
-    "container" : newStyle(rpad = 1, lpad = 1),
-    "div"       : newStyle(rpad = 1, lpad = 1, bgColor = "none"),
-    "p"         : newStyle(bmargin = 0),
-    "basic"     : newStyle(bmargin = 0),
-    "h1"        : newStyle(fgColor = "red", bold = BoldOn, align = AlignL,
-                          italic = ItalicOn, casing = CasingUpper, tmargin = 2),
-    "h2"        : newStyle(fgColor = "lime", bgColor = "darkslategray",
-                           tmargin = 1,
-                           bold = BoldOn, align = AlignL, italic = ItalicOn),
-    "h3"        : newStyle(bgColor = "red", fgColor = "white", tmargin = 1,
-                  italic = ItalicOn, bmargin = 0, casing = CasingUpper),
-    "h4"        : newStyle(bgColor = "red", fgColor = "white", tmargin = 1,
-                           italic = ItalicOn, bmargin = 0,
-                           underline = UnderlineSingle, casing = CasingTitle),
-    "h5"        : newStyle(fgColor = "darkslategray", bgColor = "lime",
-                          tmargin = 0, bmargin = 0, italic = ItalicOn,
-                                                 casing = CasingTitle),
-    "h6"        : newStyle(fgColor = "yellow", bgColor = "blue", tmargin = 0,
-                bmargin = 0, underline = UnderlineSingle, casing = CasingTitle),
-    "ol"        : newStyle(bulletChar = Rune('.'), lpad = 2, align = AlignL,
-                           tmargin = 0, bmargin = 0),
-    "ul"        : newStyle(bulletChar = Rune(0x2022), lpad = 2,
-                           tmargin = 1, bmargin = 1, align = AlignL), #•
-    "li"        : newStyle(lpad = 1, overflow = OWrap, align = AlignL,
-                           tmargin = 0, bmargin = 0),
-    "left"      : newStyle(align = AlignL),
-    "right"     : newStyle(align = AlignR),
-    "center"    : newStyle(align = AlignC),
-    "justify"   : newStyle(align = AlignJ),
-    "flush"     : newStyle(align = AlignF),
-    "table"     : newStyle(borders = [BorderAll], tmargin = 1, bmargin = 1,
-                           lpad = 1, rpad = 1, bgColor = "dodgerblue"),
-    "thead"     : tableDefault,
-    "tbody"     : tableDefault,
-    "tfoot"     : tableDefault,
-    "plain"     : plainStyle,
-    "text"      : defaultStyle,
-    "td"        : newStyle(tmargin = 0, bmargin = 0, overflow = OWrap,
-                           align = AlignL, lpad = 1, rpad = 1),
-    "th"        : newStyle(bgColor = "black", bold = BoldOn, overflow = OWrap,
-               casing = CasingUpper, tmargin = 0, bmargin = 0, fgColor = "lime",
-                  lpad = 1, rpad = 1, align = AlignC),
-    "tr"        : newStyle(fgColor = "white", bold = BoldOn, lpad = 0, rpad = 0,
-                           overflow = OWrap, tmargin = 0, bmargin = 0,
-                           bgColor = "dodgerblue"),
-    "tr.even"   : newStyle(fgColor = "white", bgColor = "slategray",
-                            tmargin = 0, overflow = OWrap),
-    "tr.odd"    : newStyle(fgColor = "white", bgColor = "steelblue",
-                            tmargin = 0, overflow = OWrap),
-    "em"        : newStyle(fgColor = "jazzberry", italic = ItalicOn),
-    "italic"    : newStyle(italic = ItalicOn),
-    "i"         : newStyle(italic = ItalicOn),
-    "u"         : newStyle(underline = UnderlineSingle),
-    "underline" : newStyle(underline = UnderlineSingle),
-    "strong"    : newStyle(inverse = InverseOn, italic = ItalicOn),
-    "code"      : newStyle(inverse = InverseOn, italic = ItalicOn),
-    "caption"   : newStyle(bgColor = "black", fgColor = "atomiclime",
-                  lpad = 2, rpad = 3,
-                  tmargin = 0, bmargin = 0, align = AlignC, italic = ItalicOn)
-
+  styleMap* = {
+      "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow= OWrap),
+      "basic"     : newStyle(bpad = 0),
+      "h1"        : newStyle(align = AlignL, italic = ItalicOn, tpad = 2, lpad = 1,
+                             fgColor = "jazzberry", bgColor = "gray"),
+      "h2"        : newStyle(lpad = 1, rpad = 1, tpad = 1, align = AlignL,
+                              italic = ItalicOn, bgColor = "gray", fgColor="lime"),
+      "h3"        : newStyle(italic = ItalicOn, tpad = 1, bpad = 0, lpad = 1,
+                                                                 rpad = 1, bgColor = "gray", fgColor="violet"),
+      "h4"        : newStyle(italic = ItalicOn, lpad = 1, rpad = 1, tpad = 0,
+                             fgColor = "gray", bgColor="jazzberry",
+                             underline = UnderlineSingle, casing = CasingTitle),
+      "h5"        : newStyle(lpad = 1, rpad = 1, tpad = 0, bpad = 0,
+                                                        fgColor = "gray", bgColor="lime",
+                             italic = ItalicOn, underline = UnderlineSingle,
+                             casing = CasingTitle),
+      "h6"        : newStyle(lpad = 1, rpad = 1, tpad = 0, bpad = 0,
+                                                        fgColor = "gray", bgColor="violet",                                                        
+                             underline = UnderlineSingle, casing = CasingTitle),
+      "ol"        : newStyle(bulletChar = Rune('.'), lpad = 3, align = AlignL,
+                             tpad = 1, bpad = 1),
+      "ul"        : newStyle(bulletChar = Rune(0x2022), lpad = 3,
+                             tpad = 1, bpad = 1, align = AlignL), #•
+      "li"        : newStyle(lpad = 1, overflow = OWrap, align = AlignL,
+                             tpad = 0, bpad = 0),
+      "left"      : newStyle(align = AlignL),
+      "right"     : newStyle(align = AlignR),
+      "center"    : newStyle(align = AlignC),
+      "justify"   : newStyle(align = AlignJ),
+      "flush"     : newStyle(align = AlignF),
+      "table"     : newStyle(borders = [BorderTypical], tpad = 1, bpad = 1,
+                             lpad = 1, rpad = 1, bgColor = "royalblue",
+                                              fgColor = "grey"),
+      "thead"     : newStyle(overflow = OWrap, tpad = 0, bpad = 0,
+                             lpad = 0, rpad = 0),
+      "tbody"     : newStyle(overflow = OWrap, tpad = 0, bpad = 0,
+                             lpad = 0, rpad = 0),
+      "tfoot"     : newStyle(overflow = OWrap, tpad = 0, bpad = 0,
+                             lpad = 0, rpad = 0),
+      "plain"     : plainStyle,
+      "text"      : newStyle(overflow = OWrap),
+      "td"        : newStyle(tpad = 0, bpad = 0, overflow = OWrap,
+                     fgColor = "white", align = AlignL, lpad = 1, rpad = 1),
+      "th"        : newStyle(bgColor = "black", bold = BoldOn, overflow = OWrap,
+                             casing = CasingUpper, tpad = 0, bpad = 0,
+                             fgColor = "lime", lpad = 1, rpad = 1,
+                             align = AlignC),
+      "tr"        : newStyle(bold = BoldOn, lpad = 0, rpad = 0,
+                             overflow = OWrap, tpad = 0, bpad = 0),
+      "tr.even"   : newStyle(lpad = 0, rpad = 0, bgColor = "dodgerblue"),
+      "tr.odd"    : newStyle(lpad = 0, rpad = 0, bgColor = "steelblue"),
+      "em"        : newStyle(inverse = InverseOn),
+      "italic"    : newStyle(italic = ItalicOn),
+      "i"         : newStyle(italic = ItalicOn),
+      "u"         : newStyle(underline = UnderlineSingle),
+      "inverse"   : newStyle(inverse = InverseOn),
+      "upper"     : newStyle(casing = CasingUpper),
+      "underline" : newStyle(underline = UnderlineSingle),
+      "strong"    : newStyle(inverse = InverseOn, italic = ItalicOn),
+      "code"      : newStyle(lpad = 2, rpad = 2, tpad = 1, bpad = 1),
+      "caption"   : newStyle(tpad = 1, bpad = 0, align = AlignC,
+                                              bgColor = "black",
+                             fgColor = "tomato", italic = ItalicOn)
     }.toTable()
-
-  perClassStyles*: Table[string, FmtStyle] = {
-    "callout"   : newStyle(fgColor = "fandango", bgColor = "jazzberry",
-                           italic = ItalicOn, casing = CasingTitle)
-    }.toTable()
-
-  perIdStyles*    = Table[string, FmtStyle]()
+    
+  perClassStyles* = {
+      "callout"   : newStyle(fgColor = "fandango", bgColor = "jazzberry",
+                             italic = ItalicOn, casing = CasingTitle)
+    }.toTable()  
+    
+  perIdStyles*:    Table[string, FmtStyle]
 
   breakingStyles*: Table[string, bool] = {
     "container"  : true,
@@ -277,6 +285,76 @@ next_style_id() {
 }
 
 """ .}
+
+var debugId = 0
+
+type WalkInfo = object
+  str: string
+  nest: int
+    
+proc repr(r: Rope, res: var WalkInfo) =
+  if r == nil:
+    return
+
+  var one = ""
+  
+  case r.kind
+  of RopeAtom:
+    one &= "TEXT: " & $(r.text)
+  of RopeLink:
+    one &= "URL: " & r.url
+  of RopeTaggedContainer:
+    if r.tag == "":
+      one &= "<container>: "
+    else:
+      one &= "<" & r.tag & ">: "
+    if r.width != 0:
+      one &= "width = r.width; "
+  of RopeList, RopeTableRow, RopeTableRows:
+    one &= r.tag & ": "
+  of RopeTable:
+    one &= "TABLE: " 
+    if r.thead != nil:
+      one &= "THEAD: " & $(r.thead.cells.len()) & "rows"
+    if r.tbody != nil:
+      one &= "TBODY: " & $(r.tbody.cells.len()) & "rows"
+    if r.tfoot != nil:
+      one &= "TFOOT: " & $(r.tfoot.cells.len()) & "rows"
+  of RopeFgColor:
+    one &= "Change text color: " & r.color
+  of RopeBgColor:
+    one &= "Change background color: " & r.color
+  of RopeBreak:
+    one &= "Break (box end)"
+
+  if r.id == "":
+    r.id = $(debugId)
+    debugId += 1
+  else:
+    if r.id in perIdStyles:
+      one &= " style= " & $(perIdStyles[r.id]) & "; "
+
+  one &= " #" & r.id
+
+  if r.class != "":
+    one &= "; class: " & r.class
+  if r.noTextExtract:
+    one &= " " & $(Rune(0x2586))
+
+  var pad = ' '.repeat(res.nest*2)
+  res.str &= pad & one & "\n"
+  res.nest += 1
+  r.genericRopeWalk(repr, res)
+  res.nest -= 1
+  
+  r.next.repr(res)
+        
+proc repr*(r: Rope): string =
+  var info: WalkInfo
+  
+  r.repr(info)
+  return info.str
+
 
 # I'd love for each style is going to get one unique ID that we can
 # look up in both directions. Currently this won't work in a
@@ -327,10 +405,10 @@ proc mergeStyles*(base: FmtStyle, changes: FmtStyle): FmtStyle =
     result.lpad = changes.lpad
   if changes.rpad.isSome():
     result.rpad = changes.rpad
-  if changes.tmargin.isSome():
-    result.tmargin = changes.tmargin
-  if changes.bmargin.isSome():
-    result.bmargin = changes.bmargin
+  if changes.tpad.isSome():
+    result.tpad = changes.tpad
+  if changes.bpad.isSome():
+    result.bpad = changes.bpad
   if changes.textColor.isSome():
     result.textColor = changes.textColor
   if changes.bgColor.isSome():
@@ -376,6 +454,9 @@ proc isContainer*(r: Rope): bool =
   if r == nil:
     return false
 
+  if r.tag in breakingStyles or r.noTextExtract:
+    return true
+    
   case r.kind
   of RopeAtom, RopeLink, RopeFgColor, RopeBgColor:
     return false
@@ -387,10 +468,7 @@ proc isContainer*(r: Rope): bool =
     else:
       return true
   of RopeTaggedContainer:
-    if r.tag in breakingStyles or r.noTextExtract:
-      return true
-    else:
-      return false
+    return false
 
 template setDefaultStyle*(style: FmtStyle) =
   ## This call allows you to set the default starting style, which is
@@ -459,16 +537,18 @@ proc ropeStyle*(r:     Rope,
 
   if r == nil:
     return
-
+    
   if container and not r.isContainer():
-    return r.findFirstContainer().ropeStyle(style, true, recurse)
+    let c = r.findFirstContainer()
+    discard c.ropeStyle(style, recurse, container)
+    return
 
   if recurse:
     toProcess = r.ropeWalk()
   else:
     toProcess.add(r)
 
-  for item in toProcess:
+  for i, item in toProcess:
     if container:
       if not item.isContainer():
         continue
@@ -490,7 +570,7 @@ proc colPcts*(r: Rope, pcts: openarray[int]): Rope {.discardable.} =
   for item in pcts:
     info.add(ColInfo(span: 1, widthPct: item))
 
-  for item in r.search(tag = ["table"]):
+  for item in r.search(tags = ["table"]):
     item.colInfo = info
 
   return r
@@ -575,29 +655,23 @@ proc fgColor*(s: string, color: string): Rope {.discardable.} =
   ## so should override other settings (e.g., in a table).
   return pre(s).fgColor(color)
 
-proc topMargin*(r: Rope, n: int): Rope {.discardable.} =
-  ## Add a top margin to a Rope object. This will be ignored if the
+proc tpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
+  ## Add a top pad to a Rope object. This will be ignored if the
   ## rope isn't a 'block' of some sort.
-  result = r
-  var tableSet = r.search("table", first = true)
-  if tableSet.len() == 1:
-    tableSet[0].ropeStyle(newStyle(tmargin = n), false)
+  return r.ropeStyle(newStyle(tpad = n), recurse, true)
+  
+proc tpad*(s: string, n: int): Rope {.discardable.} =
+  ## Adds a top pad to a string.
+  return pre(s).tpad(n)
 
-proc topMargin*(s: string, n: int): Rope {.discardable.} =
-  ## Adds a top margin to a string.
-  return pre(s).topMargin(n)
-
-proc bottomMargin*(r: Rope, n: int): Rope {.discardable.} =
-  ## Add a bottom margin to a Rope object. This will be ignored if the
+proc bpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
+  ## Add a bottom pad to a Rope object. This will be ignored if the
   ## rope isn't a 'block' of some sort.
-  result = r
-  var tableSet = r.search("table", first = true)
-  if tableSet.len() == 1:
-    tableSet[0].ropeStyle(newStyle(bmargin = n), false)
+  return r.ropeStyle(newStyle(bpad = n), recurse, true)  
 
-proc bottomMargin*(s: string, n: int): Rope {.discardable.} =
-  ## Adds a bottom margin to a string.
-  return pre(s).bottomMargin(n)
+proc bpad*(s: string, n: int): Rope {.discardable.} =
+  ## Adds a bottom pad to a string.
+  return pre(s).bpad(n)
 
 proc leftPad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Add left padding to a Rope object. This will be ignored if the
@@ -800,7 +874,7 @@ proc underline*(s: string): Rope =
 proc align*(r: Rope, kind: AlignStyle, recurse = false): Rope {.discardable.} =
   ## Sets alignment preference for a rope as specified.  Does NOT
   ## recurse into children by default.
-  return r.ropeStyle(newStyle(align = kind), recurse)
+  return r.ropeStyle(newStyle(align = kind), recurse, true)
 
 proc align*(s: string, kind: AlignStyle): Rope =
   return pre(s).align(kind)
@@ -808,7 +882,7 @@ proc align*(s: string, kind: AlignStyle): Rope =
 proc center*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Centers a node. Unless recurse is on, this will only set the
   ## preference on the top rope, not any children.
-  return r.ropeStyle(newStyle(align = AlignC), recurse)
+  return r.ropeStyle(newStyle(align = AlignC), recurse, true)
 
 proc center*(s: string): Rope =
   return pre(s).center()
@@ -816,7 +890,7 @@ proc center*(s: string): Rope =
 proc right*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Right-justifies a node. Unless recurse is on, this will only set
   ## the preference on the top rope, not any children.
-  return r.ropeStyle(newStyle(align = AlignR), recurse)
+  return r.ropeStyle(newStyle(align = AlignR), recurse, true)
 
 proc right*(s: string): Rope =
   return pre(s).right()
@@ -824,7 +898,7 @@ proc right*(s: string): Rope =
 proc left*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Left-justifies a node. Unless recurse is on, this will only set
   ## the preference on the top rope, not any children.
-  return r.ropeStyle(newStyle(align = AlignL), recurse)
+  return r.ropeStyle(newStyle(align = AlignL), recurse, true)
 
 proc left*(s: string): Rope =
   return pre(s).left()
@@ -834,7 +908,7 @@ proc justify*(r: Rope, recurse = false): Rope {.discardable.} =
   ## both on the left and the right), except for any trailing
   ## line. Unless recurse is on, this will only set the preference on
   ## the top rope, not any children.
-  return r.ropeStyle(newStyle(align = AlignJ), recurse)
+  return r.ropeStyle(newStyle(align = AlignJ), recurse, true)
 
 proc justify*(s: string): Rope =
   return pre(s).justify()
@@ -847,3 +921,88 @@ proc flushJustify*(r: Rope, recurse = false): Rope {.discardable.} =
 
 proc flushJustify*(s: string): Rope =
   return pre(s).justify()
+
+
+proc installTheme*(tagStyles:   var Table[string, FmtStyle],
+                   classStyles: var Table[string, FmtStyle]) =
+  ## Replace all of the styles used.
+  styleMap       = tagStyles
+  perClassStyles = classStyles
+
+proc useCrashTheme*() =
+  var
+    tableDefault  = newStyle(overflow = OWrap, tpad = 0, bpad = 0,
+                             lpad = 0, rpad = 0, fgColor = c0Text)
+    tagStyles     = {
+      "container" : newStyle(bgColor = c0Bg, fgColor = c0Text),
+      "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow= OWrap, 
+                             bgColor = c0Bg, fgColor = c0Text),
+      "basic"     : newStyle(bpad = 0, bgColor = c0BG, fgColor = c0Text),
+      "h1"        : newStyle(bgColor = c0Pink, align = AlignL,
+                             italic = ItalicOn, fgColor = c0Inv, tpad = 2,
+                             lpad = 1, rpad = 1),
+      "h2"        : newStyle(bgColor = c0Green, fgColor = "black", lpad = 1,
+                             rpad = 1, tpad = 1, align = AlignL,
+                             italic = ItalicOn),
+      "h3"        : newStyle(bgColor = c0Purple, fgColor = c0Inv, tpad = 1,
+                             italic = ItalicOn, bpad = 0, lpad = 1, rpad = 1),
+      "h4"        : newStyle(bgColor = c0Inv, fgColor = c0Pink, tpad = 0,
+                             italic = ItalicOn, lpad = 1, rpad = 1,
+                             underline = UnderlineSingle, casing = CasingTitle),
+      "h5"        : newStyle(fgColor = "black", bgColor = c0Green,
+                             lpad = 1, rpad = 1, tpad = 0, bpad = 0,
+                             italic = ItalicOn, underline = UnderlineSingle,
+                             casing = CasingTitle),
+      "h6"        : newStyle(fgColor = c0Purple, bgColor = c0Inv, lpad = 1,
+                             rpad = 1, tpad = 0, bpad = 0,
+                             underline = UnderlineSingle, casing = CasingTitle),
+      "ol"        : newStyle(bulletChar = Rune('.'), lpad = 3, align = AlignL,
+                             tpad = 1, bpad = 1),
+      "ul"        : newStyle(bulletChar = Rune(0x2022), lpad = 3,
+                             tpad = 1, bpad = 1, align = AlignL), #•
+      "li"        : newStyle(lpad = 1, overflow = OWrap, align = AlignL,
+                             tpad = 0, bpad = 0),
+      "left"      : newStyle(align = AlignL),
+      "right"     : newStyle(align = AlignR),
+      "center"    : newStyle(align = AlignC),
+      "justify"   : newStyle(align = AlignJ),
+      "flush"     : newStyle(align = AlignF),
+      "table"     : newStyle(borders = [BorderAll], tpad = 1, bpad = 1,
+                             lpad = 1, rpad = 1, fgColor = c0Text,
+                             bgColor = c0Pink),
+      "thead"     : tableDefault,
+      "tbody"     : tableDefault,
+      "tfoot"     : tableDefault,
+      "plain"     : plainStyle,
+      "text"      : newStyle(overflow = OWrap, bgColor = c0Bg,
+                             fgColor = c0Text),
+      "td"        : newStyle(tpad = 0, bpad = 0, overflow = OWrap,
+                             fgColor = c0Text, align = AlignL, lpad = 1,
+                             rpad = 1),
+      "th"        : newStyle(bgColor = "black", bold = BoldOn, overflow = OWrap,
+                           casing = CasingUpper, tpad = 1, bpad = 0,
+                           fgColor = c0Green, lpad = 1, rpad = 1, align = AlignC),
+      "tr"        : newStyle(bold = BoldOn, lpad = 0, rpad = 0,
+                             overflow = OWrap, tpad = 0, bpad = 0),
+      "tr.even"   : newStyle(bgColor = c0Purple, lpad = 0, rpad = 0),
+      "tr.odd"    : newStyle(bgColor = "fandango", lpad = 0, rpad = 0),
+      "em"        : newStyle(inverse = InverseOn),
+      "italic"    : newStyle(italic = ItalicOn),
+      "i"         : newStyle(italic = ItalicOn),
+      "u"         : newStyle(underline = UnderlineSingle),
+      "inverse"   : newStyle(inverse = InverseOn),
+      "upper"     : newStyle(casing = CasingUpper),
+      "underline" : newStyle(underline = UnderlineSingle),
+      "strong"    : newStyle(inverse = InverseOn, italic = ItalicOn),
+      "code"      : newStyle(lpad = 2, rpad = 2, tpad = 1, bpad = 1),
+      "caption"   : newStyle(bgColor = "black", fgColor = c0Green,
+                             tpad = 1, bpad = 0, align = AlignC,
+                             italic = ItalicOn)
+    }.toTable()
+    
+    classStyles = {
+      "callout"   : newStyle(fgColor = "fandango", bgColor = "jazzberry",
+                             italic = ItalicOn, casing = CasingTitle)
+    }.toTable()
+
+  installTheme(tagStyles, classStyles)

@@ -69,7 +69,7 @@ proc ansiStyleInfo(b: TextPlane, ch: uint32): AnsiStyleInfo =
         codes.add("48;5;" & $(bgCode))
 
   if len(codes) > 0:
-    result.ansiStart = "\e[" & codes.join(";") & "m"
+    result.ansiStart = "\e[0m\e[" & codes.join(";") & "m"
   else:
     result.ansiStart = "\e[0m"
 
@@ -108,7 +108,6 @@ proc preRenderBoxToAnsiString*(b: TextPlane, noColor = false): string =
         else:
           styleInfo = b.ansiStyleInfo(ch)
         if canColor():
-          result &= ansiReset()
           result &= styleInfo.ansiStart
         if styleInfo.casing == CasingTitle:
           shouldTitle = true
@@ -135,9 +134,13 @@ proc preRenderBoxToAnsiString*(b: TextPlane, noColor = false): string =
         else:
           result &= $(Rune(ch))
     if not b.softBreak:
-      result &= "\n"
-    if canColor():
-      result &= ansiReset()
+      if canColor():
+        result &= ansiReset() & "\r\n"
+      elif canColor():
+        result &= ansiReset()
+  if canColor():
+    result &= ansiReset()
+
 
 template render(r: Rope, width: int, showLinks: bool, style: FmtStyle,
                 ensureNl: bool, noColor: bool, outerPad: bool): string =

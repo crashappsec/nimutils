@@ -106,8 +106,8 @@ proc filterEmptyColumns*(inrows: seq[seq[string]],
 
   return (newRows, returnedHeaders)
 
-proc instantTable*[T: string|Rope](cells: openarray[T], tableCaption = Rope(nil),
-                                    width = -1, borders = BorderAll,
+proc instantTable*[T: string|Rope](cells: openarray[T], caption = Rope(nil),
+                                    width = 0, borders = BorderAll,
                                     boxStyle = BoxStyleDouble): Rope =
   ## Given a flat list of items to format into a table, figures out how
   ## many equal-sized columns fit cleanly into the available width, given
@@ -133,8 +133,11 @@ proc instantTable*[T: string|Rope](cells: openarray[T], tableCaption = Rope(nil)
       maxWidth = w
 
   numcol = remainingWidth div (maxWidth + 3)
-
+  
   if numcol == 0: numcol = 1
+  if numcol > cells.len():
+    numcol = cells.len()
+    
 
   for i, item in cells:
     if i != 0 and i mod numcol == 0:
@@ -149,11 +152,15 @@ proc instantTable*[T: string|Rope](cells: openarray[T], tableCaption = Rope(nil)
 
   rows.add(tr(row))
 
-  result = table(tbody(rows), caption = tableCaption)
+  result = table(tbody(rows), caption = caption(caption))
   result = result.setBorders(borders).boxStyle(boxStyle)
   result = result.setWidth(remainingWidth)
-
-template instantTableNoHeaders[T: string|Rope](cells: seq[seq[T]],
+  
+proc instantTable*[T: string|Rope](cells: openarray[T], caption: string,
+                                    width = 0, borders = BorderAll,
+                                    boxStyle = BoxStyleDouble): Rope =
+  result = instantTable[T](cells, atom(caption), width, borders, boxStyle)  
+template quickTableNoHeaders[T: string|Rope](cells: seq[seq[T]],
                                                tableCaption: Rope): Rope =
   var
     row:  seq[Rope] = @[]
@@ -165,9 +172,9 @@ template instantTableNoHeaders[T: string|Rope](cells: seq[seq[T]],
     rows.add(tr(row))
     row = @[]
 
-  colors(table(tbody(rows), thead(@[]), caption = tableCaption))
+  colors(table(tbody(rows), thead(@[]), caption = caption(tableCaption)))
 
-template instantTableHorizontalHeaders[T: string|Rope](cells: seq[seq[T]],
+template quickTableHorizontalHeaders[T: string|Rope](cells: seq[seq[T]],
                                                     tableCaption: Rope): Rope =
   var
     row:  seq[Rope] = @[]
@@ -183,10 +190,10 @@ template instantTableHorizontalHeaders[T: string|Rope](cells: seq[seq[T]],
     rows.add(tr(row))
     row = @[]
 
-  table(tbody(rows), caption = tableCaption)
+  table(tbody(rows), caption = caption(tableCaption))
 
-template instantTableVerticalHeaders[T: string|Rope](cells: seq[seq[T]],
-                                                     tableCaption: Rope): Rope =
+template quickTableVerticalHeaders[T: string|Rope](cells: seq[seq[T]],
+                                                   tableCaption: Rope): Rope =
   var
     row:  seq[Rope] = @[]
     rows: seq[Rope] = @[]
@@ -200,42 +207,48 @@ template instantTableVerticalHeaders[T: string|Rope](cells: seq[seq[T]],
     rows.add(tr(row))
     row = @[]
 
-  table(tbody(rows), caption = tableCaption)
+  table(tbody(rows), caption = caption(tableCaption))
 
 proc quickTable*[T: string|Rope](cells: seq[seq[T]], verticalHeaders = false,
-         noheaders = false, caption = Rope(nil), width = -1,
+         noheaders = false, caption = Rope(nil), width = 0,
          borders = BorderAll, boxStyle = BoxStyleDouble,
-                   colPcts: seq[int] = @[]): Rope =
+                     colPcts: seq[int] = @[]): Rope =
   if cells.len() == 0:
     raise newException(ValueError, "No cells passed")
 
   if noHeaders:
-    result = colors(cells.instantTableNoHeaders(caption))
+    result = colors(cells.quickTableNoHeaders(caption))
+
   elif not verticalHeaders:
-    result = colors(cells.instantTableHorizontalHeaders(caption))
+    result = colors(cells.quickTableHorizontalHeaders(caption))
   else:
-    result = colors(cells.instantTableVerticalHeaders(caption))
+    result = colors(cells.quickTableVerticalHeaders(caption))
 
   result.setBorders(borders).boxStyle(boxStyle)
-
-  if cells.len() == 1 and cells[0].len() == 1:
-    # Special treatment for callouts.
-    result.setClass("callout", recurse = true)
 
   if colPcts.len() != 0:
     result.colPcts(colPcts)
 
-  if width >= 0:
+  if width != 0:
     result = result.setWidth(width)
 
+proc quickTable*[T: string|Rope](cells: seq[seq[T]], caption: string,
+         verticalHeaders = false, noheaders = false, width = 0,
+         borders = BorderAll, boxStyle = BoxStyleDouble,
+                     colPcts: seq[int] = @[]): Rope =
+  return quickTable[T](cells, verticalHeaders, noheaders,
+                       atom(caption), width, borders, boxStyle, colPcts)
 
-template instantTableWithHeaders*(cells: seq[seq[string]], horizontal = true,
-                                  caption = Rope(nil)): string =
-  ## Deprecated, for compatability with older con4m.
-  $(instantTable(cells, horizontal, true, caption))
+proc callOut*[T: string | Rope](contents: T, width = 0, borders = BorderAll,
+                                boxStyle = BoxStyleDouble): Rope =
+  var box = container(contents)
 
+  box.center.tpad(1).bpad(1).lpad(1).rpad(1)
+  
+  result = quickTable(@[@[box]], false, false, Rope(nil), width, borders,
+                      boxStyle)
 
-proc callOut*[T: string | Rope](contents: T, width = -1, borders = BorderAll,
-                                                     boxStyle = BoxStyleDouble): Rope =
-    result = quickTable(@[@[contents.center()]], false, false, Rope(nil),
-                         width, borders, boxStyle)
+  result.searchOne(@["th", "td"]).get().tpad(0).bpad(0)
+  
+  for item in result.ropeWalk():
+    item.class = "callout"
