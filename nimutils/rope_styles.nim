@@ -356,7 +356,10 @@ var
       "underline" : newStyle(underline = UnderlineSingle),
       "strong"    : newStyle(inverse = InverseOn, italic = ItalicOn),
       "code"      : newStyle(lpad = 2, rpad = 2, tpad = 1, bpad = 1),
-      "caption"   : newStyle(tpad = 1, bpad = 0, align = AlignC,
+      "caption"   : newStyle(bpad = 1, tpad = 0, align = AlignC,
+                             bgColor = "black", fgColor = "tomato",
+                             italic = ItalicOn),
+      "title"     : newStyle(tpad = 1, bpad = 0, align = AlignC,
                              bgColor = "black", fgColor = "tomato",
                              italic = ItalicOn)
     }.toTable()
@@ -1168,8 +1171,11 @@ proc useCrashTheme*() =
       "underline" : newStyle(underline = UnderlineSingle),
       "strong"    : newStyle(inverse = InverseOn, italic = ItalicOn),
       "code"      : newStyle(lpad = 2, rpad = 2, tpad = 1, bpad = 1),
-      "caption"   : newStyle(bgColor = "black", fgColor = c0Green,
+      "title"     : newStyle(bgColor = "black", fgColor = c0Green,
                              tpad = 1, bpad = 0, align = AlignC,
+                             italic = ItalicOn),
+      "caption"   : newStyle(bgColor = "black", fgColor = c0Green,
+                             bpad = 1, tpad = 0, align = AlignC,
                              italic = ItalicOn)
     }.toTable()
     

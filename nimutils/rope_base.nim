@@ -154,6 +154,7 @@ type
       thead*:   Rope # RopeTableRows
       tbody*:   Rope # RopeTableRows
       tfoot*:   Rope # RopeTableRows
+      title*:   Rope # RopeTaggedContainer
       caption*: Rope # RopeTaggedContainer
     of RopeTableRow, RopeTableRows:
       cells*: seq[Rope]
@@ -272,6 +273,7 @@ template genericRopeWalk*(r: Rope, someFunc: untyped, someData: untyped) =
       r.thead.somefunc(someData)
       r.tbody.somefunc(someData)
       r.tfoot.somefunc(someData)
+      r.title.somefunc(someData)
       r.caption.somefunc(someData)
     of RopeTableRow, RopeTableRows:
       for item in r.cells:

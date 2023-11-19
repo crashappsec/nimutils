@@ -596,7 +596,11 @@ proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
       let toAdd = state.styleRunes(topBorder)
       result[0].contents.lines = @[toAdd] & result[0].contents.lines
 
-    if r.caption != Rope(nil):
+    if state.curStyle.useBottomBorder.getOrElse(false):
+      let toAdd = state.styleRunes(lowBorder)
+      result[^1].contents.lines.add(toAdd)
+
+    if r.caption != Rope(nil) or r.title != Rope(nil):
       # Need to constrain the caption's width to not overhang the border.
       var borderLen = 0
       for c in colWidths:
@@ -608,12 +612,11 @@ proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
       if state.curStyle.useRightBorder.getOrElse(false):
         borderLen += 1
       withWidth(borderLen):
-        result = state.preRender(r.caption) & result
-      
-    if state.curStyle.useBottomBorder.getOrElse(false):
-      let toAdd = state.styleRunes(lowBorder)
-      result[^1].contents.lines.add(toAdd)
-      
+        if r.title != nil:
+          result = state.preRender(r.title) & result
+        if r.caption != nil:
+          result &= state.preRender(r.caption)
+
     state.popTableWidths()
 
 proc emptyTableCell(state: var FmtState): seq[RenderBox] =

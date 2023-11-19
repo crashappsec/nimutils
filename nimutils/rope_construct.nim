@@ -117,6 +117,9 @@ proc refCopy*(dst: var Rope, src: Rope) =
     if src.tfoot != nil:
       dst.tfoot = Rope()
       refCopy(dst.tfoot, src.tfoot)
+    if src.title != nil:
+      dst.title = Rope()
+      refCopy(dst.caption, src.caption)
     if src.caption != nil:
       dst.caption = Rope()
       refCopy(dst.caption, src.caption)
@@ -310,6 +313,8 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
         let asRope = item.htmlTreeToRope(pre)
         case asRope.kind
         of RopeTaggedContainer:
+          if asRope.tag == "title":
+            result.title = asRope
           if asRope.tag == "caption":
             result.caption = asRope
           else:
@@ -552,16 +557,17 @@ proc container*(s: string): Rope =
   ## Returns a container with no formatting info; will inherit whatever.
   result = container(atom(s))
 
-proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
-            caption: Rope = nil, columnInfo: seq[ColInfo] = @[]): Rope =
+proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil, 
+            title: Rope = nil, caption: Rope = nil,
+             columnInfo: seq[ColInfo] = @[]): Rope =
   ## Generates a Rope that outputs a table. The content parameters
   ## must be created by tbody(), thead() or tfoot(), or else you will
   ## get an error from the internals (we do not explicitly check for
   ## this mistake right now).
   ##
-  ## For the caption, you *should* provide a caption() object if you
-  ## want it to be styled appropriately, but this one should not error
-  ## if you don't.
+  ## For the title/caption, you *should* provide a title/caption()
+  ## object if you want it to be styled appropriately, but this one
+  ## should not error if you don't.
   ##
   ## The `columnInfo` field can be set by calling `colPcts`
   ## (currently, we only support percentage based widths, and do not
@@ -571,8 +577,8 @@ proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
   ## applied the way you might expect. To counter that, We wrapped
   ## tables in a generic `container()` node.
   result = container(Rope(kind: RopeTable, tag: "table", tbody: tbody,
-                          thead: thead, tfoot: tfoot, caption: caption,
-                          colInfo: columnInfo))
+                          thead: thead, tfoot: tfoot, title: title,
+                          caption: caption, colInfo: columnInfo))
 
 
 proc colPcts*(input: openarray[(int, bool)]): seq[ColInfo] =

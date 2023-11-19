@@ -371,15 +371,18 @@ is really long. I mean, really long, long enough to drive the other column into
 
     let
       wi = [(12, true), (40, false), (0, false), (12, true)]
-      t2 = quickTable(mess2, caption = h2("Table with horizontal header")).
+      t2 = quickTable(mess2, title = h2("Table with horizontal header"),
+                      caption = h2("Table with horizontal header")).
              tpad(1).typicalBorders().colWidths(wi)
     print(t2)
 
     let t3 = quickTable(mess2, verticalHeaders = true,
+                       title = h2("Table with vertical header"),
                        caption = h2("Table with vertical header"))
     print(t3.typicalBorders())
 
     let t4 = quickTable(mess2, noheaders = true,
+                          title = h2("Table w/o header"),
                           caption = h2("Table w/o header")).
              bpad(1).boldBorders().allBorders()
     print(t4)
