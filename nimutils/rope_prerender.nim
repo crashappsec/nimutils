@@ -525,14 +525,18 @@ proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
     else:
       sum += totalWidths[i]
 
+  var proportionalSpace = available
+
   for i, width in maxWidths:
     if happy[i]: 
       continue
     if available <= 0:
       break
       
-    var v = ((totalWidths[i] * 100) div sum) - 4
-
+    var 
+      myPct = (totalWidths[i] * 100) div sum
+      v     = (myPct * proportionalSpace) div 100
+    
     if v > maxWidths[i]:
       v = maxWidths[i]
       happy[i] = true
