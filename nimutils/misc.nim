@@ -121,3 +121,12 @@ proc bytesToString*(bytes: pointer, l: int): string =
     return ""
   result = newString(l)
   copyMem(result[0].addr, bytes, l)
+
+proc delByValue*[T](s: var seq[T], x: T): bool {.discardable.} =
+  let ix = s.find(x)
+  if ix == -1:
+    return false
+
+  s.delete(ix)
+
+  return true  
