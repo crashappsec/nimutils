@@ -143,103 +143,13 @@ proc preRenderBoxToAnsiString*(b: TextPlane, noColor = false): string =
 
 
 template render(r: Rope, width: int, showLinks: bool, style: FmtStyle,
-                ensureNl: bool, noColor: bool, outerPad: bool): string =
+                ensureNl: bool, noColor: bool): string =
   var toRender: Rope
   if ensureNl and r.noBoxRequired():
     toRender = ensureNewline(r)
   else:
     toRender = r
-  toRender.preRender(width, showLinks, style, outerPad).
-           preRenderBoxToAnsiString(noColor)
-
-template stylizeMd*(s: string, width = 0, showLinks = false,
-                    ensureNl = true, style = defaultStyle,
-                               noColor = false, outerPad = true): string =
-  s.htmlStringToRope().
-    render(width, showLinks, style, ensureNl, noColor, outerPad)
-
-template stylizeHtml*(s: string, width = 0, showLinks = false,
-                      ensureNl = true, style = defaultStyle,
-                                 noColor = false, outerPad = true): string =
-  s.htmlStringToRope(false).
-    render(width, showLinks, style, ensureNl, noColor, outerPad)
-
-proc stylize*(s: string, width = -1, showLinks = false, ensureNl = true,
-              style = defaultStyle, noColor = false, outerPad = true): string =
-  ## Apply a full style object to a string, using the passed style.
-  ## Does not process Markdown or HTML.
-  ##
-  ## Deprecated; use the style API instead.
-  ##
-  ## Returns a string.
-  ##
-  ## Note that you should never pass strings with control codes to
-  ## this API. It will not get considered in the state machine /
-  ## processing done. Not only should you avoid manually adding
-  ## control codes, this also means you should never feed the output
-  ## of this API back into the API.
-  return pre(s).render(width, showLinks, style, ensureNl, noColor, outerPad)
-
-proc stylize*(s: string, tag: string, width = -1, showLinks = false,
-              ensureNl = true, style = defaultStyle, noColor = false,
-              outerPad = true): string =
-  ## Apply a full style object to a string, specifying a `tag` to
-  ## use (an html tag) for the style. Does not process Markdown or
-  ## HTML.
-  ##
-  ## Deprecated; use the style API instead.
-  ##
-  ## If passed, `style` should be a style object that will be the
-  ## starting style (after layering it on top of the default style).
-  ##
-  ## Any stored style associated with the `tag` parameter will get
-  ## applied AFTER the style object.
-  ##
-  ## Returns a string.
-  ##
-  ## Note that you should never pass strings with control codes to
-  ## this API. It will not get considered in the state machine /
-  ## processing done. Not only should you avoid manually adding
-  ## control codes, this also means you should never feed the output
-  ## of this API back into the API.
-  var r: Rope
-
-  if tag != "":
-    r = Rope(kind: RopeTaggedContainer, tag: tag,
-                 contained: Rope(kind: RopeAtom, text: s.toRunes()))
-  else:
-    r = Rope(kind: RopeAtom, text: s.toRunes())
-
-  return r.render(width, showLinks, style, ensureNl, noColor, outerPad)
-
-proc withColor*(s: string, fg: string, bg = ""): string =
-  ## Deprecated.
-  ##
-  ## The style API allows you to apply color, chaining the results,
-  ## but has more extensive options than color.
-  ##
-  ## To replace both the fg color and bg color, do:
-  ## s.fgColor("red").bgColor("white")
-  ##
-  ## Or, clear the colors with defaultFg() and defaultBg()
-  ##
-  ## Note that you should never pass strings with control codes to
-  ## this API. It will not get considered in the state machine /
-  ## processing done. Not only should you avoid manually adding
-  ## control codes, this also means you should never feed the output
-  ## of this API back into the API.
-
-
-  if fg == "" and bg == "":
-    result = s
-  else:
-    result =  s.stylize(ensureNl = false, style = newStyle(fgColor = fg,
-                        bgColor = bg))
-
-proc `$`*(r: Rope, width = 0, ensureNl = false, showLinks = false,
-          style = defaultStyle, noColor = false, outerPad = true): string =
-  ## Default rope-to-string output function.
-  return r.render(width, showLinks, style, ensureNl, noColor, outerPad)
+  toRender.preRender(width, showLinks, style).preRenderBoxToAnsiString(noColor)
 
 proc setvbuf(f: File, buf: pointer, t: cint, s: cint): cint {. importc,
                                                     header: "<stdio.h>" .}
@@ -250,9 +160,55 @@ proc unbufferIo*() =
     discard setvbuf(stderr, nil, cint(2), 0)
     discard setvbuf(stdin, nil, cint(2), 0)
 
-proc print*(s: string, file = stdout, forceMd = false, width = 0,
-            ensureNl = true, showLinks = false, style = defaultStyle,
-            noAutoDetect = false, noColor = false, outerPad = true) =
+proc `$`*(r: Rope, width = 0, ensureNl = false, showLinks = false,
+           noColor = false, style = defaultStyle): string =
+  ## The default rope-to-string output function.
+  ## 
+  ## `width` sets the output width to render into. If it's zero or
+  ## less, then it's interpreted as an offset from the current
+  ## terminal width. Tho generally you should just create a box with
+  ## the padding you'd like.
+  ##
+  ## `ensureNl` will put a newline at the end of the result if the
+  ## output wouldn't otherwise have one.
+  ##
+  ## If there are links (e.g., from html), `showLinks` will output
+  ## them as if in a markdown doc.
+  ## 
+  ## The `noColor` flag will inhibit any ansi codes, despite any
+  ## global settings allowing color.
+  ##
+  ## The `style` parameter allows you to override elements of the
+  ## default starting style. However, it does NOT override any style
+  ## formatting set. To do that, use the style API.
+  return r.render(width, showLinks, style, ensureNl, noColor)
+
+proc print*(r: Rope, file = stdout, width = 0, ensureNl = true,
+            showLinks = false, noColor = false, style = defaultStyle) =
+  ## `width` sets the output width to render into. If it's zero or
+  ## less, then it's interpreted as an offset from the current
+  ## terminal width. Tho generally you should just create a box with
+  ## the padding you'd like.
+  ##
+  ## `ensureNl` will put a newline at the end of the result if the
+  ## output wouldn't otherwise have one.
+  ##
+  ## If there are links (e.g., from html), `showLinks` will output
+  ## them as if in a markdown doc.
+  ## 
+  ## The `noColor` flag will inhibit any ansi codes, despite any
+  ## global settings allowing color.
+  ##
+  ## The `style` parameter allows you to override elements of the
+  ## default starting style. However, it does NOT override any style
+  ## formatting set. To do that, use the style API.
+
+  unbufferIo()
+  file.write(r.render(width, showLinks, style, ensureNl, noColor))
+
+proc print*(s: string, file = stdout, forceMd = false, forceHtml = false,
+            width = 0, ensureNl = true, showLinks = false, detect = true, 
+            noColor = false, pre = true, style = defaultStyle) =
   unbufferIo()
   ## Much like `echo()`, but more capable in terms of the processing
   ## you can do.
@@ -261,24 +217,24 @@ proc print*(s: string, file = stdout, forceMd = false, width = 0,
   ## it for the terminal to the current terminal width. It can also
   ## apply foreground/background colors, and other styling.
   ##
-  ## If a string to print starts with '#', it's assumed to be Markdown
-  ## (HTML if it starts with '<'). To always skip conversion, then set
-  ## `noAutoDetect = true`.
+  ## If a string to print starts with '#' (it's first non-space
+  ## character), it's assumed to be Markdown (HTML if it starts with
+  ## '<'). To always skip conversion, then set `detect = false`.
   ##
   ## If you know your string might contain Markdown or HTML, but might
   ## not start with a special character, you can instead set
-  ## `forceMd = true`.
+  ## `forceMd = true`, or `forceHtml = true`.
   ##
   ## Generally, the terminal width is automatically queried at the
   ## time you call `print()`, but the `width` parameter allows you
   ## to render to a particular width.
   ##
+  ## If you pass the `ensureNl` flag, you're asking to ensure that the
+  ## output a trailing new line, even if the input doesn't end with a
+  ## break.
+  ##
   ## When true, `showLinks` currently will render both the URL and the
   ## text in an html <a> element, using a markdown-like syntax.
-  ##
-  ## The `style` parameter allows you to override elements of the
-  ## default starting style. However, it does NOT override any style
-  ## formatting set. To do that, use the style API.
   ##
   ## Unlike `echo()`, where inputs to print can be comma separated,
   ## and are automatically converted to strings, `print()` only
@@ -287,6 +243,19 @@ proc print*(s: string, file = stdout, forceMd = false, width = 0,
   ##
   ## The `noColor` flag will inhibit any ansi codes, despite any
   ## global settings allowing color.
+  ##
+  ## When `pre` is true, newlines in the input will be
+  ## preserved. Otherwise, the text is treated like html, where the
+  ## text is expected to be wrapped-- in this mode, you need TWO
+  ## consecutive newlines to get a newline in the output.
+  ##
+  ## In both cases, tabs are *always* converted to four spaces. Giving
+  ## semantics based on tab stops would increase complexity a lot and
+  ## we don't want to support it.
+  ##
+  ## The `style` parameter allows you to override elements of the
+  ## default starting style. However, it does NOT override any style
+  ## formatting set. To do that, use the style API.
   ##
   ## Do not pass strings with control codes as inputs.
   ##
@@ -302,18 +271,16 @@ proc print*(s: string, file = stdout, forceMd = false, width = 0,
     # But we avoid a linear scan of the entire string.
     file.write(s)
     return
-  var toWrite: string
+  var 
+    toWrite:  string
+    toRender: Rope
 
-  if forceMd or ((not noAutoDetect) and len(s) > 1 and s[0] == '#'):
-    toWrite = s.stylizeMd(width, showLinks, ensureNl, style, noColor, outerPad)
-  elif len(s) >= 1 and s[0] == '<':
-    toWrite = s.stylizeHtml(width, showLinks, ensureNl, style, noColor, outerPad)
+  if forceMd:
+    toRender = markdown(s)
+  elif forceHtml:
+    toRender = html(s)
   else:
-    toWrite = pre(s).render(width, showLinks, style, ensureNl, noColor, outerPad)
-  file.write(toWrite)
+    toRender = text(s, pre, detect)
+   
+  file.write(toRender.render(width, showLinks, style, ensureNl, noColor))
 
-proc print*(r: Rope, file = stdout, width = -1, ensureNl = true,
-            showLinks = false, style = defaultStyle, noColor = false,
-            outerPad = true) =
-  unbufferIo()
-  file.write(r.render(width, showLinks, style, ensureNl, noColor, outerPad))

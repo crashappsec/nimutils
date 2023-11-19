@@ -151,6 +151,7 @@ type
       width*:      int  # Requested width in columns for a container.
     of RopeTable:
       colInfo*: seq[ColInfo]
+      numCols*: int
       thead*:   Rope # RopeTableRows
       tbody*:   Rope # RopeTableRows
       tfoot*:   Rope # RopeTableRows
@@ -335,140 +336,6 @@ proc searchOne*(r: Rope, tags = @[""], class = @[""], id = @[""], text = @[""]):
 
   if len(preResult) == 1:
     return some(preResult[0])
-  
-
-let
-  BoxStylePlain* =     BoxStyle(horizontal: Rune(0x2500),
-                                vertical:   Rune(0x2502),
-                                upperLeft:  Rune(0x250c),
-                                upperRight: Rune(0x2510),
-                                lowerLeft:  Rune(0x2514),
-                                lowerRight: Rune(0x2518),
-                                cross:      Rune(0x253c),
-                                topT:       Rune(0x252c),
-                                bottomT:    Rune(0x2534),
-                                leftT:      Rune(0x251c),
-                                rightT:     Rune(0x2524))
-  BoxStyleBold* =      BoxStyle(horizontal: Rune(0x2501),
-                                vertical:   Rune(0x2503),
-                                upperLeft:  Rune(0x250f),
-                                upperRight: Rune(0x2513),
-                                lowerLeft:  Rune(0x2517),
-                                lowerRight: Rune(0x251b),
-                                cross:      Rune(0x254b),
-                                topT:       Rune(0x2533),
-                                bottomT:    Rune(0x253b),
-                                leftT:      Rune(0x2523),
-                                rightT:     Rune(0x252b))
-  BoxStyleDouble* =    BoxStyle(horizontal: Rune(0x2550),
-                                vertical:   Rune(0x2551),
-                                upperLeft:  Rune(0x2554),
-                                upperRight: Rune(0x2557),
-                                lowerLeft:  Rune(0x255a),
-                                lowerRight: Rune(0x255d),
-                                cross:      Rune(0x256c),
-                                topT:       Rune(0x2566),
-                                bottomT:    Rune(0x2569),
-                                leftT:      Rune(0x2560),
-                                rightT:     Rune(0x2563))
-  BoxStyleDash* =      BoxStyle(horizontal: Rune(0x2504),
-                                vertical:   Rune(0x2506),
-                                upperLeft:  Rune(0x250c),
-                                upperRight: Rune(0x2510),
-                                lowerLeft:  Rune(0x2514),
-                                lowerRight: Rune(0x2518),
-                                cross:      Rune(0x253c),
-                                topT:       Rune(0x252c),
-                                bottomT:    Rune(0x2534),
-                                leftT:      Rune(0x251c),
-                                rightT:     Rune(0x2524))
-  BoxStyleDash2* =     BoxStyle(horizontal: Rune(0x2508),
-                                vertical:   Rune(0x250a),
-                                upperLeft:  Rune(0x250c),
-                                upperRight: Rune(0x2510),
-                                lowerLeft:  Rune(0x2514),
-                                lowerRight: Rune(0x2518),
-                                cross:      Rune(0x253c),
-                                topT:       Rune(0x252c),
-                                bottomT:    Rune(0x2534),
-                                leftT:      Rune(0x251c),
-                                rightT:     Rune(0x2524))
-  BoxStyleBoldDash* =  BoxStyle(horizontal: Rune(0x2505),
-                                vertical:   Rune(0x2507),
-                                upperLeft:  Rune(0x250f),
-                                upperRight: Rune(0x2513),
-                                lowerLeft:  Rune(0x2517),
-                                lowerRight: Rune(0x251b),
-                                cross:      Rune(0x254b),
-                                topT:       Rune(0x2533),
-                                bottomT:    Rune(0x253b),
-                                leftT:      Rune(0x2523),
-                                rightT:     Rune(0x252b))
-  BoxStyleBoldDash2* = BoxStyle(horizontal: Rune(0x2509),
-                                vertical:   Rune(0x250b),
-                                upperLeft:  Rune(0x250f),
-                                upperRight: Rune(0x2513),
-                                lowerLeft:  Rune(0x2517),
-                                lowerRight: Rune(0x251b),
-                                cross:      Rune(0x254b),
-                                topT:       Rune(0x2533),
-                                bottomT:    Rune(0x253b),
-                                leftT:      Rune(0x2523),
-                                rightT:     Rune(0x252b))
-  BoxStyleAsterisk*  = BoxStyle(horizontal: Rune('*'),
-                                vertical:   Rune('*'),
-                                upperLeft:  Rune('*'),
-                                upperRight: Rune('*'),
-                                lowerLeft:  Rune('*'),
-                                lowerRight: Rune('*'),
-                                cross:      Rune('*'),
-                                topT:       Rune('*'),
-                                bottomT:    Rune('*'),
-                                leftT:      Rune('*'),
-                                rightT:     Rune('*'))
-  BoxStyleAscii*     = BoxStyle(horizontal: Rune('-'),
-                                vertical:   Rune('|'),
-                                upperLeft:  Rune('/'),
-                                upperRight: Rune('\\'),
-                                lowerLeft:  Rune('\\'),
-                                lowerRight: Rune('/'),
-                                cross:      Rune('+'),
-                                topT:       Rune('-'),
-                                bottomT:    Rune('-'),
-                                leftT:      Rune('|'),
-                                rightT:     Rune('|'))
-
-proc copyStyle*(inStyle: FmtStyle): FmtStyle =
-  ## Produces a full copy of a style. This is primarily used
-  ## during the rendering process, but can be used to start
-  ## with a known style to create another style, without
-  ## modifying the original style directly.
-  result = FmtStyle(textColor:              inStyle.textColor,
-                    bgColor:                inStyle.bgColor,
-                    overflow:               inStyle.overFlow,
-                    hang:                   inStyle.hang,
-                    lpad:                   instyle.lpad,
-                    rpad:                   instyle.rpad,
-                    tpad:                   inStyle.tpad,
-                    bpad:                   inStyle.bpad,
-                    casing:                 inStyle.casing,
-                    bold:                   inStyle.bold,
-                    inverse:                inStyle.inverse,
-                    strikethrough:          inStyle.strikethrough,
-                    italic:                 inStyle.italic,
-                    underlineStyle:         inStyle.underlineStyle,
-                    bulletChar:             inStyle.bulletChar,
-                    useTopBorder:           inStyle.useTopBorder,
-                    useBottomBorder:        inStyle.useBottomBorder,
-                    useLeftBorder:          inStyle.useLeftBorder,
-                    useRightBorder:         inStyle.useRightBorder,
-                    useVerticalSeparator:   inStyle.useVerticalSeparator,
-                    useHorizontalSeparator: inStyle.useHorizontalSeparator,
-                    boxStyle:               inStyle.boxStyle,
-                    alignStyle:             inStyle.alignStyle)
-
-
-let DefaultBoxStyle* = BoxStyleDouble
 
 proc `$`*(plane: TextPlane): string =
   ## Produce a debug representation of a TextPlane object.

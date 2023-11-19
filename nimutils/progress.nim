@@ -1,4 +1,4 @@
-import misc, sugar, rope_ansirender, terminal, strformat, unicode
+import misc, sugar, rope_ansirender, rope_styles, terminal, strformat, unicode
 
 type
   ProgressWinchCb = () -> bool
@@ -74,10 +74,10 @@ proc update*(ctx: var ProgressBar, newCur: int): bool {.discardable.} =
       redraw = true
       ctx.lastPct = pctStr
     usedLen = len(pctStr)
-    pctStr  = withColor(pctStr, ctx.pctColor)
+    pctStr  = `$`(color(pctStr, ctx.pctColor))
   if ctx.showBars:
     usedLen += 2
-    bar = withColor("|", ctx.barColor)
+    bar = $(color("|", ctx.barColor))
   if ctx.showTime:
     timeStr = " " & elapsedSec.secToDuration() & " "
     if timeStr != ctx.lastT:
@@ -85,7 +85,7 @@ proc update*(ctx: var ProgressBar, newCur: int): bool {.discardable.} =
       ctx.lastT = timeStr
 
     usedLen += len(timeStr)
-    timeStr  = withColor(timestr, ctx.timeColor)
+    timeStr  = $(color(timestr, ctx.timeColor))
 
   let availableLen = w - usedLen
 
@@ -93,10 +93,10 @@ proc update*(ctx: var ProgressBar, newCur: int): bool {.discardable.} =
     let
       shownProgress = int(float(availableLen - 1) * curProgress)
       nonProgress   = (availableLen - 1) - shownProgress
-      curStr        = withColor($(ctx.curChar), ctx.curColor)
+      curStr        = $(color($(ctx.curChar), ctx.curColor))
       nonPr         = $(Rune(' ').repeat(nonProgress))
       progRaw       = $(ctx.progChar.repeat(shownProgress))
-      progStr       = withColor(progRaw, ctx.progColor)
+      progStr       = $(color(progRaw, ctx.progColor))
 
     if shownProgress != ctx.lastN:
       redraw = true

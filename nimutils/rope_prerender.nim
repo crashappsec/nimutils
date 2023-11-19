@@ -425,24 +425,25 @@ proc getBottomBorder(state: var FmtState, s: BoxStyle): seq[uint32] =
   result = state.getGenericBorder(state.colStack[^1], state.curStyle,
            s.horizontal, s.lowerLeft, s.lowerRight, s.bottomT)
 
-proc getAvailableSpace(state: var FmtState, r: Rope): int =
+proc getAvailableSpace(state: var FmtState, r: Rope, n: int): int =
   result = state.totalWidth
   if state.curStyle.useLeftBorder.getOrElse(false):
     result -= 1
   if state.curStyle.useRightBorder.getOrElse(false):
     result -= 1  
   if state.curStyle.useVerticalSeparator.getOrElse(false):
-    result -= (len(r.colInfo) - 1)
+    result -= (n - 1)
   
-proc calculateColumnWidths(state: var FmtState, r: Rope): seq[int] =
+proc calculateColumnWidths(state: var FmtState, r: Rope, 
+                           colInfo: seq[ColInfo]): seq[int] =
   # Percent is treated as a percent of AVAILABLE column width, meaning
   # after border overhead is removed.
   var
-    toDivide  = state.getAvailableSpace(r)
+    toDivide  = state.getAvailableSpace(r, colInfo.len())
     numFlex   = 0
     pctAlloc  = 0
 
-  for i, item in r.colInfo:
+  for i, item in colInfo:
     if item.wValue == 0 and not item.absVal:
         result.add(0)
         numFlex += 1
@@ -458,11 +459,11 @@ proc calculateColumnWidths(state: var FmtState, r: Rope): seq[int] =
     let
       perCol = toDivide div numFlex
 
-    for i, item in r.colInfo:
+    for i, item in colInfo:
       if item.wValue == 0 and not item.absVal:
         result[i] = perCol
 
-proc guessColWidths(state: var FmtState, r: Rope) =
+proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
   # We could do more processing to do a better job. For now, what we do is:
   #
   # 1) Give every column four cells. If that's not available there'll be
@@ -479,12 +480,13 @@ proc guessColWidths(state: var FmtState, r: Rope) =
   # 4) Anything available at the end is evenly distributed.
   
   var
+    happy:       seq[bool]
     maxWidths:   seq[int]
     totalWidths: seq[int]
     rows:        seq[Rope]
     maxSeen   = -1
     sum       = 0
-    total: int
+    total:     int
     available: int
 
   if r.thead != nil:
@@ -499,54 +501,76 @@ proc guessColWidths(state: var FmtState, r: Rope) =
       if i > maxSeen:
         maxWidths.add(0)
         totalWidths.add(0)
-        r.colInfo.add(ColInfo(wValue: 4, absVal: true))
+        result.add(ColInfo(wValue: 4, absVal: true))
+        happy.add(false)
         maxSeen += 1
-        available -= 4
 
       let l = cell.unboxedRuneLength()
       if l > maxWidths[i]:
         maxWidths[i] = l
       totalWidths[i] += l
 
-  available += state.getAvailableSpace(r)
+  available = state.getAvailableSpace(r, maxWidths.len())
 
   if len(maxWidths) == 1:
-    r.colInfo[0] = ColInfo(span: 0, wValue: 0, absVal: false)
-    return
+    return  @[ColInfo(span: 0, wValue: 0, absVal: false)]
 
   var smallThreshold = (available div maxWidths.len()) - 4
 
   for i, width in maxWidths:
-    if (width - 4) <= smallThreshold:
-      r.colInfo[i] = ColInfo(wValue: width + 4, absVal: true)
-      available -= (width - 4)
+    if width <= smallThreshold:
+      result[i].wValue = width + 4
+      available -= (width + 4)
+      happy[i] = true
     else:
       sum += totalWidths[i]
 
-  if available <= 0:
-    return
-
   for i, width in maxWidths:
-    if (width - 4) > smallThreshold:
-      let w = ((totalWidths[i] * 100) div sum) - 4
-      r.colInfo[i] = ColInfo(wValue: w, absVal: true)
-      available -= r.colInfo[i].wValue
+    if happy[i]: 
+      continue
+    if available <= 0:
+      break
+      
+    var v = ((totalWidths[i] * 100) div sum) - 4
 
-  if available > 0:
-    for i in 0 ..< available:
-      r.colInfo[i mod maxWidths.len()].wValue += 1
+    if v > maxWidths[i]:
+      v = maxWidths[i]
+      happy[i] = true
+
+    result[i].wValue =  v
+    available -= v
+
+  var lastLoop = available
+
+  while available > 0:
+    for i in 0 ..< happy.len():
+      if not happy[i]:
+        result[i].wValue += 1
+        available -= 1
+        if result[i].wValue >= maxWidths[i]:
+          happy[i] = true
+        if available == 0:
+          break
+
+    if available == lastLoop:
+      for i in 0 ..< happy.len():
+        happy[i] = false
+
+    lastLoop = available
       
 proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
     var
       colWidths: seq[int]
+      colInfo   = r.colInfo
       savedSep  = state.curTableSep
-      boxStyle  = state.curStyle.boxStyle.getOrElse(DefaultBoxStyle)
+      boxStyle  = state.curStyle.boxStyle.getOrElse(defaultBoxStyle())
 
     if r.colInfo.len() == 0:
-      state.guessColWidths(r)
+      colInfo = state.guessColWidths(r)
+    else:
+      colInfo = r.colInfo
           
-    colWidths = state.calculateColumnWidths(r)
-    
+    colWidths = state.calculateColumnWidths(r, colInfo)
     state.pushTableWidths(colWidths)
 
     var
@@ -610,7 +634,7 @@ proc adjacentCellsToRow(state: var FmtState, cells: seq[TextPlane],
                         widths: seq[int]): TextPlane =
   var
     style    = state.curStyle
-    boxStyle = style.boxStyle.getOrElse(DefaultBoxStyle)
+    boxStyle = style.boxStyle.getOrElse(defaultBoxStyle())
     leftBorder:  seq[uint32]
     sep:         seq[uint32]
     rightBorder: seq[uint32]
@@ -877,7 +901,7 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
   result &= state.preRender(r.next)
   
 proc preRender*(r: Rope, width = -1, showLinkTargets = false,
-                style = defaultStyle, outerPad = true): TextPlane =
+                style = defaultStyle): TextPlane =
   ## This takes a Rope that is essentially stored as a tree annotated
   ## with style information, and produce a representation that is an
   ## array of lines of unicode characters, interspersed with 32-bit

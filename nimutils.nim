@@ -36,7 +36,7 @@ when defined(macosx):
 ##              isn't worth it if you're not using it.
 
 when isMainModule:
-  import tables, streams, algorithm, strutils, unicode
+  import tables, streams, algorithm, strutils
 
   when defined(macosx):
     proc psSorter(x, y: ProcessInfo): int =
@@ -62,7 +62,8 @@ when isMainModule:
                                        columnInfo = widths))
 
   proc basic_subproc_tests() =
-    print(h2("Run: /bin/cat /etc/passwd /etc/file_that_doesnt_exist; show output."))
+    print(h2("Run: /bin/cat /etc/passwd /etc/file_that_doesnt_exist; " & 
+             "show output."))
     let res = runCmdGetEverything("/bin/cat", @["/etc/passwd",
                                                 "/etc/file_that_doesnt_exist"],
                                   passthrough = true)
@@ -361,7 +362,10 @@ when isMainModule:
     print(tbl)
 
     var mess2 = @[@["1, 1", "Column 2", "Column 3", "Column 4"],
-                  @["Row 2", "has some medium length strings", "This has one string that's pretty long, but the rest are short. But this one is really long. I mean, really long, long enough to drive the other column into oblivion.", "Row 2"],
+                  @["Row 2", "has some medium length strings", 
+"""This has one string that's pretty long, but the rest are short. But this one 
+is really long. I mean, really long, long enough to drive the other column into
+ oblivion.""", "Row 2"],
                   @["Row 3", "has some medium length strings", "Row 3", "Row 3"],
                   @["Row 4", "has some medium length strings", "Row 4", "Row 4"]]
 
@@ -450,4 +454,3 @@ Oh look, here comes a table!
   print h5("Heading 5")
   print h6("Heading 6")
   print(defaultBg(fgColor("Goodbye!!", "jazzberry")))
-quit()

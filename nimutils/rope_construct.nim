@@ -330,8 +330,8 @@ proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope =
     of "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div", "basic",
        "code", "ins", "del", "kbd", "mark", "p", "q", "s", "small", "td", "th",
        "sub", "sup", "title", "em", "i", "b", "strong", "u", "caption",
-       "text", "plain",
-       "var", "italic", "strikethrough", "strikethru", "underline", "bold":
+       "text", "plain", "var", "italic", "strikethrough", "strikethru",
+        "underline", "bold":
       # Since we know about this list, short-circuit the color checking code,
       # even though if no color matches, the same thing happens as happens
       # in this branch...
@@ -420,7 +420,20 @@ template html*(s: string): Rope =
 template markdown*(s: string): Rope =
   ## An alias for htmlStringToRope, with markdown always true.
   s.htmlStringToRope(markdown = true)
-  
+
+proc text*(s: string, pre = true, detect = true): Rope =  
+  if detect:
+    let n = s.strip(trailing = false)
+    if n.len() != 0:
+      case n[0]
+      of '#':
+        return s.markdown()
+      of '<':
+        return s.html()
+      else:
+        discard
+  return s.textRope(pre)
+
 macro basicTagGen(ids: static[openarray[string]]): untyped =
   result = newStmtList()
 
@@ -625,7 +638,7 @@ proc nocolors*(r: Rope, removeNested = true): Rope =
 basicTagGen(["h1", "h2", "h3", "h4", "h5", "h6",
              "li", "blockquote", "div", "code", "ins", "del", "kbd", "mark",
              "small", "sub", "sup", "width", "title", "em", "strong",
-             "caption", "td", "th", "text", "plain"])
+             "caption", "td", "th", "plain"])
 
 tagGenRename("p",   "paragraph")
 tagGenRename("q",   "quote")

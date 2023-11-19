@@ -1,8 +1,8 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import rope_base, rope_construct, rope_prerender, rope_styles, markdown,
-       unicode, unicodeid, std/terminal, tables
+import rope_base, rope_construct, rope_prerender, rope_styles, unicode, 
+       unicodeid, std/terminal, tables
 
 proc instantTable*[T: string|Rope](cells: openarray[T], caption = Rope(nil),
                                     width = 0, borders = defaultBorderStyle(),

@@ -251,7 +251,7 @@ proc wrapToWidth*(msg: string, extra: StringTable): (string, bool) =
 
   return (indentWrap(msg, w, i), true)
 
-proc addTopic*(msg: string, extra: StringTable): (string, bool) =
+proc showTopic*(msg: string, extra: StringTable): (string, bool) =
   var lines                 = msg.split("\n")
   var newLines: seq[string] = @[]
 
@@ -260,9 +260,8 @@ proc addTopic*(msg: string, extra: StringTable): (string, bool) =
 
   let
     topic   = extra["topic"]
-    body    = newLines.join("\n") & "\n"
-    prefix  = "<h4>" & "[[start " & topic & "]]\n" & "</h4>"
-    postfix = "<h4>" & "[[end " & topic & "]]\n" & "</h4>"
-    newstr  = prefix.stylizeHtml() & body & postfix.stylizeHtml()
+    body    = text(newLines.join("\n") & "\n")
+    prefix  = h4("[[start " & topic & "]]")
+    postfix = h4("[[end " & topic & "]]")
 
-  return (newstr, true)
+  return ($(prefix + body + postfix), true)

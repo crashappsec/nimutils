@@ -5,6 +5,136 @@
 import unicode, tables, rope_base, rope_construct, options, random, hexdump,
        strutils
 
+let
+  BoxStylePlain* =     BoxStyle(horizontal: Rune(0x2500),
+                                vertical:   Rune(0x2502),
+                                upperLeft:  Rune(0x250c),
+                                upperRight: Rune(0x2510),
+                                lowerLeft:  Rune(0x2514),
+                                lowerRight: Rune(0x2518),
+                                cross:      Rune(0x253c),
+                                topT:       Rune(0x252c),
+                                bottomT:    Rune(0x2534),
+                                leftT:      Rune(0x251c),
+                                rightT:     Rune(0x2524))
+  BoxStyleBold* =      BoxStyle(horizontal: Rune(0x2501),
+                                vertical:   Rune(0x2503),
+                                upperLeft:  Rune(0x250f),
+                                upperRight: Rune(0x2513),
+                                lowerLeft:  Rune(0x2517),
+                                lowerRight: Rune(0x251b),
+                                cross:      Rune(0x254b),
+                                topT:       Rune(0x2533),
+                                bottomT:    Rune(0x253b),
+                                leftT:      Rune(0x2523),
+                                rightT:     Rune(0x252b))
+  BoxStyleDouble* =    BoxStyle(horizontal: Rune(0x2550),
+                                vertical:   Rune(0x2551),
+                                upperLeft:  Rune(0x2554),
+                                upperRight: Rune(0x2557),
+                                lowerLeft:  Rune(0x255a),
+                                lowerRight: Rune(0x255d),
+                                cross:      Rune(0x256c),
+                                topT:       Rune(0x2566),
+                                bottomT:    Rune(0x2569),
+                                leftT:      Rune(0x2560),
+                                rightT:     Rune(0x2563))
+  BoxStyleDash* =      BoxStyle(horizontal: Rune(0x2504),
+                                vertical:   Rune(0x2506),
+                                upperLeft:  Rune(0x250c),
+                                upperRight: Rune(0x2510),
+                                lowerLeft:  Rune(0x2514),
+                                lowerRight: Rune(0x2518),
+                                cross:      Rune(0x253c),
+                                topT:       Rune(0x252c),
+                                bottomT:    Rune(0x2534),
+                                leftT:      Rune(0x251c),
+                                rightT:     Rune(0x2524))
+  BoxStyleDash2* =     BoxStyle(horizontal: Rune(0x2508),
+                                vertical:   Rune(0x250a),
+                                upperLeft:  Rune(0x250c),
+                                upperRight: Rune(0x2510),
+                                lowerLeft:  Rune(0x2514),
+                                lowerRight: Rune(0x2518),
+                                cross:      Rune(0x253c),
+                                topT:       Rune(0x252c),
+                                bottomT:    Rune(0x2534),
+                                leftT:      Rune(0x251c),
+                                rightT:     Rune(0x2524))
+  BoxStyleBoldDash* =  BoxStyle(horizontal: Rune(0x2505),
+                                vertical:   Rune(0x2507),
+                                upperLeft:  Rune(0x250f),
+                                upperRight: Rune(0x2513),
+                                lowerLeft:  Rune(0x2517),
+                                lowerRight: Rune(0x251b),
+                                cross:      Rune(0x254b),
+                                topT:       Rune(0x2533),
+                                bottomT:    Rune(0x253b),
+                                leftT:      Rune(0x2523),
+                                rightT:     Rune(0x252b))
+  BoxStyleBoldDash2* = BoxStyle(horizontal: Rune(0x2509),
+                                vertical:   Rune(0x250b),
+                                upperLeft:  Rune(0x250f),
+                                upperRight: Rune(0x2513),
+                                lowerLeft:  Rune(0x2517),
+                                lowerRight: Rune(0x251b),
+                                cross:      Rune(0x254b),
+                                topT:       Rune(0x2533),
+                                bottomT:    Rune(0x253b),
+                                leftT:      Rune(0x2523),
+                                rightT:     Rune(0x252b))
+  BoxStyleAsterisk*  = BoxStyle(horizontal: Rune('*'),
+                                vertical:   Rune('*'),
+                                upperLeft:  Rune('*'),
+                                upperRight: Rune('*'),
+                                lowerLeft:  Rune('*'),
+                                lowerRight: Rune('*'),
+                                cross:      Rune('*'),
+                                topT:       Rune('*'),
+                                bottomT:    Rune('*'),
+                                leftT:      Rune('*'),
+                                rightT:     Rune('*'))
+  BoxStyleAscii*     = BoxStyle(horizontal: Rune('-'),
+                                vertical:   Rune('|'),
+                                upperLeft:  Rune('/'),
+                                upperRight: Rune('\\'),
+                                lowerLeft:  Rune('\\'),
+                                lowerRight: Rune('/'),
+                                cross:      Rune('+'),
+                                topT:       Rune('-'),
+                                bottomT:    Rune('-'),
+                                leftT:      Rune('|'),
+                                rightT:     Rune('|'))
+
+proc copyStyle*(inStyle: FmtStyle): FmtStyle =
+  ## Produces a full copy of a style. This is primarily used
+  ## during the rendering process, but can be used to start
+  ## with a known style to create another style, without
+  ## modifying the original style directly.
+  result = FmtStyle(textColor:              inStyle.textColor,
+                    bgColor:                inStyle.bgColor,
+                    overflow:               inStyle.overFlow,
+                    hang:                   inStyle.hang,
+                    lpad:                   instyle.lpad,
+                    rpad:                   instyle.rpad,
+                    tpad:                   inStyle.tpad,
+                    bpad:                   inStyle.bpad,
+                    casing:                 inStyle.casing,
+                    bold:                   inStyle.bold,
+                    inverse:                inStyle.inverse,
+                    strikethrough:          inStyle.strikethrough,
+                    italic:                 inStyle.italic,
+                    underlineStyle:         inStyle.underlineStyle,
+                    bulletChar:             inStyle.bulletChar,
+                    useTopBorder:           inStyle.useTopBorder,
+                    useBottomBorder:        inStyle.useBottomBorder,
+                    useLeftBorder:          inStyle.useLeftBorder,
+                    useRightBorder:         inStyle.useRightBorder,
+                    useVerticalSeparator:   inStyle.useVerticalSeparator,
+                    useHorizontalSeparator: inStyle.useHorizontalSeparator,
+                    boxStyle:               inStyle.boxStyle,
+                    alignStyle:             inStyle.alignStyle)
+
 proc newStyle*(fgColor = "", bgColor = "", overflow = OIgnore, hang = -1,
                lpad = -1, rpad = -1, casing = CasingIgnore,
                tpad = -1, bpad = -1, bold = BoldIgnore,
@@ -637,7 +767,7 @@ proc defaultBg*(s: string): Rope {.discardable.} =
   ## color is not set (unless you later change it with another call).
   ##
   ## This call does NOT process embedded markdown.
-  return pre(s).defaultBg()
+  return text(s).defaultBg()
 
 proc defaultFg*(r: Rope, recurse = true): Rope {.discardable.} =
   ## Remove the foreground text color for the current node (applying
@@ -651,7 +781,7 @@ proc defaultFg*(s: string): Rope {.discardable.} =
   ## color is not set (unless you later change it with another call).
   ##
   ## This call does NOT process embedded markdown.
-  return pre(s).defaultFg()
+  return text(s).defaultFg()
 
 proc bgColor*(r: Rope, color: string, recurse = true): Rope {.discardable.} =
   ## Overrides a rope's current style to set the background color.
@@ -664,7 +794,7 @@ proc bgColor*(s: string, color: string): Rope {.discardable.} =
   ## Returns a new Rope from a string, where the node will have the
   ## explicit background color applied. This will not have sub-nodes,
   ## so should override other settings (e.g., in a table).
-  return pre(s).bgColor(color)
+  return text(s).bgColor(color)
 
 proc fgColor*(r: Rope, color: string, recurse = true): Rope {.discardable.} =
   ## Overrides a rope's current style to set the foreground color.
@@ -677,7 +807,18 @@ proc fgColor*(s: string, color: string): Rope {.discardable.} =
   ## Returns a new Rope from a string, where the node will have the
   ## explicit foreground color applied. This will not have sub-nodes,
   ## so should override other settings (e.g., in a table).
-  return pre(s).fgColor(color)
+  return text(s).fgColor(color)
+
+proc color*(r: Rope, fgColor: string, bgColor = "", recurse = false): 
+                                     Rope {.discardable.} =
+  ## Applies fg/bg colors.
+  return r.ropeStyle(newStyle(fgColor = fgColor, bgColor = bgColor), recurse)
+                              
+proc color*(s: string, fgColor: string, bgColor = ""): Rope =
+  ## Returns a new Rope from a string with the given fg and (optional)
+  ## background color.
+  return color(text(s), fgColor, bgColor)
+
 
 proc tpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Add a top pad to a Rope object. This will be ignored if the
@@ -686,7 +827,7 @@ proc tpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   
 proc tpad*(s: string, n: int): Rope {.discardable.} =
   ## Adds a top pad to a string.
-  return pre(s).tpad(n)
+  return text(s).tpad(n)
 
 proc bpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Add a bottom pad to a Rope object. This will be ignored if the
@@ -695,7 +836,7 @@ proc bpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
 
 proc bpad*(s: string, n: int): Rope {.discardable.} =
   ## Adds a bottom pad to a string.
-  return pre(s).bpad(n)
+  return text(s).bpad(n)
 
 proc leftPad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Add left padding to a Rope object. This will be ignored if the
@@ -704,7 +845,7 @@ proc leftPad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
 
 proc leftPad*(s: string, n: int): Rope {.discardable.} =
   ## Add left padding to a string.
-  result = pre(s).leftPad(n)
+  result = text(s).leftPad(n)
 
 proc rightPad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Add right padding to a Rope object. This will be ignored if the
@@ -813,24 +954,24 @@ proc removeBullet*(r: Rope, recurse = true): Rope {.discardable.} =
   ## the period after the number.
   return r.ropeStyle(FmtStyle(bulletChar: some(Rune(0x0000))), recurse, true)
 
-proc setCasing*(r: Rope, casing: TextCasing, recurse = true): Rope
+proc casing*(r: Rope, casing: TextCasing, recurse = true): Rope
     {.discardable.} =
   ## Sets casing on a rope.
   return r.ropeStyle(newStyle(casing = casing), recurse)
 
-proc setCasing*(s: string, casing: TextCasing): Rope =
-  return pre(s).setCasing(casing)
+proc casing*(s: string, casing: TextCasing): Rope =
+  return text(s).casing(casing)
 
-proc setOverflow*(r: Rope, overflow: OverflowPreference, recurse = true): Rope
+proc overflow*(r: Rope, overflow: OverflowPreference, recurse = true): Rope
   {.discardable.} =
   ## Sets the overflow strategy. If you set OIntentWrap then you can
   ## change the wrap hang value via `setHang()`.
   return r.ropeStyle(newStyle(overflow = overflow), recurse)
 
-proc setOverflow*(s: string, overflow: OverflowPreference): Rope =
-  return pre(s).setOverflow(overflow)
+proc overflow*(s: string, overflow: OverflowPreference): Rope =
+  return text(s).overflow(overflow)
 
-proc setHang*(r: Rope, hang: int, recurse = true): Rope {.discardable.} =
+proc hang*(r: Rope, hang: int, recurse = true): Rope {.discardable.} =
   ## Sets the indent hang for when OIndentWrap is on.
   return r.ropeStyle(newStyle(hang = hang), recurse)
 
@@ -845,7 +986,7 @@ proc bold*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   return r.ropeStyle(newStyle(bold = param), recurse)
 
 proc bold*(s: string): Rope =
-  return pre(s).bold()
+  return text(s).bold()
 
 proc inverse*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   var param: InversePref
@@ -858,7 +999,7 @@ proc inverse*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   return r.ropeStyle(newStyle(inverse = param), recurse)
 
 proc inverse*(s: string): Rope =
-  return pre(s).inverse()
+  return text(s).inverse()
 
 proc strikethrough*(r: Rope, disable = false, recurse = true):
                   Rope {.discardable.} =
@@ -872,7 +1013,7 @@ proc strikethrough*(r: Rope, disable = false, recurse = true):
   return r.ropeStyle(newStyle(strikethru = param), recurse)
 
 proc strikethrough*(s: string): Rope =
-  return pre(s).strikethrough()
+  return text(s).strikethrough()
 
 proc italic*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   var param: ItalicPref
@@ -885,7 +1026,7 @@ proc italic*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   return r.ropeStyle(newStyle(italic = param), recurse)
 
 proc italic*(s: string): Rope =
-  return pre(s).italic()
+  return text(s).italic()
 
 proc underline*(r: Rope, kind = UnderlineSingle, recurse = true):
               Rope {.discardable.} =
@@ -893,7 +1034,7 @@ proc underline*(r: Rope, kind = UnderlineSingle, recurse = true):
   return r.ropeStyle(newStyle(underline = kind), recurse)
 
 proc underline*(s: string): Rope =
-  return pre(s).underline()
+  return text(s).underline()
 
 proc align*(r: Rope, kind: AlignStyle, recurse = false): Rope {.discardable.} =
   ## Sets alignment preference for a rope as specified.  Does NOT
@@ -901,7 +1042,7 @@ proc align*(r: Rope, kind: AlignStyle, recurse = false): Rope {.discardable.} =
   return r.ropeStyle(newStyle(align = kind), recurse, true)
 
 proc align*(s: string, kind: AlignStyle): Rope =
-  return pre(s).align(kind)
+  return text(s).align(kind)
 
 proc center*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Centers a node. Unless recurse is on, this will only set the
@@ -909,7 +1050,7 @@ proc center*(r: Rope, recurse = false): Rope {.discardable.} =
   return r.ropeStyle(newStyle(align = AlignC), recurse, true)
 
 proc center*(s: string): Rope =
-  return pre(s).center()
+  return text(s).center()
 
 proc right*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Right-justifies a node. Unless recurse is on, this will only set
@@ -917,7 +1058,7 @@ proc right*(r: Rope, recurse = false): Rope {.discardable.} =
   return r.ropeStyle(newStyle(align = AlignR), recurse, true)
 
 proc right*(s: string): Rope =
-  return pre(s).right()
+  return text(s).right()
 
 proc left*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Left-justifies a node. Unless recurse is on, this will only set
@@ -925,7 +1066,7 @@ proc left*(r: Rope, recurse = false): Rope {.discardable.} =
   return r.ropeStyle(newStyle(align = AlignL), recurse, true)
 
 proc left*(s: string): Rope =
-  return pre(s).left()
+  return text(s).left()
 
 proc justify*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Does line justification (adds spaces between words to justify
@@ -935,7 +1076,7 @@ proc justify*(r: Rope, recurse = false): Rope {.discardable.} =
   return r.ropeStyle(newStyle(align = AlignJ), recurse, true)
 
 proc justify*(s: string): Rope =
-  return pre(s).justify()
+  return text(s).justify()
 
 proc flushJustify*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Does full flush line justification, including for the final line
@@ -944,7 +1085,7 @@ proc flushJustify*(r: Rope, recurse = false): Rope {.discardable.} =
   return r.ropeStyle(newStyle(align = AlignF), recurse)
 
 proc flushJustify*(s: string): Rope =
-  return pre(s).justify()
+  return text(s).justify()
 
 
 proc installTheme*(tagStyles:   var Table[string, FmtStyle],
@@ -1012,8 +1153,8 @@ proc useCrashTheme*() =
                              fgColor = c0Text, align = AlignL, lpad = 1,
                              rpad = 1),
       "th"        : newStyle(bgColor = "black", bold = BoldOn, overflow = OWrap,
-                           casing = CasingUpper, tpad = 1, bpad = 0,
-                           fgColor = c0Green, lpad = 1, rpad = 1, align = AlignC),
+                           casing = CasingUpper, tpad = 1, bpad = 0, lpad = 1, 
+                           rpad = 1, fgColor = c0Green, align = AlignC),
       "tr"        : newStyle(bold = BoldOn, lpad = 0, rpad = 0,
                              overflow = OWrap, tpad = 0, bpad = 0),
       "tr.even"   : newStyle(bgColor = "mediumpurple", lpad = 0, rpad = 0),
