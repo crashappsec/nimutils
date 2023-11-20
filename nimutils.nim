@@ -384,6 +384,15 @@ when isMainModule:
                           caption = "Table w/o header").
              bpad(1).boldBorders().allBorders()
     print(t4)
+    let t5 = t4.highlightMatches(@["medium", "the"])
+    print(t4)
+
+    let t6 = atom("This has one string that's pretty long, ")  + 
+             atom("but the rest are short. But this one is ") + 
+             atom("really long. I mean, really long, long ") +
+             atom("enough to drive the other column into oblivion.")
+
+    print(callout(t6.highlightMatches(@["one", "other"])))
 
   proc calloutTest() =
     let

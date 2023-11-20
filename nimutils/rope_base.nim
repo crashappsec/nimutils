@@ -155,7 +155,7 @@ type
       thead*:   Rope # RopeTableRows
       tbody*:   Rope # RopeTableRows
       tfoot*:   Rope # RopeTableRows
-      title*:   Rope # RopeTaggedContainer
+      title*:   Rope # RopeTaggedContainer (generally)
       caption*: Rope # RopeTaggedContainer
     of RopeTableRow, RopeTableRows:
       cells*: seq[Rope]
@@ -167,7 +167,6 @@ type
     lines*:     seq[seq[uint32]]
     width*:     int # Advisory.
     softBreak*: bool
-
 
 var
   styleMap*:    Table[string, FmtStyle]

@@ -1088,6 +1088,156 @@ proc flushJustify*(r: Rope, recurse = false): Rope {.discardable.} =
 proc flushJustify*(s: string): Rope =
   return text(s).justify()
 
+proc multiFindFirst*(s: string, terms: var seq[string], 
+                     start = 0): (int, string) =
+  ## Used to highlight matches.
+  var 
+    stillThere: seq[string] = @[]
+    lowest:     uint        = high(uint)
+    lowVal:     string      = ""
+  for i, item in terms:
+    if item == "": 
+      continue
+    let ix = s.find(item, start)
+    if ix == -1:
+      continue
+    stillThere.add(item)
+    if uint(ix) < lowest:
+      lowest = uint(ix)
+      lowVal = item
+
+  terms = stillThere
+  result = (cast[int](lowest), lowVal)
+  
+proc explode*(s: string, inTerms: seq[string]): seq[string] =
+  ## Like split(), except takes multiple words as input to split on,
+  ## and returns matches as part of the array; all odd indexes will be
+  ## matches.
+  var 
+    terms   = inTerms
+    startix = 0
+    endix: int
+
+  while terms.len() != 0:
+    let (ix, which) = multiFindFirst(s, terms, startIx)
+    if ix == -1:
+      break
+    if ix == startIx:
+      result.add("")
+    else:
+      result.add(s[startIx ..< ix])
+    result.add(which)
+    startIx = ix + which.len()
+  if startIx == s.len():
+    result.add("")
+  else:
+    result.add(s[startIx .. ^1])
+
+template replaceFromList(fieldref: untyped) =
+  var newList: seq[Rope]
+
+  for old in fieldref:
+    var replacement = Rope(nil)
+    for (o, n) in myMatchInfo.replacements:
+      if o == old:
+        replacement = n
+        break
+    if replacement != nil:
+      newList.add(replacement)
+    else:
+      newList.add(old)
+  fieldref = newList
+
+type MatchInfo = object
+  terms:        seq[string]
+  replacements: seq[(Rope, Rope)]
+  classToAdd:   string
+
+proc highlightMatches(r: Rope, info: var MatchInfo) =
+  var myMatchInfo: MatchInfo 
+
+  if r == nil:
+    return
+
+  if r.next != Rope(nil):
+    myMatchInfo = MatchInfo(terms: info.terms, classToAdd: info.classToAdd)
+    r.next.highlightMatches(myMatchInfo)
+    if myMatchInfo.replacements.len() != 0:
+      r.next = myMatchInfo.replacements[0][1]
+
+  if r.kind == RopeAtom:
+    let asStr    = toLowerAscii($(r.text))
+    var exploded = asStr.explode(info.terms)
+    
+    if exploded.len() != 1:
+      var newRope, prev, n: Rope
+
+      for i, part in exploded:
+        if part == "":
+          continue
+        if i mod 2 != 0:
+          n = em(atom(part))
+          n.class = info.classToAdd
+        else:
+          n = atom(part)
+
+        if newRope == nil:
+          newRope = n
+          prev    = n
+        else:
+          discard prev.link(n)
+          prev = n
+
+      n.next = r.next # Keep any existing end-links intact.
+      info.replacements.add((r, newRope))
+  else:
+    myMatchInfo = MatchInfo(terms: info.terms, classToAdd: info.classToAdd)
+    r.genericRopeWalk(highlightMatches, myMatchInfo)
+    if myMatchInfo.replacements.len() >= 1:
+      let (oldR, newR) = myMatchInfo.replacements[0]
+      case r.kind
+      of RopeAtom:
+        discard
+      of RopeBreak:
+        r.guts = newR
+      of RopeLink:
+        r.toHighlight = newR
+      of RopeTaggedContainer:
+        r.contained = newR
+      of RopeFgColor, RopeBgColor:
+        r.toColor = newR
+      of RopeList:
+        replaceFromList(r.items)
+      of RopeTableRow, RopeTableRows:
+        replaceFromList(r.cells)
+      of RopeTable:
+        for (o, n) in myMatchInfo.replacements:
+          if o == r.title:
+            r.title = n
+          else:
+            r.caption = n
+
+proc highlightMatches*(r: Rope, terms: seq[string], class = ""): Rope =
+  ## This does NOT copy; it is destructive, rewriting the rope to
+  ## include highlighting. If you need to preserve the old version,
+  ## copy it first.
+  ##
+  ## > ! If the input consists ONLY of text, this might return a
+  ## > different output object.
+  ##
+  ## Highlighting current consists of adding an "em" tag.  Any
+  ## class you pass in is added only to the new "em" tags.
+  ##
+  ## Note that this does NOT do full-word matching.  So if you search
+  ## for 'the', if will highlight the middle characters of 'other'.
+  
+
+  var info = MatchInfo(terms: terms, classToAdd: class)
+  r.highlightMatches(info)
+  if info.replacements.len() == 0:
+    return r
+  return info.replacements[0][1]
+  
 
 proc installTheme*(tagStyles:   var Table[string, FmtStyle],
                    classStyles: var Table[string, FmtStyle]) =
