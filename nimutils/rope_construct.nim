@@ -178,8 +178,8 @@ proc link*(r1: Rope, r2: Rope): Rope =
 
   return r1
 
-proc `+=`*(r1: Rope, r2: Rope): Rope =
-  return r1.link(r2.copy())
+proc `+=`*(r1: var Rope, r2: Rope) =
+  r1 = r1.link(r2.copy())
 
 proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope
 
