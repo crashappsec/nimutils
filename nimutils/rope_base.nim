@@ -1,4 +1,5 @@
-import unicode, options, unicodeid, unicodedb/properties, misc, strutils
+import unicode, options, unicodeid, unicodedb/properties, misc, strutils,
+       random, hexdump, tables
 
 
 const
@@ -125,7 +126,6 @@ type
   Rope* = ref object
     ## The core rope object.  Generally should only access via API.
     next*:          Rope
-    cycle*:         bool
     noTextExtract*: bool
     id*:            string
     tag*:           string
@@ -133,6 +133,7 @@ type
     style*:         FmtStyle  # Cached 
     tweak*:         FmtStyle  # temporary
     processed*:     bool
+    cycle*:         bool
 
     case kind*: RopeKind
     of RopeAtom:
@@ -166,6 +167,16 @@ type
     lines*:     seq[seq[uint32]]
     width*:     int # Advisory.
     softBreak*: bool
+
+
+var
+  styleMap*:    Table[string, FmtStyle]
+  perIdStyles*: Table[string, FmtStyle]
+proc ensureUniqueId*(r: Rope): string {.discardable.} =
+  if r.id == "":
+    r.id = randString(8).hex()
+
+  return r.id
 
 proc `$`*(s: FmtStyle): string =
   if s == nil:
@@ -292,7 +303,7 @@ proc buildWalk(r: Rope, results: var seq[Rope]) =
     r.next.buildWalk(results)    
 
 proc ropeWalk*(r: Rope): seq[Rope] =
- r.buildWalk(result)
+  r.buildWalk(result)
 
 proc search*(r: Rope,
              tags    = openarray[string]([]),

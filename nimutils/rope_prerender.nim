@@ -29,6 +29,7 @@ type
     curContainer:    Rope
     curTableSep:     Option[seq[uint32]]
     renderStack:     seq[Rope]
+    leftovers:       seq[RenderBox]
 
 proc `$`*(box: RenderBox): string =
     result &= $(box.contents)
@@ -278,13 +279,20 @@ template flushCurPlane(boxvar: untyped) =
     boxvar.add(RenderBox(contents: state.curPlane))
     state.curPlane = TextPlane(lines: @[])
 
-template enterContainer(boxvar, code: untyped) =
-  flushCurPlane(boxvar)
+template enterContainer(code: untyped) =
+  flushCurPlane(state.leftovers)
   var savedContainer = state.curContainer
   code
+  result = state.leftovers & result
+  state.leftovers = @[]
   while state.renderStack.len() != 0:
-    result &= state.preRender(state.renderStack.pop())
+    let x = state.preRender(state.renderStack.pop())
+    result &= state.leftovers
+    result &= x
+    state.leftovers = @[]
+
   state.curContainer = savedContainer
+
 
 template applyContainerStyle(boxvar: untyped, code: untyped) =
   var
@@ -828,7 +836,7 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
   of RopeBreak:
     if r.guts != nil:
       # It's a <p> or similar, so a box.
-      result.enterContainer:
+      enterContainer:
         result &= state.preRender(r.guts)
     else:
       state.curPlane.lines.add(@[])
@@ -841,7 +849,7 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
       if w <= 0:
         w = state.totalWidth + w
       withWidth(w):
-        result.enterContainer:
+        enterContainer:
           result &= state.preRender(r.contained)
     of "colors":
       # Also will stop being a tagged container.
@@ -865,7 +873,7 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
       result &= tmp
     else:
       if r.isContainer():
-        result.enterContainer:
+        enterContainer:
           applyContainerStyle(result):
             result &= state.preRender(r.contained)
       else:
@@ -873,7 +881,7 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
           result &= state.preRender(r.contained)
         r.textExit()
   of RopeList:
-    result.enterContainer:
+    enterContainer:
       applyContainerStyle(result):
          if r.tag == "ul":
            result &= state.preRenderUnorderedList(r)
@@ -881,12 +889,12 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
            result &= state.preRenderOrderedList(r)
   of RopeTable:
     state.tableEven.add(false)    
-    result.enterContainer:
+    enterContainer:
       applyContainerStyle(result):
           result &= state.preRenderTable(r)
     discard state.tableEven.pop()
   of RopeTableRow:
-    result.enterContainer:
+    enterContainer:
       var rowTag = if state.tableEven[^1]: "tr.even" else: "tr.odd"
       if rowTag in styleMap:
         for item in r.cells:
@@ -901,7 +909,7 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
           result &= state.preRender(next)
           next = next.next
   of RopeTableRows:
-    result.enterContainer:
+    enterContainer:
       applyContainerStyle(result):
         result &= state.preRenderRows(r)
 

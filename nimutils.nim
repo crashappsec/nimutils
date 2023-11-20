@@ -363,9 +363,7 @@ when isMainModule:
 
     var mess2 = @[@["1, 1", "Column 2", "Column 3", "Column 4"],
                   @["Row 2", "has some medium length strings", 
-"""This has one string that's pretty long, but the rest are short. But this one 
-is really long. I mean, really long, long enough to drive the other column into
- oblivion.""", "Row 2"],
+"""This has one string that's pretty long, but the rest are short. But this one is really long. I mean, really long, long enough to drive the other column into oblivion.""", "Row 2"],
                   @["Row 3", "has some medium length strings", "Row 3", "Row 3"],
                   @["Row 4", "has some medium length strings", "Row 4", "Row 4"]]
 
@@ -382,8 +380,8 @@ is really long. I mean, really long, long enough to drive the other column into
     print(t3.typicalBorders())
 
     let t4 = quickTable(mess2, noheaders = true,
-                          title = h2("Table w/o header"),
-                          caption = h2("Table w/o header")).
+                          title = "Table w/o header",
+                          caption = "Table w/o header").
              bpad(1).boldBorders().allBorders()
     print(t4)
 
@@ -448,6 +446,7 @@ Oh look, here comes a table!
   calloutTest()
   
   var baddie = h1("hello") + fgColor(atom("Sup,"), "lime") + atom(" dawg!")
+  print(pre(repr(baddie)))
   print(baddie)
 
   print h1("Heading 1")

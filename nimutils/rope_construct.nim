@@ -69,114 +69,81 @@ proc textRope*(s: string, pre = false): Rope =
       prev.next = brk
       brk.next  = cur
 
-proc refCopy*(dst: var Rope, src: Rope) =
-  ## Allows you to populate a rope (passed in the first parameter)
-  ## by copying the rope in the second parameter. This copies
-  ## recursively if needed.
-  dst = Rope(kind: src.kind, tag: src.tag)
 
-  case src.kind
+proc copy*(r: Rope): Rope =
+  if r == nil or r.cycle:
+    return
+
+  r.cycle = true
+
+  result = Rope(kind: r.kind, noTextExtract: r.noTextExtract,
+                 tag: r.tag, class: r.class)
+
+  if r.id != "" and r.id in perIdStyles:
+    result.ensureUniqueId()
+    perIdStyles[result.id] = perIdStyles[r.id]
+
+  case r.kind
   of RopeAtom:
-    dst.length = src.length
-    dst.text   = src.text
-
+    result.length      = r.length
+    result.text        = r.text
   of RopeBreak:
-    dst.breakType = src.breakType
-    dst.guts      = Rope()
-    refCopy(dst.guts, src.guts)
-
+    result.breakType   = r.breakType
+    result.guts        = r.guts.copy()
   of RopeLink:
-    dst.url = src.url
-    var sub: Rope = Rope()
-    refCopy(sub, src.toHighlight)
-    dst.toHighlight = sub
-
+    result.url         = r.url
+    result.toHighlight = r.toHighlight.copy()
   of RopeList:
-    var
-      sub: Rope
-      l:   seq[Rope]
-    for item in src.items:
-      sub = Rope()
-      refCopy(sub, item)
-      l.add(sub)
-    dst.items = l
-
+    for item in r.items:
+      result.items.add(item.copy())
   of RopeTaggedContainer:
-    var sub: Rope = Rope()
-    refCopy(sub, src.contained)
-    dst.contained = sub
-
+    result.width      = r.width
+    result.contained  = r.contained.copy()
   of RopeTable:
-    dst.colInfo = src.colInfo
-    if src.thead != nil:
-      dst.thead = Rope()
-      refCopy(dst.thead, src.thead)
-    if src.tbody != nil:
-      dst.tbody = Rope()
-      refCopy(dst.tbody, src.tbody)
-    if src.tfoot != nil:
-      dst.tfoot = Rope()
-      refCopy(dst.tfoot, src.tfoot)
-    if src.title != nil:
-      dst.title = Rope()
-      refCopy(dst.caption, src.caption)
-    if src.caption != nil:
-      dst.caption = Rope()
-      refCopy(dst.caption, src.caption)
-
+    result.colInfo    = r.colInfo
+    result.thead      = r.thead.copy()
+    result.tbody      = r.tbody.copy()
+    result.tfoot      = r.tfoot.copy()
+    result.title      = r.title.copy()
+    result.caption    = r.caption.copy()
   of RopeTableRow, RopeTableRows:
-    for cell in src.cells:
-      var r = Rope()
-      refCopy(r, cell)
-      dst.cells.add(r)
-
+    for item in r.cells:
+      result.cells.add(item.copy())
   of RopeFgColor, RopeBgColor:
-    dst.color   = src.color
-    dst.toColor = Rope()
-    refCopy(dst.toColor, src.toColor)
+    result.color      = r.color
+    result.toColor    = r.tocolor.copy()
 
-  if src.next != nil:
-    var f = Rope()
-    refCopy(f, src.next)
-    dst.next = f
+  result.next = r.next.copy()
+  r.cycle = false
 
-proc `&`*(r1: Rope, r2: Rope): Rope =
+proc `+`*(r1: Rope, r2: Rope): Rope =
   ## Returns a concatenation of two rope objects, *copying* the
   ## elements in the rope. This is really only necessary if you might
   ## end up with cycles in your ropes, or might mutate properties of
   ## nodes.
   ##
-  ## Typically, `+` is probably a better bet.
+  ## Typically, `+=` is probably a better bet.
   var
-    dupe1: Rope = Rope()
-    dupe2: Rope = Rope()
-    probe: Rope
+    dupe1 = r1.copy()
+    dupe2 = r2.copy()
 
   if r1 == nil and r2 == nil:
     return nil
   elif r1 == nil:
-    refCopy(dupe1, r2)
-    return dupe1
-  elif r2 == nil:
-    refCopy(dupe1, r1)
-    return dupe1
+    return dupe2
+  else:
+    result = dupe1
+    while dupe1.next != nil:
+      dupe1 = dupe1.next
+    dupe1.next = dupe2
 
-  refCopy(dupe1, r1)
-  refCopy(dupe2, r2)
-  probe = dupe1
-  while probe.next != nil:
-    probe = probe.next
-
-  probe.next = dupe2
-
-  return dupe1
-
-proc `+`*(r1: Rope, r2: Rope): Rope =
+proc link*(r1: Rope, r2: Rope): Rope =
   ## Returns the concatenation of two ropes, but WITHOUT copying them.
   ## Unless the first rope is nil, this will return the actual
-  ## left-hand object, so is identical to +=; use & or copy your
-  ## first rope before you use `+` if you want different semantics.
-  ##
+  ## left-hand object. So this links the two lists, as opposed to
+  ## `+=`, which links a copy of the rhs to the lhs, or `+` which
+  ## copies both operands.
+
   ## We did it this way, because copying is rarely the right thing.
   if r1 == nil:
     return r2
@@ -211,12 +178,8 @@ proc `+`*(r1: Rope, r2: Rope): Rope =
 
   return r1
 
-proc `+=`*(r1: var Rope, r2: Rope) =
-  ## Same as `+`
-  if r1 == nil:
-    r1 = r2
-    return
-  r1 = r1 + r2
+proc `+=`*(r1: Rope, r2: Rope): Rope =
+  return r1.link(r2.copy())
 
 proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope
 

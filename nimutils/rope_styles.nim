@@ -2,8 +2,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import unicode, tables, rope_base, rope_construct, options, random, hexdump,
-       strutils
+import unicode, tables, rope_base, rope_construct, options, strutils
 
 let
   BoxStylePlain* =     BoxStyle(horizontal: Rune(0x2500),
@@ -293,9 +292,8 @@ let
     useHorizontalSeparator: some(false), boxStyle: some(BoxStylePlain),
     alignStyle: some(AlignIgnore))
 
-var
-  defaultStyle* = plainStyle
-  styleMap* = {
+
+styleMap = { # Starting theme. Need to redo this to be a real theme API soon.
       "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow= OWrap),
       "basic"     : newStyle(bpad = 0),
       "h1"        : newStyle(align = AlignL, italic = ItalicOn, tpad = 2,
@@ -355,22 +353,23 @@ var
       "upper"     : newStyle(casing = CasingUpper),
       "underline" : newStyle(underline = UnderlineSingle),
       "strong"    : newStyle(inverse = InverseOn, italic = ItalicOn),
-      "code"      : newStyle(lpad = 2, rpad = 2, tpad = 1, bpad = 1),
+      "code"      : newStyle(lpad = 2, rpad = 2, tpad = 1, bpad = 1, 
+                             bgColor = "darkslategray"),
       "caption"   : newStyle(bpad = 1, tpad = 0, align = AlignC,
                              bgColor = "black", fgColor = "tomato",
                              italic = ItalicOn),
-      "title"     : newStyle(tpad = 1, bpad = 0, align = AlignC,
+      "title"     : newStyle(tpad = 1, bpad = 0, align = AlignL,
                              bgColor = "black", fgColor = "tomato",
                              italic = ItalicOn)
     }.toTable()
     
+var
+  defaultStyle* = plainStyle
   perClassStyles* = {
       "callout"   : newStyle(fgColor = "fandango", bgColor = "jazzberry",
                              italic = ItalicOn, casing = CasingTitle)
     }.toTable()  
     
-  perIdStyles*:    Table[string, FmtStyle]
-
   breakingStyles*: Table[string, bool] = {
     "container"  : true,
     "basic"      : true,
@@ -689,8 +688,7 @@ proc ropeStyle*(r:     Rope,
         continue
       item.noTextExtract = true
 
-    if item.id == "":
-      item.id = randString(8).hex()
+    item.ensureUniqueId()
 
     if item.id in perIdStyles:
       perIdStyles[item.id] = perIdStyles[item.id].mergeStyles(style)
@@ -1116,21 +1114,23 @@ proc useCrashTheme*() =
       "basic"     : newStyle(bpad = 0, bgColor = c0BG, fgColor = c0Text),
       "h1"        : newStyle(bgColor = c0Pink, align = AlignL,
                              italic = ItalicOn, fgColor = c0Inv, tpad = 2,
-                             lpad = 1, rpad = 1),
+                             lpad = 1, rpad = 1, bold = BoldOn),
       "h2"        : newStyle(bgColor = c0Green, fgColor = "black", lpad = 1,
-                             rpad = 1, tpad = 1, align = AlignL,
+                             rpad = 1, tpad = 1, align = AlignL, bold = BoldOn,
                              italic = ItalicOn),
       "h3"        : newStyle(bgColor = c0Purple, fgColor = c0Inv, tpad = 1,
+                                                           bold = BoldOn,
                              italic = ItalicOn, bpad = 0, lpad = 1, rpad = 1),
       "h4"        : newStyle(bgColor = c0Inv, fgColor = c0Pink, tpad = 0,
                              italic = ItalicOn, lpad = 1, rpad = 1,
+                                                       bold = BoldOn,
                              underline = UnderlineSingle, casing = CasingTitle),
       "h5"        : newStyle(fgColor = "black", bgColor = c0Green,
                              lpad = 1, rpad = 1, tpad = 0, bpad = 0,
                              italic = ItalicOn, underline = UnderlineSingle,
-                             casing = CasingTitle),
+                             bold = BoldOn, casing = CasingTitle),
       "h6"        : newStyle(fgColor = c0Purple, bgColor = c0Inv, lpad = 1,
-                             rpad = 1, tpad = 0, bpad = 0,
+                             rpad = 1, tpad = 0, bpad = 0, bold = BoldOn,
                              underline = UnderlineSingle, casing = CasingTitle),
       "ol"        : newStyle(bulletChar = Rune('.'), lpad = 3, align = AlignL,
                              tpad = 1, bpad = 1),
@@ -1158,7 +1158,7 @@ proc useCrashTheme*() =
       "th"        : newStyle(bgColor = "black", bold = BoldOn, overflow = OWrap,
                            casing = CasingUpper, tpad = 1, bpad = 0, lpad = 1, 
                            rpad = 1, fgColor = c0Green, align = AlignC),
-      "tr"        : newStyle(bold = BoldOn, lpad = 0, rpad = 0,
+      "tr"        : newStyle(lpad = 0, rpad = 0,
                              overflow = OWrap, tpad = 0, bpad = 0),
       "tr.even"   : newStyle(bgColor = "mediumpurple", lpad = 0, rpad = 0),
       "tr.odd"    : newStyle(bgColor = c0Purple, lpad = 0, rpad = 0),
@@ -1170,9 +1170,10 @@ proc useCrashTheme*() =
       "upper"     : newStyle(casing = CasingUpper),
       "underline" : newStyle(underline = UnderlineSingle),
       "strong"    : newStyle(inverse = InverseOn, italic = ItalicOn),
-      "code"      : newStyle(lpad = 2, rpad = 2, tpad = 1, bpad = 1),
+      "code"      : newStyle(lpad = 2, rpad = 2, tpad = 1, bpad = 1,
+                             bgColor = c0Bg, fgColor = c0Text),
       "title"     : newStyle(bgColor = "black", fgColor = c0Green,
-                             tpad = 1, bpad = 0, align = AlignC,
+                             tpad = 1, bpad = 0, align = AlignL,
                              italic = ItalicOn),
       "caption"   : newStyle(bgColor = "black", fgColor = c0Green,
                              bpad = 1, tpad = 0, align = AlignC,
