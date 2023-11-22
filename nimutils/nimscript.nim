@@ -94,7 +94,7 @@ template staticLinkLibraries*(libNames: openarray[string], libDir: string,
   ## Meant to be called from your config.nims file.
   when defined(linux):
     if useMusl:
-      let muslPath = muslBase & "musl/bin/musl-gcc"
+      let muslPath = muslBase.joinPath("musl/bin/musl-gcc")
       switch("gcc.exe", muslPath)
       switch("gcc.linkerexe", muslPath)
 
