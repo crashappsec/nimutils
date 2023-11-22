@@ -75,12 +75,6 @@ type
     str:        string
     ownedByNim: bool
   StrBox    = ref StrBoxObj
-  StrPayloadCast = object
-    cap: int
-    data: UncheckedArray[char]
-  StrCast = object
-    len: int
-    p:   ptr StrPayloadCast
   SomeString  = string | cstring # String box.
   SomeRef     = ref or pointer  # Not boxed.
   SomeNumber  = SomeOrdinal or SomeFloat
@@ -90,10 +84,6 @@ type
 
 
 proc toStrBox(s: string): StrBox =
-  var
-    outer = cast[StrCast](s)
-    inner = cast[ref StrPayloadCast](outer.p)
-
   new result
 
   result.data       = cstring(s)
@@ -134,7 +124,7 @@ proc hatrack_dict_put(ctx: var Dict, key: pointer,
   hatc.}
 proc hatrack_dict_replace(ctx: var Dict, key: pointer, value: pointer):
                      bool {.hatc.}
-proc hatrack_dict_add(ctx: var Dict, key: pointer, value: pointer):
+proc hatrack_dict_add*(ctx: var Dict, key: pointer, value: pointer):
                      bool {.hatc.}
 proc hatrack_dict_remove(ctx: var Dict, key: pointer): bool {.hatc.}
 proc hatrack_dict_keys_sort(ctx: var Dict, n: ptr uint64):

@@ -118,8 +118,8 @@ template quickTableVerticalHeaders[T: string|Rope](cells: seq[seq[T]],
 
 proc quickTable*[T: string|Rope](cells: seq[seq[T]], verticalHeaders = false,
          noheaders = false, title = Rope(nil), caption = Rope(nil), width = 0,
-         borders = BorderAll, boxStyle = BoxStyleDouble,
-                     colPcts: seq[int] = @[]): Rope =
+         borders = defaultBorderStyle(), boxStyle = defaultBoxStyle(),
+                     colPcts: seq[int] = @[], class = ""): Rope =
   if cells.len() == 0:
     raise newException(ValueError, "No cells passed")
 
@@ -139,12 +139,19 @@ proc quickTable*[T: string|Rope](cells: seq[seq[T]], verticalHeaders = false,
   if width != 0:
     result = result.setWidth(width)
 
+  if class != "":
+    for item in result.ropeWalk():
+      if item.tag != "" and item.class == "":
+        item.class = item.tag & "." & class
+      elif item.class == "":
+        item.class = class
+
 proc quickTable*[T: string|Rope](cells: seq[seq[T]], title: string,
          caption = "", verticalHeaders = false, noheaders = false, width = 0,
          borders = defaultBorderStyle(), boxStyle = defaultBoxStyle(),
-                     colPcts: seq[int] = @[]): Rope =
+         colPcts: seq[int] = @[], class = ""): Rope =
   return quickTable[T](cells, verticalHeaders, noheaders, atom(title),
-                       atom(caption), width, borders, boxStyle, colPcts)
+                       atom(caption), width, borders, boxStyle, colPcts, class)
 
 proc callOut*[T: string | Rope](contents: T, width = 0, borders = BorderAll,
                                 boxStyle = BoxStyleDouble): Rope =

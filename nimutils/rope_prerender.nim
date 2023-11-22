@@ -7,8 +7,8 @@
 # Everything else on my original wishlist is here now though.
 
 
-import tables, options, std/terminal, rope_base, rope_styles, unicodeid,
-       unicode, misc
+import tables, options, std/terminal, rope_base, rope_construct, rope_styles, 
+       unicodeid, unicode, misc
 
 type
   RenderBoxKind* = enum RbText, RbBoxes
@@ -35,10 +35,13 @@ proc `$`*(box: RenderBox): string =
     result &= $(box.contents)
     result &= "\n"
 
+const MAXPAD = 1000
 template styleRunes(state: FmtState, runes: seq[uint32]): seq[uint32] =
   @[state.curStyle.getStyleId()] & runes & @[StylePop]
 
 template pad(state: FmtState, w: int): seq[uint32] =
+  if w > MAXPAD:
+    return
   @[state.curStyle.getStyleId()] & uint32(Rune(' ')).repeat(w) & @[StylePop]
 
 
@@ -331,7 +334,12 @@ proc preRenderUnorderedList(state: var FmtState, r: Rope): seq[RenderBox] =
       subedWidth = false
 
     for n, item in r.items:
-      var oneItem  = state.preRender(item)[0]
+      var subs = state.preRender(item)
+
+      if len(subs) == 0:
+        continue
+
+      var oneItem = subs[0]
 
       for i in 0 ..< oneItem.contents.lines.len():
         if i == 0:
@@ -384,7 +392,13 @@ proc preRenderOrderedList(state: var FmtState, r: Rope): seq[RenderBox] =
       subedWidth = false
 
     for n, item in r.items:
-      var oneItem = state.preRender(item)[0]
+      var sub = state.preRender(item)
+
+      if len(sub) == 0:
+        continue
+
+      var oneItem = sub[0]
+
       let
         bulletText = state.toNumberBullet(n + 1, maxDigits)
         styled     = state.styleRunes(bulletText)
@@ -448,6 +462,7 @@ proc calculateColumnWidths(state: var FmtState, r: Rope,
   # after border overhead is removed.
   var
     toDivide  = state.getAvailableSpace(r, colInfo.len())
+    available = toDivide
     numFlex   = 0
     pctAlloc  = 0
 
@@ -457,15 +472,15 @@ proc calculateColumnWidths(state: var FmtState, r: Rope,
         numFlex += 1
     elif item.absVal:
       result.add(item.wValue)
-      toDivide -= item.wValue
+      available -= item.wValue
     else:
       pctAlloc += item.wValue
       result.add((item.wValue * toDivide) div 100)
-      toDivide -= result[i]
+      available -= result[i]
 
   if numFlex > 0 and toDivide >= 0:
     let
-      perCol = toDivide div numFlex
+      perCol = available div numFlex
 
     for i, item in colInfo:
       if item.wValue == 0 and not item.absVal:
@@ -494,7 +509,6 @@ proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
     rows:        seq[Rope]
     maxSeen   = -1
     sum       = 0
-    total:     int
     available: int
 
   if r.thead != nil:
@@ -509,7 +523,6 @@ proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
       if i > maxSeen:
         maxWidths.add(0)
         totalWidths.add(0)
-        result.add(ColInfo(wValue: 4, absVal: true))
         happy.add(false)
         maxSeen += 1
 
@@ -520,56 +533,79 @@ proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
 
   available = state.getAvailableSpace(r, maxWidths.len())
 
-  if len(maxWidths) == 1:
+  if len(maxWidths) <= 1:
     return  @[ColInfo(span: 0, wValue: 0, absVal: false)]
+  
+  var evenDivision = (available div maxWidths.len())
 
-  var smallThreshold = (available div maxWidths.len()) - 4
+  for i in 0 ..< happy.len():
+    result.add(ColInfo(wValue: evenDivision, absVal: true))
+    available -= evenDivision
 
   for i, width in maxWidths:
-    if width <= smallThreshold:
-      result[i].wValue = width + 4
-      available -= (width + 4)
+    let diff = evenDivision - (width + 2)
+
+    if diff > 0:
+      result[i].wValue = width + 2
+      available += diff
       happy[i] = true
-    else:
-      sum += totalWidths[i]
 
-  var proportionalSpace = available
-
+  # See if there's enough nicked space to make columns happy.
   for i, width in maxWidths:
     if happy[i]: 
       continue
-    if available <= 0:
-      break
-      
-    var 
-      myPct = (totalWidths[i] * 100) div sum
-      v     = (myPct * proportionalSpace) div 100
-    
-    if v > maxWidths[i]:
-      v = maxWidths[i]
+    let needed = (width + 2) - result[i].wValue
+    if needed < available:
+      result[i].wValue += needed
+      available -= needed
       happy[i] = true
 
-    result[i].wValue =  v
-    available -= v
+  if available <= 0:
+    return
 
-  var lastLoop = available
+  # If there's space left over, hand it out proportionally
+  # to remaining unhappy columns.
+  var proportionalSpace = available
 
-  while available > 0:
-    for i in 0 ..< happy.len():
-      if not happy[i]:
-        result[i].wValue += 1
-        available -= 1
-        if result[i].wValue >= maxWidths[i]:
-          happy[i] = true
-        if available == 0:
-          break
+  for i in 0 ..< totalWidths.len():
+    if happy[i]: 
+      continue
+    sum += totalWidths[i]
+    
+  if sum != 0:
+    for i, width in totalWidths:
+      if available <= 0:
+        break
+      if happy[i]:
+        break
+      var 
+        myPct = (width * 100) div sum
+        v     = (myPct * proportionalSpace) div 100
+    
+      result[i].wValue += v
+      available -= v
 
-    if available == lastLoop:
-      for i in 0 ..< happy.len():
-        happy[i] = false
+  ## And if there's *still* space left over, give it out
+  ## proportionally to all the columns.
+  sum = 0
+  proportionalSpace = available
 
-    lastLoop = available
-      
+  for i in 0 ..< maxWidths.len():
+    sum += totalWidths[i]
+
+  if sum != 0:
+    for i, width in totalWidths:
+      if available <= 0:
+        break
+      var 
+        myPct = (width * 100) div sum
+        v     = (myPct * proportionalSpace) div 100
+
+      result[i].wValue += v
+      available -= v
+
+  result[^1].wValue += available
+    
 proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
     var
       colWidths: seq[int]
@@ -601,6 +637,10 @@ proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
       result &= state.preRender(r.tbody)
     if r.tfoot != Rope(nil):
       result &= state.preRender(r.tfoot)
+
+    if len(result) == 0:
+      state.popTableWidths()
+      return
 
     state.curTableSep = savedSep
 
@@ -765,10 +805,6 @@ proc addRunesToExtraction(extraction: TextPlane, runes: seq[Rune]) =
       else:
         extraction.lines[^1].add(uint32(rune))
 
-template addRunesToExtraction(extraction: TextPlane,
-                              runes:      seq[uint32]) =
-  extraction.addRunesToExtraction(cast[seq[Rune]](runes))
-
 proc preRenderAtom(state: var FmtState, r: Rope) =
   withRopeStyle:
     var text = cast[seq[Rune]](state.styleRunes(cast[seq[uint32]](r.text)))
@@ -779,8 +815,8 @@ proc preRenderLink(state: var FmtState, r: Rope) =
     raise newException(ValueError, "Only styled text is allowed in links")
 
   discard state.preRender(r.toHighlight)
+
   if state.showLinkTarg:
-    var text = cast[seq[Rune]](state.styleRunes(cast[seq[uint32]](r.text)))
     let runes = @[Rune('(')] & r.url.toRunes() & @[Rune(')')]
     state.curPlane.addRunesToExtraction(runes)
 
@@ -957,10 +993,39 @@ proc preRender*(r: Rope, width = -1, showLinkTargets = false,
     nobox = true
 
   if noBox:
-    return state.curPlane
+    result = state.curPlane
+    result.softBreak = true
+    return
 
   let preRender = state.collapseColumn(preRenderBoxes, 0, 0)
   result        = state.collapsedBoxToTextPlane(preRender)
   result.width  = state.totalWidth
   for item in r.ropeWalk():
     item.processed = false
+
+  if r.noBoxRequired():
+    result.softBreak = true
+
+proc asUtf8*(r: Rope, width = high(int)): string =
+  ## Return a string that has padding and alignment applied, but no other 
+  ## styling.
+
+  let box = nocolors(r).preRender(width)
+  for i, line in box.lines:
+    if i != 0:
+      result.add("\n")
+    for i32 in line:
+      if i32 > 0x10ffff:
+        continue
+      result.add($(Rune(i32)))
+  if not box.softBreak:
+    result.add("\n")
+
+proc extractRawText*(r: Rope): string =
+  ## Returns a string consisting of all the raw text with no formatting
+  ## whatsoever (not even alignment or pad)
+  let parts = r.ropeWalk()
+
+  for item in parts:
+    if item.kind == RopeAtom:
+      result &= $(item.text)

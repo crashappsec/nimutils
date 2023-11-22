@@ -15,12 +15,13 @@ import nimutils/[box, random, unicodeid, pubsub, sinks, misc, texttable, dict],
        nimutils/[file, filetable, encodings, advisory_lock, progress],
        nimutils/[sha, aes, prp, hexdump, markdown, htmlparse, net],
        nimutils/[colortable, rope_base, rope_styles, rope_construct],
-       nimutils/[rope_prerender, rope_ansirender, switchboard, subproc]
+       nimutils/[rope_prerender, rope_ansirender, rope_htmlrender],
+       nimutils/[switchboard, subproc]
 export box, random, unicodeid, pubsub, sinks, misc, random, texttable,
        file, filetable, encodings, advisory_lock, progress, sha,
        aes, prp, hexdump, markdown, htmlparse, net, colortable, rope_base,
        rope_styles, rope_construct, rope_prerender, rope_ansirender,
-       switchboard, subproc, dict
+       rope_htmlrender, switchboard, subproc, dict
 
 when defined(macosx):
   import nimutils/macproc
@@ -69,7 +70,7 @@ when isMainModule:
                                   passthrough = true)
     print(fgColor("PID was:       ", "atomiclime") + em($(res.getPid())))
     print(fgColor("Exit code was: ", "atomiclime") + em($(res.getExit())))
-    print(fgColor("Stdout was:    ", "atomiclime") + code(res.getStdout()))
+    print(fgColor("Stdout was:    ", "atomiclime") + code(pre(res.getStdout())))
     print(fgColor("Stderr was:    ", "atomiclime") + text(res.getStderr()))
     print(strdump(res.getStderr()))
 
@@ -385,7 +386,7 @@ when isMainModule:
              bpad(1).boldBorders().allBorders()
     print(t4)
     let t5 = t4.highlightMatches(@["medium", "the"])
-    print(t4)
+    print(t5)
 
     let t6 = atom("This has one string that's pretty long, ")  + 
              atom("but the rest are short. But this one is ") + 
@@ -399,7 +400,6 @@ when isMainModule:
       st  = "This is a test of something I'd really like to know about, " &
             "I think??"
       txt = nocolors(callout(st, boxStyle = BoxStyleAscii))
-      res = txt.search(text = "test")
 
     print(txt)
 

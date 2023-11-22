@@ -352,9 +352,12 @@ proc htmlTreeToRope(n: HtmlNode): Rope =
 
   n.htmlTreeToRope(pre)
 
-proc htmlStringToRope*(s: string, markdown = true): Rope =
+proc htmlStringToRope*(s: string, markdown = true, add_div = true): Rope =
   ## Convert text that is either in HTML or in Markdown into a Rope
   ## object. If `markdown = false` it will only do HTML conversion.
+  ##
+  ## If `add_div` is true, it will encapsulate the result in a 'div'
+  ## object.
   ##
   ## Markdown conversion works by using MD4C to convert markdown to an
   ## HTML DOM, and then uses gumbo to produce a tree, which we then
@@ -373,9 +376,12 @@ proc htmlStringToRope*(s: string, markdown = true): Rope =
      tree.children[0].contents == "p" and
      tree.children[1].contents == "\n" and
      tree.children[0].children.len() == 1:
-    return tree.children[0].children[0].htmlTreeToRope()
+    result = tree.children[0].children[0].htmlTreeToRope()
   else:
-    return tree.htmlTreeToRope()
+    result = tree.htmlTreeToRope()
+
+  if add_div:
+    result = Rope(kind: RopeTaggedContainer, tag: "div", contained: result)
 
 template html*(s: string): Rope =
   ## Converts HTML into a Rope object.
@@ -383,11 +389,11 @@ template html*(s: string): Rope =
   ## If your input is not well-formed, what you get is
   ## undefined. Basically, we seem to always get trees of some sort
   ## from the underlying library, but it may not map to what you want.
-  s.htmlStringToRope(markdown = false)
+  s.strip().htmlStringToRope(markdown = false, add_div = true)
 
-template markdown*(s: string): Rope =
-  ## An alias for htmlStringToRope, with markdown always true.
-  s.htmlStringToRope(markdown = true)
+proc markdown*(s: string, add_div = true): Rope =
+  ## Process the text as markdown.
+  s.strip().htmlStringToRope(markdown = true, add_div = true)
 
 proc text*(s: string, pre = true, detect = true): Rope =  
   if detect:
@@ -409,7 +415,6 @@ macro basicTagGen(ids: static[openarray[string]]): untyped =
     let
       strNode = newLit(id)
       idNode  = newIdentNode(id)
-      hidNode = newIdentNode("html" & id)
       decl    = quote do:
         proc `idNode`*(r: Rope): Rope =
           ## Apply the style at the point of a rope node.  Sub-nodes
@@ -434,7 +439,6 @@ macro tagGenRename(id: static[string], rename: static[string]): untyped =
   let
     strNode = newLit(id)
     idNode  = newIdentNode(rename)
-    hidNode = newIdentNode("html" & id)
     decl    = quote do:
       proc `idNode`*(r: Rope): Rope =
         ## Apply the style at the point of a rope node.  Sub-nodes
@@ -643,4 +647,25 @@ proc ul*(l: seq[string]): Rope =
   for item in l:
     listItems.add(li(item))
   return ul(listItems)
+
+proc inlineCode*(s: string): Rope =
+  ## For formatting code w/o line breaks.
+  if s == "":
+    return Rope(nil)
+  else:
+    return Rope(kind: RopeTaggedContainer, tag: "inline", 
+                contained: s.text(pre = false))
+
+proc join*(l: seq[Rope], s: Rope): Rope =
+  if l.len() == 0:
+    return
+
+  result = l[0].copy()
+  var cur = result
+
+  for i in 1 ..< l.len():
+    var next = l[i]
+    cur += s.copy()
+    cur += next
+    next = cur
 

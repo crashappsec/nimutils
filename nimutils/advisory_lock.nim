@@ -8,10 +8,9 @@ proc flock*(fd: cint, flags: cint): cint {.discardable, importc,
                                            header: "<sys/file.h>".}
 proc fdopen*(fd: cint, mode: cstring): File {.importc, header: "<stdio.h>".}
 
-type OsErrRef = ref OsError
-
 proc obtainLockFile*(fname: string, writeLock = false, timeout: int64 = 5000,
-                                                oflags: cint = 0): cint =
+                                                oflags: cint = 0x200): cint =
+  # 0x200 == O_CREAT
   ## Obtains a lock on a file, returning the file descriptor associated
   ## with it. Unlock via `unlockFd()`
   var
@@ -32,12 +31,13 @@ proc obtainLockFile*(fname: string, writeLock = false, timeout: int64 = 5000,
   result = open(cstring(fullpath), openflags)
 
   if result == -1:
-    raise OsErrRef(errorCode: errno)
+    raise newException(ValueError, "When trying to open " & fullpath &
+                       ", Got error = " & $(strerror(errno)))
   var
     endtime: uint64 = if timeout < 0:
-                        0xffffffffffffffff
-                      else:
-                        unixTimeInMs() + uint64(timeout)
+                      0xffffffffffffffff
+                    else:
+                      unixTimeInMs() + uint64(timeout)
     sleepdur = 16
 
   while flock(result, lockflags) != 0:

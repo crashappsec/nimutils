@@ -5,7 +5,7 @@
  ]#
 
 import strutils except toLower
-import times, unicode, tables, httpclient, xmlparser, xmltree, strutils, uri
+import times, unicode, tables, httpclient, xmlparser, xmltree, uri
 import awsclient
 
 

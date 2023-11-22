@@ -274,15 +274,14 @@ sb_init_party_input_buf(switchboard_t *ctx, party_t *party, char *input,
     
     if (dup) {
 	free   = true;
-	to_set = (char *)calloc(len + 1, 0);
-	memcpy(to_set, dup, len);
+	to_set = (char *)calloc(len + 1, 1);
+	memcpy(to_set, input, len);
     }
     party->open_for_read        = true;
     party->open_for_write       = false;
     party->can_read_from_it     = true;
     party->can_write_to_it      = false;
     party->party_type           = PT_STRING;
-
     str_src_party_t *sobj       = get_sstr_obj(party);
     sobj->strbuf                = to_set;
     sobj->len                   = len;

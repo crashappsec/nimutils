@@ -271,9 +271,8 @@ proc print*(s: string, file = stdout, forceMd = false, forceHtml = false,
     # But we avoid a linear scan of the entire string.
     file.write(s)
     return
-  var 
-    toWrite:  string
-    toRender: Rope
+
+  var toRender: Rope
 
   if forceMd:
     toRender = markdown(s)

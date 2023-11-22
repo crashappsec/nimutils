@@ -3441,6 +3441,18 @@ md_is_autolink_uri(MD_CTX* ctx, OFF beg, OFF max_end, OFF* p_end)
 }
 
 static int
+is_any_of(char c, char *p) {
+  int i = 0;
+  while (p[i] != 0) {
+    if (p[i] == c) {
+      return TRUE;
+    }
+    i++;
+  }
+  return FALSE;
+}
+
+static int
 md_is_autolink_email(MD_CTX* ctx, OFF beg, OFF max_end, OFF* p_end)
 {
     OFF off = beg + 1;
@@ -3455,7 +3467,7 @@ md_is_autolink_email(MD_CTX* ctx, OFF beg, OFF max_end, OFF* p_end)
      */
 
     /* Username (before '@'). */
-    while(off < max_end  &&  (ISALNUM(off) || ISANYOF(off, _T(s2))))
+    while(off < max_end  &&  (ISALNUM(CH(off)) || is_any_of(ctx->text[off], &s2)))
         off++;
     if(off <= beg+1)
         return FALSE;

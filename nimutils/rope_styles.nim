@@ -374,7 +374,7 @@ var
     "container"  : true,
     "basic"      : true,
     "caption"    : true,
-    "code"       : true,
+    "pre"        : true,
     "p"          : true,
     "div"        : true,
     "ol"         : true,
@@ -708,7 +708,7 @@ proc colWidths*(r: Rope, vals: openarray[(int, bool)]): Rope {.discardable.} =
   var info: seq[ColInfo]
 
   for (n, b) in vals:
-    info.add(ColInfo(span: 0, wValue: n, absVal: b))
+    info.add(ColInfo(span: 1, wValue: n, absVal: b))
     
   return r.colWidths(info)
   
@@ -819,7 +819,6 @@ proc color*(s: string, fgColor: string, bgColor = ""): Rope =
   ## Returns a new Rope from a string with the given fg and (optional)
   ## background color.
   return color(text(s), fgColor, bgColor)
-
 
 proc tpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Add a top pad to a Rope object. This will be ignored if the
@@ -1116,7 +1115,6 @@ proc explode*(s: string, inTerms: seq[string]): seq[string] =
   var 
     terms   = inTerms
     startix = 0
-    endix: int
 
   while terms.len() != 0:
     let (ix, which) = multiFindFirst(s, terms, startIx)
@@ -1194,7 +1192,7 @@ proc highlightMatches(r: Rope, info: var MatchInfo) =
     myMatchInfo = MatchInfo(terms: info.terms, classToAdd: info.classToAdd)
     r.genericRopeWalk(highlightMatches, myMatchInfo)
     if myMatchInfo.replacements.len() >= 1:
-      let (oldR, newR) = myMatchInfo.replacements[0]
+      let (_, newR) = myMatchInfo.replacements[0]
       case r.kind
       of RopeAtom:
         discard
@@ -1246,46 +1244,46 @@ proc installTheme*(tagStyles:   var Table[string, FmtStyle],
   perClassStyles = classStyles
 
 const
-  c0Pink   = "jazzberry" 
-  c0Purple = "fandango"
-  c0Green  = "atomiclime"
-  c0BG     = "darkslategray"
-  c0Text   = "white"
-  c0Inv    = "gainsboro"
+  c0Bg1      = "black"
+  c0Bg2      = "darkslategray"
+  c0Bg3      = "gray" # darkdlateblue?
+  c0Text     = "gainsboro"
+  c0DarkText = "midnightblue"
+  c0Accent1  = "jazzberry"
+  c0Accent2  = "atomiclime"
+  c0Accent3  = "fandango"
 
 proc useCrashTheme*() =
   var
     tableDefault  = newStyle(overflow = OWrap, tpad = 0, bpad = 0,
                              lpad = 0, rpad = 0, fgColor = c0Text)
     tagStyles     = {
-      "container" : newStyle(bgColor = c0Bg, fgColor = c0Text),
-      "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow= OWrap, 
-                             bgColor = c0Bg, fgColor = c0Text),
-      "basic"     : newStyle(bpad = 0, bgColor = c0BG, fgColor = c0Text),
-      "h1"        : newStyle(bgColor = c0Pink, align = AlignL,
-                             italic = ItalicOn, fgColor = c0Inv, tpad = 2,
-                             lpad = 1, rpad = 1, bold = BoldOn),
-      "h2"        : newStyle(bgColor = c0Green, fgColor = "black", lpad = 1,
-                             rpad = 1, tpad = 1, align = AlignL, bold = BoldOn,
-                             italic = ItalicOn),
-      "h3"        : newStyle(bgColor = c0Purple, fgColor = c0Inv, tpad = 1,
-                                                           bold = BoldOn,
-                             italic = ItalicOn, bpad = 0, lpad = 1, rpad = 1),
-      "h4"        : newStyle(bgColor = c0Inv, fgColor = c0Pink, tpad = 0,
-                             italic = ItalicOn, lpad = 1, rpad = 1,
-                                                       bold = BoldOn,
+      "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow = OWrap,
+                    bgColor = c0Bg1, fgColor = c0Text),
+      "basic"     : newStyle(bpad = 0, bgColor = c0Bg1, fgColor = c0Text),
+      "h1"        : newStyle(align = AlignL, italic = ItalicOn, tpad = 2,
+                      casing = CasingUpper, lpad = 1,
+                      fgColor = c0Accent1, bgColor = c0Bg2),
+      "h2"        : newStyle(lpad = 1, rpad = 1, tpad = 0, align = AlignL,
+                              italic = ItalicOn, bgColor = c0Bg3,
+                              fgColor = c0Accent2),
+      "h3"        : newStyle(italic = ItalicOn, tpad = 1, bpad = 0, lpad = 1,
+                             rpad = 1, bgColor = c0Bg3, fgColor = c0Accent3),
+      # h4-6 are inverse-ish from 1-3.
+      "h4"        : newStyle(italic = ItalicOn, lpad = 1, rpad = 1, tpad = 0,
+                             fgColor = c0Bg2, bgColor= c0Accent1,
                              underline = UnderlineSingle, casing = CasingTitle),
-      "h5"        : newStyle(fgColor = "black", bgColor = c0Green,
-                             lpad = 1, rpad = 1, tpad = 0, bpad = 0,
+      "h5"        : newStyle(lpad = 1, rpad = 1, tpad = 0, bpad = 0,
+                             fgColor = c0DarkText, bgColor = c0Accent2,
                              italic = ItalicOn, underline = UnderlineSingle,
-                             bold = BoldOn, casing = CasingTitle),
-      "h6"        : newStyle(fgColor = c0Purple, bgColor = c0Inv, lpad = 1,
-                             rpad = 1, tpad = 0, bpad = 0, bold = BoldOn,
+                             casing = CasingTitle),
+      "h6"        : newStyle(lpad = 1, rpad = 1, tpad = 0, bpad = 0,
+                             fgColor = c0DarkText, bgColor= c0Accent3,
                              underline = UnderlineSingle, casing = CasingTitle),
       "ol"        : newStyle(bulletChar = Rune('.'), lpad = 3, align = AlignL,
-                             tpad = 1, bpad = 1),
-      "ul"        : newStyle(bulletChar = Rune(0x2022), lpad = 3,
-                             tpad = 1, bpad = 1, align = AlignL), #•
+                             tpad = 0, bpad = 0),
+      "ul"        : newStyle(bulletChar = Rune(0x2022), lpad = 3, rpad = 0,
+                             tpad = 0, bpad = 0, align = AlignL), #•
       "li"        : newStyle(lpad = 1, overflow = OWrap, align = AlignL,
                              tpad = 0, bpad = 0),
       "left"      : newStyle(align = AlignL),
@@ -1295,23 +1293,22 @@ proc useCrashTheme*() =
       "flush"     : newStyle(align = AlignF),
       "table"     : newStyle(borders = [BorderTypical], tpad = 1, bpad = 1,
                              lpad = 1, rpad = 1, fgColor = c0Text,
-                             bgColor = c0Pink, boxStyle = BoxStyleDash2),
+                             bgColor = c0Bg2, boxStyle = BoxStyleDash2),
       "thead"     : tableDefault,
       "tbody"     : tableDefault,
       "tfoot"     : tableDefault,
       "plain"     : plainStyle,
-      "text"      : newStyle(overflow = OWrap, bgColor = c0Bg,
-                             fgColor = c0Text),
+      "text"      : newStyle(overflow = OWrap),
       "td"        : newStyle(tpad = 0, bpad = 0, overflow = OWrap,
                              fgColor = c0Text, align = AlignL, lpad = 1,
                              rpad = 1),
-      "th"        : newStyle(bgColor = "black", bold = BoldOn, overflow = OWrap,
+      "th"        : newStyle(bgColor = c0Bg1, bold = BoldOn, overflow = OWrap,
                            casing = CasingUpper, tpad = 1, bpad = 0, lpad = 1, 
-                           rpad = 1, fgColor = c0Green, align = AlignC),
+                           rpad = 1, fgColor = c0Accent2, align = AlignC),
       "tr"        : newStyle(lpad = 0, rpad = 0,
                              overflow = OWrap, tpad = 0, bpad = 0),
-      "tr.even"   : newStyle(bgColor = "mediumpurple", lpad = 0, rpad = 0),
-      "tr.odd"    : newStyle(bgColor = c0Purple, lpad = 0, rpad = 0),
+      "tr.odd"    : newStyle(bgColor = c0Bg2, lpad = 0, rpad = 0),
+      "tr.even"   : newStyle(bgColor = c0Bg3, lpad = 0, rpad = 0),
       "em"        : newStyle(inverse = InverseOn),
       "italic"    : newStyle(italic = ItalicOn),
       "i"         : newStyle(italic = ItalicOn),
@@ -1320,19 +1317,20 @@ proc useCrashTheme*() =
       "upper"     : newStyle(casing = CasingUpper),
       "underline" : newStyle(underline = UnderlineSingle),
       "strong"    : newStyle(inverse = InverseOn, italic = ItalicOn),
-      "code"      : newStyle(lpad = 2, rpad = 2, tpad = 1, bpad = 1,
-                             bgColor = c0Bg, fgColor = c0Text),
-      "title"     : newStyle(bgColor = "black", fgColor = c0Green,
-                             tpad = 1, bpad = 0, align = AlignL,
+      "code"      : newStyle(fgColor = "jazzberry", lpad = 3, rpad = 3), 
+      "inline"    : newStyle(fgColor = "jazzberry"),
+      "title"     : newStyle(bgColor = "black", fgColor = c0Accent2,
+                             tpad = 1, bpad = 0, align = AlignC,
                              italic = ItalicOn),
-      "caption"   : newStyle(bgColor = "black", fgColor = c0Green,
+      "caption"   : newStyle(bgColor = "black", fgColor = c0Accent1,
                              bpad = 1, tpad = 0, align = AlignC,
                              italic = ItalicOn)
     }.toTable()
     
     classStyles = {
       "callout"   : newStyle(fgColor = "fandango", bgColor = "jazzberry",
-                             italic = ItalicOn, casing = CasingTitle)
+                             italic = ItalicOn, casing = CasingTitle),
+      "th.help"   : newStyle(tpad = 0),
     }.toTable()
 
   installTheme(tagStyles, classStyles)

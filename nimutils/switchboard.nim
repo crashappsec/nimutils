@@ -335,10 +335,10 @@ proc `=destroy`*(ctx: Party) =
   var copy = ctx
   copy.clearExtraData()
 
-proc sb_result_destroy(res: var SBCaptures) {.sb.}
+proc sb_result_destroy(res: ptr SBCaptures) {.sb.}
 
-proc `=destroy*`(res: var SBCaptures) =
-  res.sb_result_destroy()
+proc `=destroy`*(res: SBCaptures) =
+  sb_result_destroy(addr res)
 
 proc sb_result_get_capture(res: var SBCaptures, tag: cstring,
                            borrow: bool): cstring {.sb.}

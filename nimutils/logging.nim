@@ -1,7 +1,8 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import tables, options, pubsub, sinks, rope_base,rope_ansirender, rope_styles
+import tables, options, pubsub, sinks, rope_base, rope_construct, 
+   rope_ansirender, rope_styles
 
 type LogLevel* = enum
   ## LogLevel describes what kind of messages you want to see.
@@ -28,10 +29,10 @@ const
 
 var logLevelPrefixes = {
   llNone:  "",
-  llError: $(defaultBg(fgColor("error: ", "red"))),
-  llWarn:  $(defaultBg(fgColor("warn:  ", "yellow"))),
-  llInfo:  $(defaultBg(fgColor("info:  ", "atomiclime"))),
-  llTrace: $(defaultBg(fgColor("trace: ", "jazzberry")))
+  llError: $(defaultBg(fgColor(atom("error: "), "red"))),
+  llWarn:  $(defaultBg(fgColor(atom("warn:  "), "yellow"))),
+  llInfo:  $(defaultBg(fgColor(atom("info:  "), "atomiclime"))),
+  llTrace: $(defaultBg(fgColor(atom("trace: "), "jazzberry")))
 }.toTable()
 
 const keyLogLevel*  = "loglevel"
@@ -61,14 +62,18 @@ proc getLogLevel*(): LogLevel =
 proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
   ## A filter, installed by default, that adds a logging prefix to
   ## the beginning of the message.
+  var msgLevel: LogLevel
+
   if keyLogLevel in info:
     let llStr = info[keyLogLevel]
 
     if llStr in toLogLevelMap:
-      let
-        msgLevel = toLogLevelMap[llStr]
+      msgLevel = toLogLevelMap[llStr]
 
-      return (logLevelPrefixes[msgLevel] & msg, true)
+      result = (logLevelPrefixes[msgLevel] & msg, true)
+    else:
+      result = (llStr & msg, true)
+
   else:
     raise newException(ValueError, "Log prefix filter used w/o passing in " &
              "a valid value for 'loglevel' in the publish() call's 'aux' " &
@@ -118,15 +123,12 @@ subscribe(logTopic, defaultLogHook)
 
 proc log*(level: LogLevel, msg: string) =
   ## Generic interface for publishing messages at a given log level.
-  discard publish(logTopic,
-                  msg & "\n",
-                        newOrderedTable({ keyLogLevel: llToStrMap[level] }))
+  discard publish(logTopic, msg, newOrderedTable({ keyLogLevel:
+                                                 llToStrMap[level] }))
 
 proc log*(level: string, msg: string) =
   ## Generic interface for publishing messages at a given log level.
-  discard publish(logTopic,
-                  msg & "\n",
-                        newOrderedTable({ keyLogLevel: level }))
+  discard publish(logTopic, msg, newOrderedTable({ keyLogLevel: level }))
 
 template log*(level: LogLevel, msg: Rope) = log(level, $(msg))
 template log*(level: string, msg: Rope) = log(level, $(msg))

@@ -47,9 +47,7 @@ type PrpCtx = object
   round1, round2, round3, round4: string
 
 proc initPrpContext(key, nonce, msg: string): PrpCtx =
-  var
-    ctx: AesCtx
-    ks:  string
+  var ks: string
 
   result.contents = msg
 
