@@ -1244,22 +1244,21 @@ proc installTheme*(tagStyles:   var Table[string, FmtStyle],
   perClassStyles = classStyles
 
 const
-  c0Bg1      = "black"
-  c0Bg2      = "darkslategray"
-  c0Bg3      = "gray" # darkdlateblue?
-  c0Text     = "gainsboro"
-  c0DarkText = "midnightblue"
-  c0Accent1  = "jazzberry"
-  c0Accent2  = "atomiclime"
-  c0Accent3  = "fandango"
+  c0Bg1*      = "black"
+  c0Bg2*      = "darkslategray"
+  c0Bg3*      = "gray" # darkdlateblue?
+  c0Text*     = "gainsboro"
+  c0DarkText* = "midnightblue"
+  c0Accent1*  = "jazzberry"
+  c0Accent2*  = "atomiclime"
+  c0Accent3*  = "violet"
 
 proc useCrashTheme*() =
   var
-    tableDefault  = newStyle(overflow = OWrap, tpad = 0, bpad = 0,
-                             lpad = 0, rpad = 0, fgColor = c0Text)
+    tableDefault  = newStyle(overflow = OWrap, tpad = 0, bpad = 0, lpad = 0,
+                             rpad = 0, fgColor = c0Text,  bgColor = c0Bg1)
     tagStyles     = {
-      "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow = OWrap,
-                    bgColor = c0Bg1, fgColor = c0Text),
+      "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow = OWrap),
       "basic"     : newStyle(bpad = 0, bgColor = c0Bg1, fgColor = c0Text),
       "h1"        : newStyle(align = AlignL, italic = ItalicOn, tpad = 2,
                       casing = CasingUpper, lpad = 1,
@@ -1332,6 +1331,8 @@ proc useCrashTheme*() =
                              italic = ItalicOn, casing = CasingTitle),
       "th.help"   : newStyle(tpad = 0),
     }.toTable()
+
+  defaultStyle = defaultStyle.mergeStyles(tagStyles["basic"])
 
   installTheme(tagStyles, classStyles)
   
