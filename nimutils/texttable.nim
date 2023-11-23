@@ -38,7 +38,6 @@ proc instantTable*[T: string|Rope](cells: openarray[T], title = Rope(nil),
   if numcol > cells.len():
     numcol = cells.len()
     
-
   for i, item in cells:
     if i != 0 and i mod numcol == 0:
       rows.add(tr(row))
@@ -47,7 +46,7 @@ proc instantTable*[T: string|Rope](cells: openarray[T], title = Rope(nil),
 
   var n = len(cells)
   while n mod numcol != 0:
-    row.add(td(""))
+    row.add(td(text("")))
     n = n + 1
 
   rows.add(tr(row))
