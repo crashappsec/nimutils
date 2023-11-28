@@ -763,7 +763,7 @@ proc defaultBg*(r: Rope, recurse = true): Rope {.discardable.} =
   ## do this at the top level of a table).
   return r.ropeStyle(FmtStyle(bgColor: some("")), recurse)
 
-proc defaultBg*(s: string): Rope {.discardable.} =
+proc defaultBg*(s: string): Rope =
   ## Return a Rope that will ensure the current string's background
   ## color is not set (unless you later change it with another call).
   ##
@@ -777,7 +777,7 @@ proc defaultFg*(r: Rope, recurse = true): Rope {.discardable.} =
   ## do this at the top level of a table).
   return r.ropeStyle(FmtStyle(textColor: some("")), recurse)
 
-proc defaultFg*(s: string): Rope {.discardable.} =
+proc defaultFg*(s: string): Rope =
   ## Return a Rope that will ensure the current string's foreground
   ## color is not set (unless you later change it with another call).
   ##
@@ -789,26 +789,38 @@ proc bgColor*(r: Rope, color: string, recurse = true): Rope {.discardable.} =
   ## Note that sub-nodes will still have their style applied after
   ## this, and can have an impact. For instance, setting this at the
   ## "table" level is unlikely to affect the entire table.
-  return r.ropeStyle(newStyle(bgColor = color), recurse)
+  if color == "":
+    return r.defaultBg(recurse)
+  else:
+    return r.ropeStyle(newStyle(bgColor = color), recurse)
 
-proc bgColor*(s: string, color: string): Rope {.discardable.} =
+proc bgColor*(s: string, color: string): Rope =
   ## Returns a new Rope from a string, where the node will have the
   ## explicit background color applied. This will not have sub-nodes,
   ## so should override other settings (e.g., in a table).
-  return text(s).bgColor(color)
+  if color == "":
+    return s.defaultBg()
+  else:
+    return text(s).bgColor(color)
 
 proc fgColor*(r: Rope, color: string, recurse = true): Rope {.discardable.} =
   ## Overrides a rope's current style to set the foreground color.
   ## Note that sub-nodes will still have their style applied after
   ## this, and can have an impact. For instance, setting this at the
   ## "table" level is unlikely to affect the entire table.
-  return r.ropeStyle(newStyle(fgColor = color), recurse)
+  if color == "":
+    return r.defaultFg(recurse)
+  else:
+    return r.ropeStyle(newStyle(fgColor = color), recurse)
 
-proc fgColor*(s: string, color: string): Rope {.discardable.} =
+proc fgColor*(s: string, color: string): Rope =
   ## Returns a new Rope from a string, where the node will have the
   ## explicit foreground color applied. This will not have sub-nodes,
   ## so should override other settings (e.g., in a table).
-  return text(s).fgColor(color)
+  if color == "":
+    return s.defaultBg()
+  else:
+    return text(s).fgColor(color)
 
 proc color*(r: Rope, fgColor: string, bgColor = "", recurse = false): 
                                      Rope {.discardable.} =
@@ -825,7 +837,7 @@ proc tpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## rope isn't a 'block' of some sort.
   return r.ropeStyle(newStyle(tpad = n), recurse, true)
   
-proc tpad*(s: string, n: int): Rope {.discardable.} =
+proc tpad*(s: string, n: int): Rope =
   ## Adds a top pad to a string.
   return text(s).tpad(n)
 
@@ -834,7 +846,7 @@ proc bpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## rope isn't a 'block' of some sort.
   return r.ropeStyle(newStyle(bpad = n), recurse, true)  
 
-proc bpad*(s: string, n: int): Rope {.discardable.} =
+proc bpad*(s: string, n: int): Rope =
   ## Adds a bottom pad to a string.
   return text(s).bpad(n)
 
@@ -843,7 +855,7 @@ proc leftPad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## rope isn't a 'block' of some sort.
   return r.ropeStyle(newStyle(lpad = n), recurse, true)
 
-proc leftPad*(s: string, n: int): Rope {.discardable.} =
+proc leftPad*(s: string, n: int): Rope =
   ## Add left padding to a string.
   result = text(s).leftPad(n)
 
@@ -852,7 +864,7 @@ proc rightPad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## rope isn't a 'block' of some sort.
   return r.ropeStyle(newStyle(rpad = n), recurse, true)
 
-proc rightPad*(s: string, n: int): Rope {.discardable.} =
+proc rightPad*(s: string, n: int): Rope =
   ## Add right padding to a string.
   result = s.text().rightPad(n)
 

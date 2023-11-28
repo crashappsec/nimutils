@@ -38,6 +38,7 @@ when defined(macosx):
 
 when isMainModule:
   import tables, streams, algorithm, strutils
+  useCrashTheme()
 
   when defined(macosx):
     proc psSorter(x, y: ProcessInfo): int =

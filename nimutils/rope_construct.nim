@@ -174,7 +174,10 @@ proc link*(r1: Rope, r2: Rope): Rope =
     probe.cycle = false
     probe = probe.next
 
-  last.next = r2
+  if last.kind == RopeAtom and r2.kind == RopeAtom and last.id == "":
+    last.text &= r2.text
+  else:
+    last.next = r2
 
   return r1
 

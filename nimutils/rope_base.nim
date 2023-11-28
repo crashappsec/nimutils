@@ -294,12 +294,14 @@ template genericRopeWalk*(r: Rope, someFunc: untyped, someData: untyped) =
       discard
 
 proc buildWalk(r: Rope, results: var seq[Rope]) =
+  var rope = r
+
   # Probably should rewrite to use a stack; this could get called
   # on some big ropes.
-  if r != nil:
-    results.add(r)  
-    r.genericRopeWalk(buildWalk, results)
-    r.next.buildWalk(results)    
+  if rope != nil:
+    results.add(rope)  
+    rope.genericRopeWalk(buildWalk, results)
+    rope = rope.next
 
 proc ropeWalk*(r: Rope): seq[Rope] =
   r.buildWalk(result)

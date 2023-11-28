@@ -2,7 +2,7 @@
 ## :Copyright: 2023, Crash Override, Inc.
 
 import rope_base, rope_construct, rope_prerender, rope_styles, unicode, 
-       unicodeid, std/terminal, tables
+       unicodeid, std/terminal, tables, sugar
 
 proc instantTable*[T: string|Rope](cells: openarray[T], title = Rope(nil), 
                                     caption = Rope(nil),
@@ -165,3 +165,57 @@ proc callOut*[T: string | Rope](contents: T, width = 0, borders = BorderAll,
   
   for item in result.ropeWalk():
     item.class = "callout"
+
+type 
+  TreeRopeWalker*[T] = (T) -> (Rope, seq[T])
+  WalkState[T] = object
+    walker: TreeRopeWalker[T]
+    tChar:  Rune
+    lChar:  Rune
+    hChar:  Rune
+    vChar:  Rune
+    vpad:   int
+    padStr: seq[Rune]
+
+proc quickTree[T](cur: T, state: var WalkState): Rope =
+  var (myRepr, kids) = state.walker(cur)
+
+  result = li(Rope(kind: RopeAtom, text: state.padstr) + myRepr).tpad(0).bpad(0)
+
+  if len(kids) == 0:
+    return
+
+  var 
+    padStr:  seq[Rune]
+    lastPad: seq[Rune]
+
+  for ch in state.padStr:
+    if ch == state.tChar or ch == state.vChar:
+      padStr.add(state.vChar)
+    else:
+      padStr.add(Rune(' '))
+
+  lastPad = padStr
+  padStr.add(state.tChar)
+  lastPad.add(state.lChar)
+
+  for i in 0 ..< state.vpad:
+    padstr.add(state.hChar)
+    lastPad.add(state.hChar)
+  
+  for i, kid in kids:
+    if i == kids.len() - 1:
+      state.padStr = lastPad
+    else:
+      state.padStr = padStr
+
+    result += quickTree[T](kid, state)
+  
+
+proc quickTree*[T](root: T, walker: TreeRopeWalker[T], tChar = Rune(0x251c),
+                   lChar = Rune(0x2514), hChar = Rune(0x2500), 
+                   vChar = Rune(0x2502), vpad = 2): Rope =
+  var state = WalkState[T](walker: walker, tChar: tChar, lChar: lChar,
+                           hChar: hChar, vChar: vChar, vpad: vpad)
+
+  result = quickTree[T](root, state).overflow(ODots)

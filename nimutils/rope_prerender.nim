@@ -828,7 +828,7 @@ template textExit(old: Rope) =
         return
       else:
         result &= state.preRender(next)
-        next = next.next
+        next = nil
     return
   
 proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
