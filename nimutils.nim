@@ -459,6 +459,11 @@ Oh look, here comes a table!
   print(pre(repr(baddie)))
   print(baddie)
 
+  var goodie = fgColor(atom("Sup,"), "lime") + atom(" dawg!")
+  goodie = h1("hello") + goodie
+  print(pre(repr(goodie)))
+  print(goodie)
+
   print h1("Heading 1")
   print h2("Heading 2")
   print h3("Heading 3")

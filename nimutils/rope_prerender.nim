@@ -32,8 +32,10 @@ type
     leftovers:       seq[RenderBox]
 
 proc `$`*(box: RenderBox): string =
-    result &= $(box.contents)
-    result &= "\n"
+  ## Return debug data for a render box object.
+
+  result &= $(box.contents)
+  result &= "\n"
 
 const MAXPAD = 1000
 template styleRunes(state: FmtState, runes: seq[uint32]): seq[uint32] =
@@ -45,59 +47,14 @@ template pad(state: FmtState, w: int): seq[uint32] =
   @[state.curStyle.getStyleId()] & uint32(Rune(' ')).repeat(w) & @[StylePop]
 
 
-proc noBoxRequired*(r: Rope): bool =
-  ## Generally, this call is only meant to be used either internally,
-  ## or by a renderer (the ansi renderer being the only one we
-  ## currently have).
-  ##
-  ## Returns true if we have paragraph text that does NOT require any
-  ## sort of box... so no alignment, padding, tables, lists, ...
-  ##
-  ## However, we DO allow break objects, as they don't require boxing,
-  ## so it isn't quite non-breaking text.
-  ##
-  ## This has gotten a bit more complicated with the styling
-  ## API. Previously we relied on the tag being in 'breaking
-  ## styles'. However, with the style API, one can easily set
-  ## properties that change whether a box is implied. So, while we
-  ## still check the list of tags that imply a box, we also check the
-  ## boolean `noTextExtract`.
-  ##
-  ## This boolean isn't meant to be definitive; it's only to be added
-  ## to nodes that will short-circuit text extraction, so that box
-  ## properties get applied, and we don't bother to set it when the
-  ## tag already iplies it.
-
-  # This will be used to test containers that may contain some basic
-  # content, some not.
-
-  if r == nil:
-    return true
-  if r.tag in breakingStyles or r.noTextExtract:
-    return false
-  case r.kind
-  of RopeList, RopeTable, RopeTableRow, RopeTableRows:
-    return false
-  of RopeAtom:
-    result = true
-  of RopeLink:
-    result = r.toHighlight.noBoxRequired()
-  of RopeFgColor, RopeBgColor:
-    result = r.toColor.noBoxRequired()
-  of RopeBreak:
-    result = r.guts == Rope(nil)
-  of RopeTaggedContainer:
-    result = r.contained.noBoxRequired()
-
-  if result != false:
-    result = r.next.noBoxRequired()
-
 proc unboxedRuneLength(r: Rope, results: var int) =
   if r != nil:
     if r.kind == RopeAtom:
       results += cast[seq[uint32]](r.text).u32LineLength()
+
     r.genericRopeWalk(unboxedRuneLength, results)
-    r.next.unboxedRuneLength(results)
+    for item in r.siblings:
+      item.unboxedRuneLength(results)
     
 proc unboxedRuneLength*(r: Rope): int =
   ## Returns the approximate display-width of a rope, without
@@ -295,7 +252,6 @@ template enterContainer(code: untyped) =
     state.leftovers = @[]
 
   state.curContainer = savedContainer
-
 
 template applyContainerStyle(boxvar: untyped, code: untyped) =
   var
@@ -820,16 +776,10 @@ proc preRenderLink(state: var FmtState, r: Rope) =
     let runes = @[Rune('(')] & r.url.toRunes() & @[Rune(')')]
     state.curPlane.addRunesToExtraction(runes)
 
-template textExit(old: Rope) =
-    var next = old.next
-    while next != nil:
-      if next.isContainer():
-        state.renderStack.add(next)
-        return
-      else:
-        result &= state.preRender(next)
-        next = nil
-    return
+template textExit(r: Rope) =
+  for item in r.siblings:
+    result &= state.preRender(item)
+  return
   
 proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
   # This is the actual main worker for rendering. Generally, these
@@ -939,17 +889,16 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
       applyContainerStyle(result):
         result &= state.preRenderRow(r)
         r.tag = "tr"
-        var next = r.next
-        while next != nil:
-          next.tweak = styleMap[rowTag]
-          result &= state.preRender(next)
-          next = next.next
+        for item in r.siblings:
+          item.tweak = styleMap[rowTag]
+          result &= state.preRender(item)
   of RopeTableRows:
     enterContainer:
       applyContainerStyle(result):
         result &= state.preRenderRows(r)
 
-  result &= state.preRender(r.next)
+  for item in r.siblings:
+    result &= state.preRender(item)
   
 proc preRender*(r: Rope, width = -1, showLinkTargets = false,
                 style = defaultStyle): TextPlane =

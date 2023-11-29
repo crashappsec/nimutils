@@ -125,7 +125,7 @@ type
 
   Rope* = ref object
     ## The core rope object.  Generally should only access via API.
-    next*:          Rope
+    siblings*:      seq[Rope]
     noTextExtract*: bool
     id*:            string
     tag*:           string
@@ -178,6 +178,8 @@ proc ensureUniqueId*(r: Rope): string {.discardable.} =
   return r.id
 
 proc `$`*(s: FmtStyle): string =
+  ## Provides a string representation of a style object, intended for
+  ## debugging purposes.
   if s == nil:
     return "<none>"
   if s.textColor.isSome():
@@ -266,9 +268,15 @@ proc `$`*(s: FmtStyle): string =
       discard
     
 template genericRopeWalk*(r: Rope, someFunc: untyped, someData: untyped) =
-  # This doesn't invoke r.next so that the caller can do things after 
-  # descending but before calling the next item.
-  if r != nil:
+  ## This is a helper template to decompose calling the next level
+  ## down in a Rope. 
+  ##
+  ## This only goes down a single level, and it doesn't invoke
+  ## siblings so that the caller can do things after descending but
+  ## before iterating over siblings.
+
+  if r != nil and not r.cycle:
+    r.cycle = true
     case r.kind
     of RopeBreak:
       r.guts.somefunc(someData)
@@ -292,18 +300,18 @@ template genericRopeWalk*(r: Rope, someFunc: untyped, someData: untyped) =
       r.toColor.somefunc(someData)
     else:
       discard
+    r.cycle = false
 
 proc buildWalk(r: Rope, results: var seq[Rope]) =
-  var rope = r
-
-  # Probably should rewrite to use a stack; this could get called
-  # on some big ropes.
-  if rope != nil:
-    results.add(rope)  
-    rope.genericRopeWalk(buildWalk, results)
-    rope = rope.next
+  if r != nil:
+    results.add(r)  
+    r.genericRopeWalk(buildWalk, results)
+    for item in r.siblings:
+      item.buildWalk(results)
 
 proc ropeWalk*(r: Rope): seq[Rope] =
+  ## Returns a list of all sub-ropes inside a rope, in the order in
+  ## which they would be processed (down first, then siblings).
   r.buildWalk(result)
 
 proc search*(r: Rope,
@@ -312,6 +320,16 @@ proc search*(r: Rope,
              ids     = openarray[string]([]),
              text    = openarray[string]([]),
              first   = false): seq[Rope] =
+  ## Searches a rope.  Any of the provided values that match will
+  ## cause a sub-rope to return.
+  ##
+  ## - The `tags` field does an exact match of the tag of a sub-Rope.
+  ## - The `classes` field does an exact match on the `class` property.
+  ## - The `ids` field does an exact match on the `id` property.
+  ## - The `text` field does *substring* matching. But it does not do
+  ##   regular expression matching.
+  ## - If the `first` field is true, then the search will stop when the
+  ##   first result is found (so only 0 or 1 results will be returned).
 
   for item in r.ropeWalk():
     if item.tag != "" and len(tags) != 0 and item.tag in tags:
@@ -322,14 +340,28 @@ proc search*(r: Rope,
       result.add(item)
     elif text.len() != 0 and item.kind == RopeAtom:
       for s in text:
+        echo "Searching for string of len ", s.len()
         if s in $(item.text):
+          echo "Got a hit: " & $(item.text)
           result.add(item)
           break
     if result.len() == 1 and first:
       return
 
+proc allAtoms*(r: Rope): seq[Rope] =
+  ## Return all sub-ropes that have their `kind` field set to `RopeAtom`,
+  ## and thus have a `text` field.
+
+  let all = r.ropeWalk()
+  for item in all:
+    if item.kind == RopeAtom:
+      result.add(item)
+
 proc search*(r: Rope, tag = "", class = "", id = "", text = "",
              first = false): seq[Rope] =
+  ## A variant of `search` that allows at most one term for searching per
+  ## category.
+
   var tags, classes, ids, texts: seq[string]
 
   if tag != "":
@@ -345,6 +377,9 @@ proc search*(r: Rope, tag = "", class = "", id = "", text = "",
 
 proc searchOne*(r: Rope, tags = @[""], class = @[""], id = @[""], text = @[""]):
               Option[Rope] =
+  ## A variant of `search` that returns either 0 or 1 item (using an
+  ## option to wrap).
+
   let preResult = r.search(tags, class, id, text, true)
 
   if len(preResult) == 1:
@@ -352,6 +387,7 @@ proc searchOne*(r: Rope, tags = @[""], class = @[""], id = @[""], text = @[""]):
 
 proc `$`*(plane: TextPlane): string =
   ## Produce a debug representation of a TextPlane object.
+
   for line in plane.lines:
     for ch in line:
       if ch <= 0x10ffff:
@@ -541,6 +577,7 @@ proc wrapToWidth*(plane: var TextPlane, style: FmtStyle, w: int) =
   ## using the given overflow strategy. Generally, this should
   ## probably only be used internally; see `truncateToWidth()` for
   ## something that will operate on UTF-32 (arrays of codepoints).
+
   # First, we're going to do a basic wrap, without regard to style
   # indicators. But then we want each line to have the correct stack
   # state, so we'll go back through and figure out when we need to add

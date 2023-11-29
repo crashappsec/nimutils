@@ -1,7 +1,3 @@
-## Initial, very basic verion. Currently does NOT preserve colors,
-## fixed width, classes, IDs, custom tags, etc. Not even doing column
-## width yet.
-
 const tagsToConvert = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "td", "th",
                        "em", "italic", "i", "u", "inverse", "underline",
                        "strong", "code", "caption", "pre"]
@@ -15,6 +11,10 @@ proc nobreak(name, contents: string): string =
   result = "<" & name & ">" & contents  & "</" & name & ">"
   
 proc toHtml*(r: Rope, indent = 0): string =
+  ## An verty basic rope-to-html generator.. Currently does NOT
+  ## preserve colors, fixed width, classes, IDs, custom tags, etc.  It
+  ## doesn't even do column width at this point.
+
   if r == nil:
     return ""
 
@@ -89,5 +89,6 @@ proc toHtml*(r: Rope, indent = 0): string =
           cells.add(element("td", cell))
       result = cells.join("\n")
 
-  result &= r.next.toHtml()
+  for item in r.siblings:
+    result &= item.toHtml()
       

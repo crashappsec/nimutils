@@ -370,35 +370,6 @@ var
                              italic = ItalicOn, casing = CasingTitle)
     }.toTable()  
     
-  breakingStyles*: Table[string, bool] = {
-    "container"  : true,
-    "basic"      : true,
-    "caption"    : true,
-    "pre"        : true,
-    "p"          : true,
-    "div"        : true,
-    "ol"         : true,
-    "ul"         : true,
-    "li"         : true,
-    "blockquote" : true,
-    "q"          : true,
-    "small"      : true,
-    "td"         : true,
-    "th"         : true,
-    "title"      : true,
-    "h1"         : true,
-    "h2"         : true,
-    "h3"         : true,
-    "h4"         : true,
-    "h5"         : true,
-    "h6"         : true,
-    "left"       : true,
-    "right"      : true,
-    "center"     : true,
-    "justify"    : true,
-    "flush"      : true
-    }.toTable()
-
 {.emit: """
 #include <stdatomic.h>
 #include <stdint.h>
@@ -473,9 +444,12 @@ proc repr(r: Rope, res: var WalkInfo) =
   r.genericRopeWalk(repr, res)
   res.nest -= 1
   
-  r.next.repr(res)
+  for item in r.siblings: 
+    item.repr(res)
         
 proc repr*(r: Rope): string =
+  ## Return a debug representation of a rope.
+
   var info: WalkInfo
   
   r.repr(info)
@@ -596,12 +570,17 @@ proc isContainer*(r: Rope): bool =
     return false
 
 template defaultBoxStyle*(): BoxStyle =
+  ## Return the default box style, taken from the current value of 
+  ## the 'table' style, if set.
+
   if "table" in styleMap:
     styleMap["table"].boxStyle.get(BoxStylePlain)
   else:
     BoxStylePlain
   
 template defaultBorderStyle*(): BorderOpts =
+  ## Return the default border style.
+
   BorderTypical
 
 template setDefaultStyle*(style: FmtStyle) =
@@ -696,6 +675,8 @@ proc ropeStyle*(r:     Rope,
       perIdStyles[item.id] = style
 
 proc colWidths*(r: Rope, info: seq[ColInfo]): Rope {.discardable.} =
+  ## Set column widths in the first table contained within a rope.
+
   if r == nil:
     return
 
@@ -705,7 +686,12 @@ proc colWidths*(r: Rope, info: seq[ColInfo]): Rope {.discardable.} =
   return r
   
 proc colWidths*(r: Rope, vals: openarray[(int, bool)]): Rope {.discardable.} =
+  ## Set column widths in the first table contained within a rope.
+  ## Different from `colWidthInfo` in that it applies values, whereas
+  ## the former only bundles them up into a set of ColInfo objects.
+
   var info: seq[ColInfo]
+
 
   for (n, b) in vals:
     info.add(ColInfo(span: 1, wValue: n, absVal: b))
@@ -713,6 +699,9 @@ proc colWidths*(r: Rope, vals: openarray[(int, bool)]): Rope {.discardable.} =
   return r.colWidths(info)
   
 proc colAbs*(r: Rope, pcts: openarray[int]): Rope {.discardable.} =
+  ## Similar to `colWidths`, except all inputs are treated as absolute
+  ## column widths.
+
   var info: seq[ColInfo]
   for item in pcts:
     info.add(ColInfo(span: 1, wValue: item, absVal: true))
@@ -720,6 +709,11 @@ proc colAbs*(r: Rope, pcts: openarray[int]): Rope {.discardable.} =
   return r.colWidths(info)
 
 proc colPcts*(r: Rope, pcts: openarray[int]): Rope {.discardable.} =
+  ## Similar to `colWidths`, except all inputs are treated as
+  ## percentages.  Percentages do not need to add up to 100. Anything
+  ## set to 0 will share any available width after other percentages
+  ## are applied.
+
   if r == nil:
     return
 
@@ -731,6 +725,9 @@ proc colPcts*(r: Rope, pcts: openarray[int]): Rope {.discardable.} =
   return r.colWidths(info)
   
 proc applyClass*(r: Rope, class: string, recurse = true): Rope {.discardable.} =
+  ## Set the `class` property on a rope. By default, recurses to any
+  ## sub-ropes.
+
   if r == nil:
     return
 
@@ -741,19 +738,25 @@ proc applyClass*(r: Rope, class: string, recurse = true): Rope {.discardable.} =
     r.class = class
 
 proc noBorders*(r: Rope, recurse = true): Rope {.discardable.} =
-  ## Overrides a rope's current style to remove any
-  ## table borders.
+  ## Overrides a rope's current style to remove any table borders.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(borders = [BorderNone]), recurse, true)
 
 proc allBorders*(r: Rope, recurse = true): Rope {.discardable.} =
-  ## Overrides a rope's current style to add all
-  ## table borders.
+  ## Overrides a rope's current style to add all table borders.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(borders = [BorderAll]), recurse, true)
 
 proc typicalBorders*(r: Rope, recurse = true): Rope {.discardable.} =
-  ## Overrides a rope's current style to set 'typical'
-  ## table borders, which is all except for internal
-  ## horizontal separators.
+  ## Overrides a rope's current style to set 'typical' table borders,
+  ## which is all except for internal horizontal separators.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(borders = [BorderTypical]), recurse, true)
 
 proc defaultBg*(r: Rope, recurse = true): Rope {.discardable.} =
@@ -761,6 +764,9 @@ proc defaultBg*(r: Rope, recurse = true): Rope {.discardable.} =
   ## whatever the environment uses by default). Note that it may not
   ## have the effect you think if sub-nodes set a color (i.e., don't
   ## do this at the top level of a table).
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(FmtStyle(bgColor: some("")), recurse)
 
 proc defaultBg*(s: string): Rope =
@@ -768,6 +774,7 @@ proc defaultBg*(s: string): Rope =
   ## color is not set (unless you later change it with another call).
   ##
   ## This call does NOT process embedded markdown.
+
   return text(s).defaultBg()
 
 proc defaultFg*(r: Rope, recurse = true): Rope {.discardable.} =
@@ -775,6 +782,9 @@ proc defaultFg*(r: Rope, recurse = true): Rope {.discardable.} =
   ## whatever the environment uses by default). Note that it may not
   ## have the effect you think if sub-nodes set a color (i.e., don't
   ## do this at the top level of a table).
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(FmtStyle(textColor: some("")), recurse)
 
 proc defaultFg*(s: string): Rope =
@@ -782,6 +792,7 @@ proc defaultFg*(s: string): Rope =
   ## color is not set (unless you later change it with another call).
   ##
   ## This call does NOT process embedded markdown.
+
   return text(s).defaultFg()
 
 proc bgColor*(r: Rope, color: string, recurse = true): Rope {.discardable.} =
@@ -789,6 +800,9 @@ proc bgColor*(r: Rope, color: string, recurse = true): Rope {.discardable.} =
   ## Note that sub-nodes will still have their style applied after
   ## this, and can have an impact. For instance, setting this at the
   ## "table" level is unlikely to affect the entire table.
+  ##
+  ## Recursive by default.
+
   if color == "":
     return r.defaultBg(recurse)
   else:
@@ -798,6 +812,7 @@ proc bgColor*(s: string, color: string): Rope =
   ## Returns a new Rope from a string, where the node will have the
   ## explicit background color applied. This will not have sub-nodes,
   ## so should override other settings (e.g., in a table).
+
   if color == "":
     return s.defaultBg()
   else:
@@ -808,6 +823,7 @@ proc fgColor*(r: Rope, color: string, recurse = true): Rope {.discardable.} =
   ## Note that sub-nodes will still have their style applied after
   ## this, and can have an impact. For instance, setting this at the
   ## "table" level is unlikely to affect the entire table.
+
   if color == "":
     return r.defaultFg(recurse)
   else:
@@ -817,6 +833,7 @@ proc fgColor*(s: string, color: string): Rope =
   ## Returns a new Rope from a string, where the node will have the
   ## explicit foreground color applied. This will not have sub-nodes,
   ## so should override other settings (e.g., in a table).
+
   if color == "":
     return s.defaultBg()
   else:
@@ -824,17 +841,22 @@ proc fgColor*(s: string, color: string): Rope =
 
 proc color*(r: Rope, fgColor: string, bgColor = "", recurse = false): 
                                      Rope {.discardable.} =
-  ## Applies fg/bg colors.
+  ## Applies fg/bg colors. By default, this is NOT recursive.
+
   return r.ropeStyle(newStyle(fgColor = fgColor, bgColor = bgColor), recurse)
                               
 proc color*(s: string, fgColor: string, bgColor = ""): Rope =
   ## Returns a new Rope from a string with the given fg and (optional)
   ## background color.
+
   return color(text(s), fgColor, bgColor)
 
 proc tpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Add a top pad to a Rope object. This will be ignored if the
   ## rope isn't a 'block' of some sort.
+  ##
+  ## By default, this is NOT recursive.
+
   return r.ropeStyle(newStyle(tpad = n), recurse, true)
   
 proc tpad*(s: string, n: int): Rope =
@@ -844,6 +866,9 @@ proc tpad*(s: string, n: int): Rope =
 proc bpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Add a bottom pad to a Rope object. This will be ignored if the
   ## rope isn't a 'block' of some sort.
+  ##
+  ## By default, this is NOT recursive.
+
   return r.ropeStyle(newStyle(bpad = n), recurse, true)  
 
 proc bpad*(s: string, n: int): Rope =
@@ -853,6 +878,9 @@ proc bpad*(s: string, n: int): Rope =
 proc leftPad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Add left padding to a Rope object. This will be ignored if the
   ## rope isn't a 'block' of some sort.
+  ##
+  ## By default, this is NOT recursive.
+
   return r.ropeStyle(newStyle(lpad = n), recurse, true)
 
 proc leftPad*(s: string, n: int): Rope =
@@ -862,36 +890,55 @@ proc leftPad*(s: string, n: int): Rope =
 proc rightPad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Add right padding to a Rope object. This will be ignored if the
   ## rope isn't a 'block' of some sort.
+  ##
+  ## By default, this is NOT recursive.
+
   return r.ropeStyle(newStyle(rpad = n), recurse, true)
 
 proc rightPad*(s: string, n: int): Rope =
   ## Add right padding to a string.
+
   result = s.text().rightPad(n)
 
 proc lpad*(r: string | Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Alias for `leftPad`
+  ##
+  ## By default, this is NOT recursive.
+
   result = r.leftPad(n, recurse)
 
-proc rpad*(r: string | Rope, n: int): Rope {.discardable.} =
+proc rpad*(r: string | Rope, n: int, recurse = false): Rope {.discardable.} =
   ## Alias for `rightPad`
-  result = r.rightPad(n)
+  ##
+  ## By default, this is NOT recursive.
+
+  result = r.rightPad(n, recurse)
 
 proc plainBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ## Overrides any settings for table borders; any nested table
   ## contents will have plain borders, *if* borders are set, and if
   ## the border setting isn't overriden by an internal node.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(boxStyle = BoxStylePlain), recurse, true)
 
 proc boldBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ## Overrides any settings for table borders; any nested table
   ## contents will have bold borders, *if* borders are set, and if
   ## the border setting isn't overriden by an internal node.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(boxStyle = BoxStyleBold), recurse, true)
 
 proc doubleBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ## Overrides any settings for table borders; any nested table
   ## contents will have double-lined borders, *if* borders are set,
   ## and if the border setting isn't overriden by an internal node.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(boxStyle = BoxStyleDouble), recurse, true)
 
 proc dashBorders*(r: Rope, recurse = true): Rope {.discardable.} =
@@ -901,6 +948,9 @@ proc dashBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ##
   ## NB, All dashed borders don't render on all terminals, and we do
   ## not currently attempt to detect this condition.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(boxStyle = BoxStyleDash), recurse, true)
 
 proc altDashBorders*(r: Rope, recurse = true): Rope {.discardable.} =
@@ -912,6 +962,9 @@ proc altDashBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ##
   ## NB, All dashed borders don't render on all terminals, and we do
   ## not currently attempt to detect this condition.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(boxStyle = BoxStyleDash2), recurse, true)
 
 proc boldDashBorders*(r: Rope, recurse = true): Rope {.discardable.} =
@@ -921,6 +974,9 @@ proc boldDashBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ##
   ## NB, All dashed borders don't render on all terminals, and we do
   ## not currently attempt to detect this condition.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(boxStyle = BoxStyleBoldDash), recurse, true)
 
 proc altBoldDashBorders*(r: Rope, recurse = true): Rope {.discardable.} =
@@ -932,6 +988,9 @@ proc altBoldDashBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ##
   ## NB, All dashed borders don't render on all terminals, and we do
   ## not currently attempt to detect this condition.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(boxStyle = BoxStyleBoldDash2), recurse, true)
 
 proc boxStyle*(r: Rope, s: BoxStyle, recurse = true): Rope {.discardable.} =
@@ -944,10 +1003,16 @@ proc boxStyle*(r: Rope, s: BoxStyle, recurse = true): Rope {.discardable.} =
   ##
   ## Styles depend on the font having approrpiate unicode glyphs;
   ## we've found the dashed boxes are less widely available.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(boxStyle = s), recurse, true)
 
 proc setBorders*(r: Rope, o: BorderOpts, recurse = true): Rope {.discardable.} =
   ## Set which borders will be displayed for any tables within a rope.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(borders = [o]), recurse, true)
 
 proc setBullet*(r: Rope, c: Rune, recurse = true): Rope {.discardable.} =
@@ -956,6 +1021,9 @@ proc setBullet*(r: Rope, c: Rune, recurse = true): Rope {.discardable.} =
   ## character put after the number. Currently, there's no ability to
   ## tweak the numbering style. You can instead use an unordered list,
   ## remove the bullet with `removeBullet` and manually number.
+  ##
+  ## Recursive by default.
+
   if r != nil:
     r.noTextExtract = true
   return r.ropeStyle(newStyle(bulletChar = c), recurse)
@@ -964,30 +1032,50 @@ proc removeBullet*(r: Rope, recurse = true): Rope {.discardable.} =
   ## Causes unordered list items to render without a bullet.
   ## Ordered list items still render numbered; they just lose
   ## the period after the number.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(FmtStyle(bulletChar: some(Rune(0x0000))), recurse, true)
 
 proc casing*(r: Rope, casing: TextCasing, recurse = true): Rope
     {.discardable.} =
   ## Sets casing on a rope.
+  ##
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(casing = casing), recurse)
 
 proc casing*(s: string, casing: TextCasing): Rope =
+  ## Sets casing on a rope.
+
   return text(s).casing(casing)
 
 proc overflow*(r: Rope, overflow: OverflowPreference, recurse = true): Rope
   {.discardable.} =
   ## Sets the overflow strategy. If you set OIntentWrap then you can
   ## change the wrap hang value via `setHang()`.
+  ## 
+  ## Recursive by default.
+
   return r.ropeStyle(newStyle(overflow = overflow), recurse)
 
 proc overflow*(s: string, overflow: OverflowPreference): Rope =
+  ## Sets the overflow strategy. If you set OIntentWrap then you can
+  ## change the wrap hang value via `setHang()`.
+
   return text(s).overflow(overflow)
 
 proc hang*(r: Rope, hang: int, recurse = true): Rope {.discardable.} =
   ## Sets the indent hang for when OIndentWrap is on.
+
   return r.ropeStyle(newStyle(hang = hang), recurse)
 
 proc bold*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
+  ## Sets the `bold` property of a Rope's style. By default,
+  ## turns on the property, unless `disable` is true. 
+  ##
+  ## Recursive by default.
+
   var param: BoldPref
 
   if disable:
@@ -998,9 +1086,16 @@ proc bold*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   return r.ropeStyle(newStyle(bold = param), recurse)
 
 proc bold*(s: string): Rope =
+  ## Creates a rope of bold text.
+
   return text(s).bold()
 
 proc inverse*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
+  ## Sets the `inverse` property of a Rope's style. By default,
+  ## turns on the property, unless `disable` is true. 
+  ##
+  ## Recursive by default.
+
   var param: InversePref
 
   if disable:
@@ -1011,10 +1106,17 @@ proc inverse*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   return r.ropeStyle(newStyle(inverse = param), recurse)
 
 proc inverse*(s: string): Rope =
+  ## Creates a rope with inverted fg/bg colors from what is otherwise set.
+
   return text(s).inverse()
 
 proc strikethrough*(r: Rope, disable = false, recurse = true):
                   Rope {.discardable.} =
+  ## Sets the `strikethrough` property of a Rope's style. By default,
+  ## turns on the property, unless `disable` is true. 
+  ##
+  ## Recursive by default.
+
   var param: StrikeThruPref
 
   if disable:
@@ -1025,9 +1127,16 @@ proc strikethrough*(r: Rope, disable = false, recurse = true):
   return r.ropeStyle(newStyle(strikethru = param), recurse)
 
 proc strikethrough*(s: string): Rope =
+  ## Creates a rope with text that has strikethrough turned on.
+
   return text(s).strikethrough()
 
 proc italic*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
+  ## Sets the `italic` property of a Rope's style. By default,
+  ## turns on the property, unless `disable` is true. 
+  ##
+  ## Recursive by default.
+  
   var param: ItalicPref
 
   if disable:
@@ -1038,47 +1147,45 @@ proc italic*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   return r.ropeStyle(newStyle(italic = param), recurse)
 
 proc italic*(s: string): Rope =
+  ## Creates a rope with text that has italic turned on.
+
   return text(s).italic()
 
 proc underline*(r: Rope, kind = UnderlineSingle, recurse = true):
               Rope {.discardable.} =
+  ## Sets the `underline` property of a Rope's style. By default,
+  ## turns on the property, unless `disable` is true. 
+  ##
+  ## Recursive by default.
 
   return r.ropeStyle(newStyle(underline = kind), recurse)
 
 proc underline*(s: string): Rope =
+  ## Creates a rope with text that has underline turned on.
+
   return text(s).underline()
 
 proc align*(r: Rope, kind: AlignStyle, recurse = false): Rope {.discardable.} =
   ## Sets alignment preference for a rope as specified.  Does NOT
   ## recurse into children by default.
-  return r.ropeStyle(newStyle(align = kind), recurse, true)
 
-proc align*(s: string, kind: AlignStyle): Rope =
-  return text(s).align(kind)
+  return r.ropeStyle(newStyle(align = kind), recurse, true)
 
 proc center*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Centers a node. Unless recurse is on, this will only set the
   ## preference on the top rope, not any children.
-  return r.ropeStyle(newStyle(align = AlignC), recurse, true)
 
-proc center*(s: string): Rope =
-  return text(s).center()
+  return r.ropeStyle(newStyle(align = AlignC), recurse, true)
 
 proc right*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Right-justifies a node. Unless recurse is on, this will only set
   ## the preference on the top rope, not any children.
   return r.ropeStyle(newStyle(align = AlignR), recurse, true)
 
-proc right*(s: string): Rope =
-  return text(s).right()
-
 proc left*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Left-justifies a node. Unless recurse is on, this will only set
   ## the preference on the top rope, not any children.
   return r.ropeStyle(newStyle(align = AlignL), recurse, true)
-
-proc left*(s: string): Rope =
-  return text(s).left()
 
 proc justify*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Does line justification (adds spaces between words to justify
@@ -1087,21 +1194,17 @@ proc justify*(r: Rope, recurse = false): Rope {.discardable.} =
   ## the top rope, not any children.
   return r.ropeStyle(newStyle(align = AlignJ), recurse, true)
 
-proc justify*(s: string): Rope =
-  return text(s).justify()
-
 proc flushJustify*(r: Rope, recurse = false): Rope {.discardable.} =
   ## Does full flush line justification, including for the final line
   ## (unless it is a single word). Unless recurse is on, this will
   ## only set the preference on the top rope, not any children.
   return r.ropeStyle(newStyle(align = AlignF), recurse)
 
-proc flushJustify*(s: string): Rope =
-  return text(s).justify()
-
 proc multiFindFirst*(s: string, terms: var seq[string], 
                      start = 0): (int, string) =
-  ## Used to highlight matches.
+  ## This is used to highlight text substring matches. The arguments
+  ## are all unstyled strings, not ropes.
+
   var 
     stillThere: seq[string] = @[]
     lowest:     uint        = high(uint)
@@ -1124,6 +1227,7 @@ proc explode*(s: string, inTerms: seq[string]): seq[string] =
   ## Like split(), except takes multiple words as input to split on,
   ## and returns matches as part of the array; all odd indexes will be
   ## matches.
+
   var 
     terms   = inTerms
     startix = 0
@@ -1169,11 +1273,11 @@ proc highlightMatches(r: Rope, info: var MatchInfo) =
   if r == nil:
     return
 
-  if r.next != Rope(nil):
+  for i, item in r.siblings:
     myMatchInfo = MatchInfo(terms: info.terms, classToAdd: info.classToAdd)
-    r.next.highlightMatches(myMatchInfo)
+    item.highlightMatches(myMatchInfo)
     if myMatchInfo.replacements.len() != 0:
-      r.next = myMatchInfo.replacements[0][1]
+      r.siblings[i] = myMatchInfo.replacements[0][1]
 
   if r.kind == RopeAtom:
     let asStr    = toLowerAscii($(r.text))
@@ -1198,7 +1302,7 @@ proc highlightMatches(r: Rope, info: var MatchInfo) =
           discard prev.link(n)
           prev = n
 
-      n.next = r.next # Keep any existing end-links intact.
+      n.siblings = r.siblings # Keep any existing end-links intact.
       info.replacements.add((r, newRope))
   else:
     myMatchInfo = MatchInfo(terms: info.terms, classToAdd: info.classToAdd)
@@ -1251,7 +1355,9 @@ proc highlightMatches*(r: Rope, terms: seq[string], class = ""): Rope =
 
 proc installTheme*(tagStyles:   var Table[string, FmtStyle],
                    classStyles: var Table[string, FmtStyle]) =
-  ## Replace all of the styles used.
+  ## Replace all of the styles used. The theme API is not very
+  ## sophisticated yet, and may change.
+
   styleMap       = tagStyles
   perClassStyles = classStyles
 
@@ -1266,6 +1372,9 @@ const
   c0Accent3*  = "violet"
 
 proc useCrashTheme*() =
+  ## Use the Crash Override theme. This theme may change over time, at
+  ## our discretion.
+
   var
     tableDefault  = newStyle(overflow = OWrap, tpad = 0, bpad = 0, lpad = 0,
                              rpad = 0, fgColor = c0Text,  bgColor = c0Bg1)

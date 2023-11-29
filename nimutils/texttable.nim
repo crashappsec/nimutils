@@ -169,16 +169,20 @@ proc callOut*[T: string | Rope](contents: T, width = 0, borders = BorderAll,
 type 
   TreeRopeWalker*[T] = (T) -> (Rope, seq[T])
   WalkState[T] = object
-    walker: TreeRopeWalker[T]
-    tChar:  Rune
-    lChar:  Rune
-    hChar:  Rune
-    vChar:  Rune
-    vpad:   int
-    padStr: seq[Rune]
+    walker:     TreeRopeWalker[T]
+    tChar:      Rune
+    lChar:      Rune
+    hChar:      Rune
+    vChar:      Rune
+    vpad:       int
+    padStr:     seq[Rune]
+    noNewLines: bool
 
 proc quickTree[T](cur: T, state: var WalkState): Rope =
   var (myRepr, kids) = state.walker(cur)
+
+  if state.noNewLines:
+      myRepr = myRepr.copyToBreak(addDots = true)
 
   result = li(Rope(kind: RopeAtom, text: state.padstr) + myRepr).tpad(0).bpad(0)
 
@@ -214,8 +218,9 @@ proc quickTree[T](cur: T, state: var WalkState): Rope =
 
 proc quickTree*[T](root: T, walker: TreeRopeWalker[T], tChar = Rune(0x251c),
                    lChar = Rune(0x2514), hChar = Rune(0x2500), 
-                   vChar = Rune(0x2502), vpad = 2): Rope =
+                   vChar = Rune(0x2502), vpad = 2, noNewlines = true): Rope =
   var state = WalkState[T](walker: walker, tChar: tChar, lChar: lChar,
-                           hChar: hChar, vChar: vChar, vpad: vpad)
+                           hChar: hChar, vChar: vChar, vpad: vpad,
+                           noNewlines: noNewlines)
 
   result = quickTree[T](root, state).overflow(ODots)

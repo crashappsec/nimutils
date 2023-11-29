@@ -6,6 +6,90 @@ import  unicode, markdown, htmlparse, tables, parseutils, colortable, rope_base,
 
 from strutils import startswith, replace
 
+var breakingStyles*: Table[string, bool] = {
+    "container"  : true,
+    "basic"      : true,
+    "caption"    : true,
+    "pre"        : true,
+    "p"          : true,
+    "div"        : true,
+    "ol"         : true,
+    "ul"         : true,
+    "li"         : true,
+    "blockquote" : true,
+    "q"          : true,
+    "small"      : true,
+    "td"         : true,
+    "th"         : true,
+    "title"      : true,
+    "h1"         : true,
+    "h2"         : true,
+    "h3"         : true,
+    "h4"         : true,
+    "h5"         : true,
+    "h6"         : true,
+    "left"       : true,
+    "right"      : true,
+    "center"     : true,
+    "justify"    : true,
+    "flush"      : true
+    }.toTable()
+
+
+proc noBoxRequired*(r: Rope): bool =
+  ## Generally, this call is only meant to be used either internally,
+  ## or by a renderer (the ansi renderer being the only one we
+  ## currently have).
+  ##
+  ## Returns true if we have paragraph text that does NOT require any
+  ## sort of box... so no alignment, padding, tables, lists, ...
+  ##
+  ## However, we DO allow break objects, as they don't require boxing,
+  ## so it isn't quite non-breaking text.
+  ##
+  ## This has gotten a bit more complicated with the styling
+  ## API. Previously we relied on the tag being in 'breaking
+  ## styles'. However, with the style API, one can easily set
+  ## properties that change whether a box is implied. So, while we
+  ## still check the list of tags that imply a box, we also check the
+  ## boolean `noTextExtract`.
+  ##
+  ## This boolean isn't meant to be definitive; it's only to be added
+  ## to nodes that will short-circuit text extraction, so that box
+  ## properties get applied, and we don't bother to set it when the
+  ## tag already iplies it.
+
+  # This will be used to test containers that may contain some basic
+  # content, some not.
+
+  if r == nil:
+    return true
+  if r.tag in breakingStyles or r.noTextExtract:
+    return false
+  case r.kind
+  of RopeList, RopeTable, RopeTableRow, RopeTableRows:
+    return false
+  of RopeAtom:
+    result = true
+  of RopeLink:
+    result = r.toHighlight.noBoxRequired()
+  of RopeFgColor, RopeBgColor:
+    result = r.toColor.noBoxRequired()
+  of RopeBreak:
+    result = r.guts == Rope(nil)
+  of RopeTaggedContainer:
+    result = r.contained.noBoxRequired()
+
+  if result != false:
+    for item in r.siblings:
+      if not item.noBoxRequired():
+        return false
+
+proc boxText*(r: Rope): Rope =
+  ## Place text that needs to be boxed in an unstyled box.
+  result = Rope(kind: RopeTaggedContainer, noTextExtract: true, 
+                contained: r)
+
 proc textRope*(s: string, pre = false): Rope =
   ## Converts a plain string to a rope object.  By default, white
   ## space is treated as if you stuck the string in an HTML document,
@@ -54,23 +138,20 @@ proc textRope*(s: string, pre = false): Rope =
   lines.add(curStr)
 
   var
-    prev: Rope
     brk:  Rope
     cur:  Rope
 
   for line in lines:
-    prev = cur
     cur  = Rope(kind: RopeAtom, text: line.toRunes())
-
-    if prev == nil:
+    if result == Rope(nil):
       result = cur
     else:
-      brk       = Rope(kind: RopeBreak, breakType: BrHardLine)
-      prev.next = brk
-      brk.next  = cur
-
+      result.siblings.add(Rope(kind: RopeBreak, breakType: BrHardLine))
+      result.siblings.add(cur)
 
 proc copy*(r: Rope): Rope =
+  ## Makes a recursive copy of a Rope object.
+
   if r == nil or r.cycle:
     return
 
@@ -113,8 +194,19 @@ proc copy*(r: Rope): Rope =
     result.color      = r.color
     result.toColor    = r.tocolor.copy()
 
-  result.next = r.next.copy()
+  for item in r.siblings:
+    result.siblings.add(item.copy())
+
   r.cycle = false
+
+template canMergeTextRopes(r1, r2: Rope): bool =
+  if   r1.kind != RopeAtom: false
+  elif r2.kind != RopeAtom: false
+  elif r1.siblings.len() > 0: false
+  elif r2.siblings.len() > 0: false
+  elif r1.id != "": false
+  elif r2.id != "": false
+  else: true
 
 proc `+`*(r1: Rope, r2: Rope): Rope =
   ## Returns a concatenation of two rope objects, *copying* the
@@ -131,57 +223,82 @@ proc `+`*(r1: Rope, r2: Rope): Rope =
     return nil
   elif r1 == nil:
     return dupe2
+  elif dupe1.canMergeTextRopes(dupe2):
+    dupe1.text &= dupe2.text
+    return dupe1
   else:
-    result = dupe1
-    while dupe1.next != nil:
-      dupe1 = dupe1.next
-    dupe1.next = dupe2
+    let 
+      noBox1 = dupe1.noBoxRequired()
+      noBox2 = dupe2.noBoxRequired()
+
+    if noBox1 == noBox2:
+      result = dupe1
+      result.siblings.add(dupe2)
+    elif noBox1 == true:
+      result = dupe1.boxText()
+      result.siblings.add(dupe2)
+    else:
+      result = dupe1
+      dupe1.siblings.add(dupe2.boxText())
+      
 
 proc link*(r1: Rope, r2: Rope): Rope =
   ## Returns the concatenation of two ropes, but WITHOUT copying them.
-  ## Unless the first rope is nil, this will return the actual
-  ## left-hand object. So this links the two lists, as opposed to
-  ## `+=`, which links a copy of the rhs to the lhs, or `+` which
-  ## copies both operands.
-
+  ##
+  ## In many cases, the object in the first operand will also be
+  ## returned, but not always:
+  ## 
+  ## 1) The first parameter might end up getting boxed, since boxed
+  ## content cannot live next to unboxed content.
+  ##
+  ## 2), if the first parameter is nil, the second param will be
+  ## returned.
+  ##
+  ## 
+  ## But generally, this links the two Ropes (modulo our box
+  ## constraint), as opposed to `+=`, which links a copy of the rhs to
+  ## the lhs, or `+` which copies both operands.
+  ##
   ## We did it this way, because copying is rarely the right thing.
+  ##
+  ## However, we currently are NOT checking for cycles here. Use += 
+  ## if there might be a cycle; it will deep-copy the RHS.
+  ## 
+
   if r1 == nil:
     return r2
   if r2 == nil:
     return r1
 
-  var
-    probe: Rope = r1
-    last:  Rope
+  var 
+    lastOnL: Rope
 
-  while true:
-    probe.cycle = true
-    if probe.next == nil:
-      break
-    probe = probe.next
-
-  last  = probe
-  probe = r2
-
-  while probe != nil:
-    if probe.cycle:
-       raise newException(ValueError, "Addition would cause a cycle")
-    else:
-      probe = probe.next
-
-  probe = r1
-  while probe != nil:
-    probe.cycle = false
-    probe = probe.next
-
-  if last.kind == RopeAtom and r2.kind == RopeAtom and last.id == "":
-    last.text &= r2.text
+  if r1.siblings.len() == 0:
+    lastOnL = r1
   else:
-    last.next = r2
+    lastOnL = r1.siblings[^1]
 
-  return r1
+  if lastOnL.canMergeTextRopes(r2):
+    lastOnL.text &= r2.text
+    result = r1
+  else:
+    let 
+      noBox1 = r1.noBoxRequired()
+      noBox2 = r2.noBoxRequired()
+
+    if noBox1 == noBox2:
+      result = r1
+      result.siblings.add(r2)
+    elif noBox1:
+      result = r1.boxText()
+      result.siblings.add(r2)
+    else:
+      result = r1
+      result.siblings.add(r2.boxText())
 
 proc `+=`*(r1: var Rope, r2: Rope) =
+  ## Concatenate two ropes, making a copy of the right-hand rope.
+
   r1 = r1.link(r2.copy())
 
 proc htmlTreeToRope(n: HtmlNode, pre: var seq[bool]): Rope
@@ -398,7 +515,7 @@ proc markdown*(s: string, add_div = true): Rope =
   ## Process the text as markdown.
   s.strip().htmlStringToRope(markdown = true, add_div = true)
 
-proc text*(s: string, pre = true, detect = true): Rope =  
+proc text*(s: string, pre = true, detect = false): Rope =  
   if detect:
     let n = s.strip(trailing = false)
     if n.len() != 0:
@@ -551,7 +668,21 @@ proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
                           caption: caption, colInfo: columnInfo))
 
 
-proc colPcts*(input: openarray[(int, bool)]): seq[ColInfo] =
+proc colWidthInfo*(input: openarray[(int, bool)]): seq[ColInfo] =
+  ## This takes column information and returns what you need
+  ## to pass to `table()`.
+  ## 
+  ## The inputs are two-tuples. If the boolean is true, then the
+  ## integer is interpreted as an absolute column width. If it's
+  ## false, then it's interpreted as a percent.
+  ##
+  ## Use a percentage of 0 to signal flexible with, based on available
+  ## space. If multiple columns have this value, they'll be given
+  ## equal space. 
+  ##
+  ## Note that, if you do not specify any values for a table at all,
+  ## the system will try to do more intelligent auto-sizing.
+
   for (v, b) in input:
     result.add(ColInfo(span: 0, wValue: v, absVal: b))
     
@@ -660,6 +791,7 @@ proc inlineCode*(s: string): Rope =
                 contained: s.text(pre = false))
 
 proc join*(l: seq[Rope], s: Rope): Rope =
+  ## Works like a regular old join(), but with stylized text.
   if l.len() == 0:
     return
 
@@ -671,4 +803,67 @@ proc join*(l: seq[Rope], s: Rope): Rope =
     cur += s.copy()
     cur += next
     next = cur
+
+
+proc copyToBreakInternal(r: Rope, truncated: var bool,
+                         enterOk: var bool): Rope =
+  # Copy to a break only.
+  if r == nil or r.cycle:
+    return
+
+  r.cycle = true
+
+  result = Rope(kind: r.kind, tag: r.tag, class: r.class)
+  
+  if r.id != "" and r.id in perIdStyles:
+    result.ensureUniqueId()
+    perIdStyles[result.id] = perIdStyles[r.id]
+  
+  case r.kind
+  of RopeAtom:
+    result.length = r.length
+    for ch in r.text:
+      if ch == Rune('\n'):
+        break
+      result.text.add(ch)
+  of RopeBreak, RopeList, RopeTable, RopeTableRow, RopeTableRows:
+    truncated = true
+    result = nil
+    return
+  of RopeLink:
+    result.url = r.url
+    result.toHighlight = r.toHighlight.copyToBreakInternal(truncated, enterOk)
+  of RopeFgColor, RopeBgColor:
+    result.color   = r.color
+    result.toColor = r.toColor.copyToBreakInternal(truncated, enterOk)
+  of RopeTaggedContainer:
+    if r.tag in breakingStyles or r.noTextExtract:
+      if enterOk:
+        enterOk = false
+      else:
+        truncated = true
+        result = nil
+        return
+
+    result.width = r.width
+    result.contained = r.contained.copyToBreakInternal(truncated, enterOk)
+
+  if not truncated:
+    for item in r.siblings:
+      let newsib = item.copyToBreakInternal(truncated, enterOk)
+      if truncated:
+        break
+      result.siblings.add(newsib)
+
+proc copyToBreak*(r: Rope, addDots = true): Rope =
+  ## Copies a rope up until the first break. Thie will NOT go into 
+  ## tables or lists.
+  var 
+    truncated: bool
+    okToEnterContainer = true
+
+  result = r.copyToBreakInternal(truncated, okToEnterContainer)
+  
+  if truncated and addDots:
+    result = result.link(atom("…"))
 

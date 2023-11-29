@@ -155,6 +155,7 @@ proc setvbuf(f: File, buf: pointer, t: cint, s: cint): cint {. importc,
                                                     header: "<stdio.h>" .}
 
 proc unbufferIo*() =
+  ## Turn off I/O buffering for stdin, stdout and stderr.
   once:
     discard setvbuf(stdout, nil, cint(2), 0)
     discard setvbuf(stderr, nil, cint(2), 0)

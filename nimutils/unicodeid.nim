@@ -29,6 +29,8 @@ proc isPostBreakingChar*(r: Rune): bool =
     return false
 
 proc isPreBreakingChar*(r: Rune): bool =
+  ## Returns true if a rune can be a pre-break point.
+
   if r.isWhiteSpace():
     return true
   case r.ord()
@@ -38,6 +40,8 @@ proc isPreBreakingChar*(r: Rune): bool =
     return false
 
 proc isPossibleBreakingChar*(n: uint32): bool =
+  ## Returns true if a rune can be a break point of any kind.
+
   if n > 0x10ffff:
     return false
   let r = Rune(n)
@@ -47,6 +51,7 @@ proc isPossibleBreakingChar*(n: uint32): bool =
 proc isPatternSyntax*(r: Rune): bool =
   ## Returns true if the codepoint is part of the Unicode
   ## Pattern_Syntax class.
+
   case r.ord()
   # I can't figure out how to format this case statement in a way that
   # doesn't annoy the hell out of me.  I've been thinking about making
@@ -67,6 +72,7 @@ proc isPatternSyntax*(r: Rune): bool =
 proc isPatternWhiteSpace*(r: Rune): bool =
   ## Returns true if the codepoint is part of the Unicode
   ## Pattern_White_Space class.
+
   case r.ord()
   of 0x0009 .. 0x000d, 0x0020, 0x0085, 0x200e, 0x200f, 0x2028, 0x2029:
     return true
@@ -76,6 +82,7 @@ proc isPatternWhiteSpace*(r: Rune): bool =
 proc isOtherIdStart*(r: Rune): bool =
   ## Returns true if the codepoint is part of the Unicode
   ## Other_ID_Start class.
+
   case r.ord()
   of 0x1885 .. 0x1886, 0x2118, 0x212e, 0x309b .. 0x309c:
     return true
@@ -85,6 +92,7 @@ proc isOtherIdStart*(r: Rune): bool =
 proc isOtherIdContinue*(r: Rune): bool =
   ## Returns true if the codepoint is part of the Unicode
   ## Other_ID_Continue class.
+
   case r.ord()
   of 0x00b7, 0x0387, 0x1369 .. 0x1371, 0x19DA:
     return true
@@ -97,6 +105,7 @@ proc isIdStart*(r: Rune, underscoreOk: bool = true): bool =
   ## con4m lexer accepts based on the Unicode standard for identifiers.
   ## Unfortunately, neither Nim itself or the unicode character database
   ## package implements this check, which we use in con4m tokenization.
+
   if underscoreOk and r.ord == 0x005f:
     return true
   if (r.unicodeCategory() in ctgL+ctgNl) or r.isOtherIdStart():
@@ -111,6 +120,7 @@ proc isIdContinue*(r: Rune): bool =
   ## Returns true if the passed codepoint is acceptable as any
   ## character, other than the first, within an identifier, per
   ## the unicode standard.
+
   if (r.unicodeCategory() in ctgL+ctgNl+ctgMn+ctgMc+ctgNd+ctgPc) or
      r.isOtherIdStart() or r.isOtherIdContinue():
     if not (r.isPatternSyntax() or r.isPatternWhiteSpace()):
@@ -121,6 +131,7 @@ proc isIdContinue*(r: Rune): bool =
 proc isValidId*(s: string): bool =
   ## Return true if the input string is a valid identifier per the
   ## unicode spec.
+
   if s.len() == 0:
     return false
 
@@ -137,6 +148,7 @@ proc isValidId*(s: string): bool =
 
 proc readRune*(s: Stream): Rune =
   ## Read a single rune from a stream.
+
   var
     c   = s.readChar()
     n: uint
@@ -162,28 +174,44 @@ proc readRune*(s: Stream): Rune =
 proc peekRune*(s: Stream): Rune =
   ## Return the current rune from a stream, without advancing the
   ## pointer.  Not thread safe, of course.
+
   let n = s.getPosition()
   result = s.readRune()
   s.setPosition(n)
 
 proc isPrintable*(r: Rune): bool =
+  ## Returns true if a Rune is considered a printable character.
+
   return r.unicodeCategory() in ctgL + ctgM + ctgN + ctgP + ctgS + ctgZs
 
 template isLineBreak*(r: Rune): bool =
+  ## Returns true if a Rune is a line break character.
+
   r in [Rune(0x000d), Rune(0x000a), Rune(0x0085),
         Rune(0x000b), Rune(0x2028)]
 
 template isParagraphBreak*(r: Rune): bool =
+  ## Returns true if a Rune is the paragraph break character.
+
   r == Rune(0x2029)
 
 template isPageBreak*(r: Rune): bool =
+  ## Returns true if a Rune is the page break character.
+
   r == Rune(0x000c)
 
 template isSeparator*(r: Rune): bool =
+  ## Returns true if a Rune is a separator character.
+
   r in [Rune(0x000d), Rune(0x000a), Rune(0x0085), Rune(0x000b),
         Rune(0x2028), Rune(0x2029), Rune(0x000c)]
 
 proc runeWidth*(r: Rune): int =
+  ## Returns a best guess of how many columns it will take to render a
+  ## rune. This cannot be precise in all cases, since we do not have
+  ## font information. But it should be right for most letters /
+  ## numbers. Complicated emojis are most likely to be wrong.
+
   let category = r.unicodeCategory()
 
   if int(r) in [0xfe0f]:
@@ -207,16 +235,30 @@ proc runeWidth*(r: Rune): int =
     return 1
 
 template runeWidth*(r: uint32): int =
+  ## Returns a best guess of how many columns it will take to render a
+  ## rune. This cannot be precise in all cases, since we do not have
+  ## font information. But it should be right for most letters /
+  ## numbers. Complicated emojis are most likely to be wrong.
+  ##
+  ## Operates an a uint32; values above the maximum code point return
+  ## 0.
+
   if r > 0x0010ffff:
     0
   else:
     Rune(r).runeWidth()
 
 proc runeLength*(s: string): int =
+  ## Returns the expected renderable length of a string... the sum of
+  ## the `runewidth` for all codepoints in the string.
+
   for r in s.toRunes():
     result += r.runeWidth()
 
 proc truncateToWidth*(l: seq[uint32], width: int): seq[uint32] =
+  ## Truncates a sequence of our internal representation of codepoints
+  ## to a specific width.
+
   var total = 0
 
   for ch in l:
@@ -229,6 +271,8 @@ proc truncateToWidth*(l: seq[uint32], width: int): seq[uint32] =
         result.add(ch)
 
 proc count*[T](list: seq[T], target: T): int =
+  ## Count the number of instance of a value in a sequence.
+
   result = 0
   for item in list:
     if item == target:
@@ -252,6 +296,8 @@ proc indentWrap*( s: string,
                   splitLongWords = true,
                   seps: set[char] = Whitespace,
                   newLine = "\n"): string =
+  ## Depricated. A legacy wrapping function for 
+
   result           = newStringOfCap(s.len + s.len shr 6)
   var startWidth   = if startingMaxLineWidth < 1:
                       terminalWidth() + startingMaxLineWidth
@@ -306,11 +352,19 @@ proc indentWrap*( s: string,
     i = j
 
 proc u32LineLength*(line: seq[uint32]): int =
+  ## Returns the expected renderable length of a string... the sum of
+  ## the `runewidth` for all codepoints in the string.
+  ## 
+  ## Operates on our internal u32 representation.
+
   for item in line:
     if item <= 0x10ffff:
       result += item.runeWidth()
 
 proc toWords*(line: seq[uint32]): seq[seq[uint32]] =
+  ## For our internal representation of codepoints plus formatting
+  ## info, split it into words, removing white space.
+
   var cur: seq[uint32]
 
   for item in line:
@@ -325,6 +379,9 @@ proc toWords*(line: seq[uint32]): seq[seq[uint32]] =
     result.add(cur)
 
 proc justify*(line: seq[uint32], width: int): seq[uint32] =
+  ## Justify our own internal codepoint representation to a particular
+  ## width.
+
   let actual = line.u32LineLength()
 
   if actual >= width:
