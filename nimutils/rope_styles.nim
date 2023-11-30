@@ -1377,7 +1377,7 @@ proc useCrashTheme*() =
 
   var
     tableDefault  = newStyle(overflow = OWrap, tpad = 0, bpad = 0, lpad = 0,
-                             rpad = 0, fgColor = c0Text,  bgColor = c0Bg1)
+                             rpad = 0, fgColor = c0Text,  bgColor = c0Bg2)
     tagStyles     = {
       "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow = OWrap),
       "basic"     : newStyle(bpad = 0, bgColor = c0Bg1, fgColor = c0Text),

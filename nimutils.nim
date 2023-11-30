@@ -13,15 +13,15 @@
 
 import nimutils/[box, random, unicodeid, pubsub, sinks, misc, texttable, dict],
        nimutils/[file, filetable, encodings, advisory_lock, progress],
-       nimutils/[sha, aes, prp, hexdump, markdown, htmlparse, net],
-       nimutils/[colortable, rope_base, rope_styles, rope_construct],
-       nimutils/[rope_prerender, rope_ansirender, rope_htmlrender],
+       nimutils/[sha, aes, prp, hexdump, markdown, htmlparse, net, colortable],
+       nimutils/[rope_base, rope_styles, rope_construct, rope_prerender],
+       nimutils/[rope_ansirender, rope_htmlrender, rope_textrender],
        nimutils/[switchboard, subproc]
 export box, random, unicodeid, pubsub, sinks, misc, random, texttable,
        file, filetable, encodings, advisory_lock, progress, sha,
        aes, prp, hexdump, markdown, htmlparse, net, colortable, rope_base,
        rope_styles, rope_construct, rope_prerender, rope_ansirender,
-       rope_htmlrender, switchboard, subproc, dict
+       rope_htmlrender, rope_textrender, switchboard, subproc, dict
 
 when defined(macosx):
   import nimutils/macproc
@@ -437,7 +437,6 @@ Oh look, here comes a table!
 
   import nimutils/logging
   print(h1("Testing Nimutils functionality."))
-
   hexTests()
   boxTest()
   ulidTests()

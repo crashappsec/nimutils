@@ -867,3 +867,6 @@ proc copyToBreak*(r: Rope, addDots = true): Rope =
   if truncated and addDots:
     result = result.link(atom("…"))
 
+proc newBreak*(): Rope =
+  ## Return a Rope that forces a line break.
+  result = Rope(kind: RopeBreak, breakType: BrHardLine)

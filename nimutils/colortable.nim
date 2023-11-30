@@ -151,8 +151,15 @@ var colorTable* = {
   "gray"                 : 0x808080,
   "lightslategray"       : 0x778899,
   "darkgray"             : 0xa9a9a9,
-  "silver"               : 0xc0c0c0,
   "lightgray"            : 0xd3d3d3,
+  "darkslategrey"        : 0x2f4f4f,
+  "dimgrey"              : 0x696969,
+  "slategrey"            : 0x708090,
+  "grey"                 : 0x808080,
+  "lightslategrey"       : 0x778899,
+  "darkgrey"             : 0xa9a9a9,
+  "lightgrey"            : 0xd3d3d3,
+  "silver"               : 0xc0c0c0,
   "gainsboro"            : 0xdcdcdc
 }.toOrderedTable()
 

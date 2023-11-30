@@ -296,7 +296,8 @@ proc indentWrap*( s: string,
                   splitLongWords = true,
                   seps: set[char] = Whitespace,
                   newLine = "\n"): string =
-  ## Depricated. A legacy wrapping function for 
+  ## A somewhat basic wrapping function for regular strings that does
+  ## not use ropes.
 
   result           = newStringOfCap(s.len + s.len shr 6)
   var startWidth   = if startingMaxLineWidth < 1:
