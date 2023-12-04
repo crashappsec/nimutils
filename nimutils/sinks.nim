@@ -365,19 +365,11 @@ proc safeRequest*(client: HttpClient,
   return client.request(url = url, httpMethod = httpMethod, body = body,
                         headers = headers, multipart = multipart)
 
-proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
+proc httpHeadersForSink(cfg: SinkConfig): HttpHeaders =
   var
-    client:      HttpClient
-    headers:     HttpHeaders
-    timeout:     int
-    uri:         Uri                   = parseURI(cfg.params["uri"])
     tups:        seq[(string, string)] = @[]
     contentType: string                = cfg.params["content_type"]
-    pinnedCert:  string                = ""
-    context:     SslContext
 
-  if "pinned_cert_file" in cfg.params:
-    pinnedCert = cfg.params["pinned_cert_file"]
   if "headers" in cfg.params:
     var
       rawHeaders = cfg.params["headers"].split("\n")
@@ -394,8 +386,21 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   # This might also get provided in the headers; not checking right now.
   tups.add(("Content-Type", contentType))
 
-  headers = newHTTPHeaders(tups)
+  return newHTTPHeaders(tups)
 
+template httpUriForSink(cfg: SinkConfig): Uri =
+  parseURI(cfg.params["uri"])
+
+proc httpClientForSink(cfg: SinkConfig, maxRedirects: int = 5): HttpClient =
+  var
+    client:      HttpClient
+    timeout:     int
+    uri:         Uri         = httpUriForSink(cfg)
+    pinnedCert:  string      = ""
+    context:     SslContext
+
+  if "pinned_cert_file" in cfg.params:
+    pinnedCert = cfg.params["pinned_cert_file"]
   if "timeout" in cfg.params:
     let paramstr = cfg.params["timeout"]
     if parseInt(paramstr, timeout) != len(paramstr):
@@ -410,26 +415,73 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
     context = newContext(verifyMode = CVerifyPeer)
     if pinnedCert != "":
       discard context.context.SSL_CTX_load_verify_file(cstring(pinnedCert))
-    client  = newHttpClient(sslContext=context, timeout=timeout)
+    client  = newHttpClient(sslContext=context, timeout=timeout, maxRedirects = maxRedirects)
   else:
     if "disallow_http" in cfg.params:
       raise newException(ValueError, "http:// URLs not allowed (only https).")
     elif pinnedCert != "":
       raise newException(ValueError, "Pinned cert not allowed with http " &
                                       "URL (only https).")
-    client = newHttpClient(sslContext=nil, timeout=timeout)
+    client = newHttpClient(sslContext=nil, timeout=timeout, maxRedirects = maxRedirects)
 
   if client == nil:
     raise newException(ValueError, "Invalid HTTP configuration")
 
-  let response = client.safeRequest(url        = uri,
-                                    httpMethod = HttpPost,
-                                    body       = msg,
-                                    headers    = headers)
-  if response.status[0] != '2':
+  return client
+
+proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
+  let
+    headers  = httpHeadersForSink(cfg)
+    uri      = httpUriForSink(cfg)
+    client   = httpClientForSink(cfg)
+    response = client.safeRequest(url        = uri,
+                                  httpMethod = HttpPost,
+                                  body       = msg,
+                                  headers    = headers)
+
+  if not response.code.is2xx():
     raise newException(ValueError, response.status)
 
   cfg.iolog(t, "Post " & response.status)
+
+proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
+  let
+    headers      = httpHeadersForSink(cfg)
+    signUri      = httpUriForSink(cfg)
+    # for the sign request, we do not want to send full request payload as:
+    # * we expect a redirect response
+    # * server might not accept large requests (hence presigning sink is used)
+    # * no need to waste bandwidth
+    # and will only send it to the returned signed URL
+    # which is why we disallow redirects here via maxRedirects
+    # NOTE this assumes that the endpoint immediately returns presigned URL
+    signClient   = httpClientForSink(cfg, maxRedirects = 0)
+    signResponse = signClient.safeRequest(url        = signUri,
+                                          httpMethod = HttpPut,
+                                          headers    = headers)
+
+  if signResponse.code notin [Http302, Http307]:
+    raise newException(ValueError, "Presign requires 302/307 redirect but received: " & signResponse.status)
+
+  if not signResponse.headers.hasKey("location"):
+    raise newException(ValueError, "Presign edirect Location header missing")
+
+  let uri = parseUri(signResponse.headers["location"])
+
+  if uri.scheme == "":
+    raise newException(ValueError, "Presign edirect Location header needs to be absolute URL")
+
+  let
+    client = httpClientForSink(cfg)
+    response = client.safeRequest(url        = uri,
+                                  httpMethod = HttpPut,
+                                  body       = msg,
+                                  headers    = headers)
+
+  if not response.code.is2xx():
+    raise newException(ValueError, response.status)
+
+  cfg.iolog(t, "Presign " & response.status)
 
 proc addFileSink*() =
   var
@@ -502,6 +554,22 @@ proc addPostSink*() =
 
   registerSink("post", record)
 
+proc addPresignSink*() =
+  var
+    record = SinkImplementation()
+    keys = {
+      "uri"              : true,
+      "content_type"     : true,
+      "disallow_http"    : false,
+      "headers"          : false,
+      "timeout"          : false,
+      "pinned_cert_file" : false
+    }.toTable()
+
+  record.outputFunction = presignSinkOut
+  record.keys           = keys
+
+  registerSink("presign", record)
 
 proc addDefaultSinks*() =
   addStdoutSink()
@@ -510,3 +578,4 @@ proc addDefaultSinks*() =
   addRotoLogSink()
   addS3Sink()
   addPostSink()
+  addPresignSink()
