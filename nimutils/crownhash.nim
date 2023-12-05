@@ -179,9 +179,10 @@ proc initDict*[T, V](dict: var Dict[T, V]) =
     dict.hatrack_dict_set_free_handler(decrefDictItems)
 
 proc `=destroy`*[T, V](x: Dict[T, V]) =
-  ## Calls the underlying C cleanup routine to deallocate everything
-  ## specifically allocated in C.
-  hatrack_dict_cleanup(addr x)
+  if (addr x) != nil:
+    ## Calls the underlying C cleanup routine to deallocate everything
+    ## specifically allocated in C.
+    hatrack_dict_cleanup(addr x)
 
 
 proc `[]=`*[T, V](dict: var Dict[T, V], key: T, value: sink V) =
@@ -326,7 +327,7 @@ proc contains*[T, V](dict: DictRef[T, V], key: T): bool =
   return contains(dict[], key)
 
 proc `[]`*[T, V](dict: var Dict[T, V], key: T) : V =
-  ## Retrieve the value associated with a key, or else throws an erro
+  ## Retrieve the value associated with a key, or else throws an error
   ## if it's not present.
   ##
   ## See `lookup` for a version that returns an Option, and thus
