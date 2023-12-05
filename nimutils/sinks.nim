@@ -391,11 +391,10 @@ proc httpHeadersForSink(cfg: SinkConfig): HttpHeaders =
 template httpUriForSink(cfg: SinkConfig): Uri =
   parseURI(cfg.params["uri"])
 
-proc httpClientForSink(cfg: SinkConfig, maxRedirects: int = 5): HttpClient =
+proc httpClientForSink(cfg: SinkConfig, uri: Uri, maxRedirects: int = 5): HttpClient =
   var
     client:      HttpClient
     timeout:     int
-    uri:         Uri         = httpUriForSink(cfg)
     pinnedCert:  string      = ""
     context:     SslContext
 
@@ -433,7 +432,7 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   let
     headers  = httpHeadersForSink(cfg)
     uri      = httpUriForSink(cfg)
-    client   = httpClientForSink(cfg)
+    client   = httpClientForSink(cfg, uri)
     response = client.safeRequest(url        = uri,
                                   httpMethod = HttpPost,
                                   body       = msg,
@@ -455,7 +454,7 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
     # and will only send it to the returned signed URL
     # which is why we disallow redirects here via maxRedirects
     # NOTE this assumes that the endpoint immediately returns presigned URL
-    signClient   = httpClientForSink(cfg, maxRedirects = 0)
+    signClient   = httpClientForSink(cfg, signUri, maxRedirects = 0)
     signResponse = signClient.safeRequest(url        = signUri,
                                           httpMethod = HttpPut,
                                           headers    = headers)
@@ -472,7 +471,7 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
     raise newException(ValueError, "Presign edirect Location header needs to be absolute URL")
 
   let
-    client = httpClientForSink(cfg)
+    client = httpClientForSink(cfg, uri)
     response = client.safeRequest(url        = uri,
                                   httpMethod = HttpPut,
                                   body       = msg,
