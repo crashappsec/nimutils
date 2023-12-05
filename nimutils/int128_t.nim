@@ -23,7 +23,7 @@ void hex128(uint64_t *x, char *p) {
 #else
   hex64(x[0], p);
   hex64(x[1], p + 16);
-#endif 
+#endif
 }
 
 #if BYTE_ORDER == __BIG_ENDIAN
@@ -84,7 +84,7 @@ func `>`*[T: int128|uint128](x, y: T): bool =
 func high*[T: uint128](x: typedesc[T]): T =
   {.emit: "`result` = ~(__uint128_t)0;" .}
 func low*[T: uint128](x: typedesc[T]): T = 0
-func high*[T: int128](x: typedesc[T]): T = 
+func high*[T: int128](x: typedesc[T]): T =
   {.emit: "`result` = (__int128_t)~(((__uint128_t)1) << 127);" .}
 func low*[T: int128](x: typedesc[T]): T =
   {.emit: "`result` = (__int128_t)((__uint128_t)1) << 127;" .}
@@ -108,7 +108,7 @@ converter i128ToI16*(n: int128): int16 =
   {.emit: "`result` = (uint16_t)`n`;" .}
 converter i128ToI8*(n: int128): int8 =
   {.emit: "`result` = (uint8_t)`n`;" .}
-  
+
 proc `toRope`*[T: int128|uint128](x: T): string =
   var n = x
   result = newString(33)

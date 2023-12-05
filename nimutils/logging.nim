@@ -1,7 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import tables, options, pubsub, sinks, rope_base, rope_construct, 
+import tables, options, pubsub, sinks, rope_base, rope_construct,
    rope_ansirender, rope_styles
 
 type LogLevel* = enum

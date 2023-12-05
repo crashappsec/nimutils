@@ -87,7 +87,7 @@ proc noBoxRequired*(r: Rope): bool =
 
 proc boxText*(r: Rope): Rope =
   ## Place text that needs to be boxed in an unstyled box.
-  result = Rope(kind: RopeTaggedContainer, noTextExtract: true, 
+  result = Rope(kind: RopeTaggedContainer, noTextExtract: true,
                 contained: r)
 
 proc textRope*(s: string, pre = false): Rope =
@@ -227,7 +227,7 @@ proc `+`*(r1: Rope, r2: Rope): Rope =
     dupe1.text &= dupe2.text
     return dupe1
   else:
-    let 
+    let
       noBox1 = dupe1.noBoxRequired()
       noBox2 = dupe2.noBoxRequired()
 
@@ -240,37 +240,37 @@ proc `+`*(r1: Rope, r2: Rope): Rope =
     else:
       result = dupe1
       dupe1.siblings.add(dupe2.boxText())
-      
+
 
 proc link*(r1: Rope, r2: Rope): Rope =
   ## Returns the concatenation of two ropes, but WITHOUT copying them.
   ##
   ## In many cases, the object in the first operand will also be
   ## returned, but not always:
-  ## 
+  ##
   ## 1) The first parameter might end up getting boxed, since boxed
   ## content cannot live next to unboxed content.
   ##
   ## 2), if the first parameter is nil, the second param will be
   ## returned.
   ##
-  ## 
+  ##
   ## But generally, this links the two Ropes (modulo our box
   ## constraint), as opposed to `+=`, which links a copy of the rhs to
   ## the lhs, or `+` which copies both operands.
   ##
   ## We did it this way, because copying is rarely the right thing.
   ##
-  ## However, we currently are NOT checking for cycles here. Use += 
+  ## However, we currently are NOT checking for cycles here. Use +=
   ## if there might be a cycle; it will deep-copy the RHS.
-  ## 
+  ##
 
   if r1 == nil:
     return r2
   if r2 == nil:
     return r1
 
-  var 
+  var
     lastOnL: Rope
 
   if r1.siblings.len() == 0:
@@ -282,7 +282,7 @@ proc link*(r1: Rope, r2: Rope): Rope =
     lastOnL.text &= r2.text
     result = r1
   else:
-    let 
+    let
       noBox1 = r1.noBoxRequired()
       noBox2 = r2.noBoxRequired()
 
@@ -515,7 +515,7 @@ proc markdown*(s: string, add_div = true): Rope =
   ## Process the text as markdown.
   s.strip().htmlStringToRope(markdown = true, add_div = true)
 
-proc text*(s: string, pre = true, detect = false): Rope =  
+proc text*(s: string, pre = true, detect = false): Rope =
   if detect:
     let n = s.strip(trailing = false)
     if n.len() != 0:
@@ -570,7 +570,7 @@ macro tagGenRename(id: static[string], rename: static[string]): untyped =
         ## Turn a string into a rope, styled with this tag.
         return `idNode`(s.textRope(pre))
   result.add(decl)
-  
+
 macro trSetGen(ids: static[openarray[string]]): untyped =
   result = newStmtList()
 
@@ -639,12 +639,12 @@ proc container*(r: Rope): Rope =
   ## Returns a container with no formatting info; will inherit whatever.
   result = Rope(kind: RopeTaggedContainer, tag: "", contained: r,
                 noTextExtract: true)
-  
+
 proc container*(s: string): Rope =
   ## Returns a container with no formatting info; will inherit whatever.
   result = container(atom(s))
 
-proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil, 
+proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
             title: Rope = nil, caption: Rope = nil,
              columnInfo: seq[ColInfo] = @[]): Rope =
   ## Generates a Rope that outputs a table. The content parameters
@@ -671,21 +671,21 @@ proc table*(tbody: Rope, thead: Rope = nil, tfoot: Rope = nil,
 proc colWidthInfo*(input: openarray[(int, bool)]): seq[ColInfo] =
   ## This takes column information and returns what you need
   ## to pass to `table()`.
-  ## 
+  ##
   ## The inputs are two-tuples. If the boolean is true, then the
   ## integer is interpreted as an absolute column width. If it's
   ## false, then it's interpreted as a percent.
   ##
   ## Use a percentage of 0 to signal flexible with, based on available
   ## space. If multiple columns have this value, they'll be given
-  ## equal space. 
+  ## equal space.
   ##
   ## Note that, if you do not specify any values for a table at all,
   ## the system will try to do more intelligent auto-sizing.
 
   for (v, b) in input:
     result.add(ColInfo(span: 0, wValue: v, absVal: b))
-    
+
 proc colPcts*(pcts: openarray[int]): seq[ColInfo] =
   ## This takes a list of column percentages and returns what you need
   ## to pass to `table()`.
@@ -741,7 +741,7 @@ proc nocolors*(r: Rope, removeNested = true): Rope =
   if removeNested:
     for item in r.search("colors"):
       item.tag = "nocolors"
-      
+
 basicTagGen(["h1", "h2", "h3", "h4", "h5", "h6",
              "li", "blockquote", "div", "code", "ins", "del", "kbd", "mark",
              "small", "sub", "sup", "width", "title", "em", "strong",
@@ -787,7 +787,7 @@ proc inlineCode*(s: string): Rope =
   if s == "":
     return Rope(nil)
   else:
-    return Rope(kind: RopeTaggedContainer, tag: "inline", 
+    return Rope(kind: RopeTaggedContainer, tag: "inline",
                 contained: s.text(pre = false))
 
 proc join*(l: seq[Rope], s: Rope): Rope =
@@ -814,11 +814,11 @@ proc copyToBreakInternal(r: Rope, truncated: var bool,
   r.cycle = true
 
   result = Rope(kind: r.kind, tag: r.tag, class: r.class)
-  
+
   if r.id != "" and r.id in perIdStyles:
     result.ensureUniqueId()
     perIdStyles[result.id] = perIdStyles[r.id]
-  
+
   case r.kind
   of RopeAtom:
     result.length = r.length
@@ -856,14 +856,14 @@ proc copyToBreakInternal(r: Rope, truncated: var bool,
       result.siblings.add(newsib)
 
 proc copyToBreak*(r: Rope, addDots = true): Rope =
-  ## Copies a rope up until the first break. Thie will NOT go into 
+  ## Copies a rope up until the first break. Thie will NOT go into
   ## tables or lists.
-  var 
+  var
     truncated: bool
     okToEnterContainer = true
 
   result = r.copyToBreakInternal(truncated, okToEnterContainer)
-  
+
   if truncated and addDots:
     result = result.link(atom("…"))
 

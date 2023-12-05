@@ -9,7 +9,7 @@ proc element(name, contents: string): string =
 
 proc nobreak(name, contents: string): string =
   result = "<" & name & ">" & contents  & "</" & name & ">"
-  
+
 proc toHtml*(r: Rope, indent = 0): string =
   ## An verty basic rope-to-html generator.. Currently does NOT
   ## preserve colors, fixed width, classes, IDs, custom tags, etc.  It
@@ -20,12 +20,12 @@ proc toHtml*(r: Rope, indent = 0): string =
 
   case r.kind
   of RopeAtom:
-    result = $(r.text) 
+    result = $(r.text)
   of RopeBreak:
     if r.guts != nil:
       result = element("p", r.guts.toHtml())
     else:
-      result = "<br>\n" 
+      result = "<br>\n"
   of RopeLink:
     result = "<a href=" & r.url & ">" & r.toHighlight.toHtml() & "</a>"
   of RopeList:
@@ -85,10 +85,9 @@ proc toHtml*(r: Rope, indent = 0): string =
         var cell = item.toHtml()
         if cell.startswith("<td>") or cell.startswith("<th>"):
           cells.add(cell)
-        else: 
+        else:
           cells.add(element("td", cell))
       result = cells.join("\n")
 
   for item in r.siblings:
     result &= item.toHtml()
-      

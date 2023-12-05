@@ -362,14 +362,14 @@ styleMap = { # Starting theme. Need to redo this to be a real theme API soon.
                              bgColor = "black", fgColor = "tomato",
                              italic = ItalicOn)
     }.toTable()
-    
+
 var
   defaultStyle* = plainStyle
   perClassStyles* = {
       "callout"   : newStyle(fgColor = "fandango", bgColor = "jazzberry",
                              italic = ItalicOn, casing = CasingTitle)
-    }.toTable()  
-    
+    }.toTable()
+
 {.emit: """
 #include <stdatomic.h>
 #include <stdint.h>
@@ -388,13 +388,13 @@ var debugId = 0
 type WalkInfo = object
   str: string
   nest: int
-    
+
 proc repr(r: Rope, res: var WalkInfo) =
   if r == nil:
     return
 
   var one = ""
-  
+
   case r.kind
   of RopeAtom:
     one &= "TEXT: " & $(r.text)
@@ -410,7 +410,7 @@ proc repr(r: Rope, res: var WalkInfo) =
   of RopeList, RopeTableRow, RopeTableRows:
     one &= r.tag & ": "
   of RopeTable:
-    one &= "TABLE: " 
+    one &= "TABLE: "
     if r.thead != nil:
       one &= "THEAD: " & $(r.thead.cells.len()) & "rows"
     if r.tbody != nil:
@@ -443,15 +443,15 @@ proc repr(r: Rope, res: var WalkInfo) =
   res.nest += 1
   r.genericRopeWalk(repr, res)
   res.nest -= 1
-  
-  for item in r.siblings: 
+
+  for item in r.siblings:
     item.repr(res)
-        
+
 proc repr*(r: Rope): string =
   ## Return a debug representation of a rope.
 
   var info: WalkInfo
-  
+
   r.repr(info)
   return info.str
 
@@ -555,7 +555,7 @@ proc isContainer*(r: Rope): bool =
 
   if r.tag in breakingStyles or r.noTextExtract:
     return true
-    
+
   case r.kind
   of RopeAtom, RopeLink, RopeFgColor, RopeBgColor:
     return false
@@ -570,14 +570,14 @@ proc isContainer*(r: Rope): bool =
     return false
 
 template defaultBoxStyle*(): BoxStyle =
-  ## Return the default box style, taken from the current value of 
+  ## Return the default box style, taken from the current value of
   ## the 'table' style, if set.
 
   if "table" in styleMap:
     styleMap["table"].boxStyle.get(BoxStylePlain)
   else:
     BoxStylePlain
-  
+
 template defaultBorderStyle*(): BorderOpts =
   ## Return the default border style.
 
@@ -650,7 +650,7 @@ proc ropeStyle*(r:     Rope,
 
   if r == nil:
     return
-    
+
   if container and not r.isContainer():
     let c = r.findFirstContainer()
     discard c.ropeStyle(style, recurse, container)
@@ -684,7 +684,7 @@ proc colWidths*(r: Rope, info: seq[ColInfo]): Rope {.discardable.} =
     item.colInfo = info
 
   return r
-  
+
 proc colWidths*(r: Rope, vals: openarray[(int, bool)]): Rope {.discardable.} =
   ## Set column widths in the first table contained within a rope.
   ## Different from `colWidthInfo` in that it applies values, whereas
@@ -695,9 +695,9 @@ proc colWidths*(r: Rope, vals: openarray[(int, bool)]): Rope {.discardable.} =
 
   for (n, b) in vals:
     info.add(ColInfo(span: 1, wValue: n, absVal: b))
-    
+
   return r.colWidths(info)
-  
+
 proc colAbs*(r: Rope, pcts: openarray[int]): Rope {.discardable.} =
   ## Similar to `colWidths`, except all inputs are treated as absolute
   ## column widths.
@@ -718,12 +718,12 @@ proc colPcts*(r: Rope, pcts: openarray[int]): Rope {.discardable.} =
     return
 
   var info: seq[ColInfo]
-  
+
   for item in pcts:
     info.add(ColInfo(span: 1, wValue: item))
 
   return r.colWidths(info)
-  
+
 proc applyClass*(r: Rope, class: string, recurse = true): Rope {.discardable.} =
   ## Set the `class` property on a rope. By default, recurses to any
   ## sub-ropes.
@@ -839,12 +839,12 @@ proc fgColor*(s: string, color: string): Rope =
   else:
     return text(s).fgColor(color)
 
-proc color*(r: Rope, fgColor: string, bgColor = "", recurse = false): 
+proc color*(r: Rope, fgColor: string, bgColor = "", recurse = false):
                                      Rope {.discardable.} =
   ## Applies fg/bg colors. By default, this is NOT recursive.
 
   return r.ropeStyle(newStyle(fgColor = fgColor, bgColor = bgColor), recurse)
-                              
+
 proc color*(s: string, fgColor: string, bgColor = ""): Rope =
   ## Returns a new Rope from a string with the given fg and (optional)
   ## background color.
@@ -858,7 +858,7 @@ proc tpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ## By default, this is NOT recursive.
 
   return r.ropeStyle(newStyle(tpad = n), recurse, true)
-  
+
 proc tpad*(s: string, n: int): Rope =
   ## Adds a top pad to a string.
   return text(s).tpad(n)
@@ -869,7 +869,7 @@ proc bpad*(r: Rope, n: int, recurse = false): Rope {.discardable.} =
   ##
   ## By default, this is NOT recursive.
 
-  return r.ropeStyle(newStyle(bpad = n), recurse, true)  
+  return r.ropeStyle(newStyle(bpad = n), recurse, true)
 
 proc bpad*(s: string, n: int): Rope =
   ## Adds a bottom pad to a string.
@@ -1054,7 +1054,7 @@ proc overflow*(r: Rope, overflow: OverflowPreference, recurse = true): Rope
   {.discardable.} =
   ## Sets the overflow strategy. If you set OIntentWrap then you can
   ## change the wrap hang value via `setHang()`.
-  ## 
+  ##
   ## Recursive by default.
 
   return r.ropeStyle(newStyle(overflow = overflow), recurse)
@@ -1072,7 +1072,7 @@ proc hang*(r: Rope, hang: int, recurse = true): Rope {.discardable.} =
 
 proc bold*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   ## Sets the `bold` property of a Rope's style. By default,
-  ## turns on the property, unless `disable` is true. 
+  ## turns on the property, unless `disable` is true.
   ##
   ## Recursive by default.
 
@@ -1092,7 +1092,7 @@ proc bold*(s: string): Rope =
 
 proc inverse*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   ## Sets the `inverse` property of a Rope's style. By default,
-  ## turns on the property, unless `disable` is true. 
+  ## turns on the property, unless `disable` is true.
   ##
   ## Recursive by default.
 
@@ -1113,7 +1113,7 @@ proc inverse*(s: string): Rope =
 proc strikethrough*(r: Rope, disable = false, recurse = true):
                   Rope {.discardable.} =
   ## Sets the `strikethrough` property of a Rope's style. By default,
-  ## turns on the property, unless `disable` is true. 
+  ## turns on the property, unless `disable` is true.
   ##
   ## Recursive by default.
 
@@ -1133,10 +1133,10 @@ proc strikethrough*(s: string): Rope =
 
 proc italic*(r: Rope, disable = false, recurse = true): Rope {.discardable.} =
   ## Sets the `italic` property of a Rope's style. By default,
-  ## turns on the property, unless `disable` is true. 
+  ## turns on the property, unless `disable` is true.
   ##
   ## Recursive by default.
-  
+
   var param: ItalicPref
 
   if disable:
@@ -1154,7 +1154,7 @@ proc italic*(s: string): Rope =
 proc underline*(r: Rope, kind = UnderlineSingle, recurse = true):
               Rope {.discardable.} =
   ## Sets the `underline` property of a Rope's style. By default,
-  ## turns on the property, unless `disable` is true. 
+  ## turns on the property, unless `disable` is true.
   ##
   ## Recursive by default.
 
@@ -1200,17 +1200,17 @@ proc flushJustify*(r: Rope, recurse = false): Rope {.discardable.} =
   ## only set the preference on the top rope, not any children.
   return r.ropeStyle(newStyle(align = AlignF), recurse)
 
-proc multiFindFirst*(s: string, terms: var seq[string], 
+proc multiFindFirst*(s: string, terms: var seq[string],
                      start = 0): (int, string) =
   ## This is used to highlight text substring matches. The arguments
   ## are all unstyled strings, not ropes.
 
-  var 
+  var
     stillThere: seq[string] = @[]
     lowest:     uint        = high(uint)
     lowVal:     string      = ""
   for i, item in terms:
-    if item == "": 
+    if item == "":
       continue
     let ix = s.find(item, start)
     if ix == -1:
@@ -1222,13 +1222,13 @@ proc multiFindFirst*(s: string, terms: var seq[string],
 
   terms = stillThere
   result = (cast[int](lowest), lowVal)
-  
+
 proc explode*(s: string, inTerms: seq[string]): seq[string] =
   ## Like split(), except takes multiple words as input to split on,
   ## and returns matches as part of the array; all odd indexes will be
   ## matches.
 
-  var 
+  var
     terms   = inTerms
     startix = 0
 
@@ -1268,7 +1268,7 @@ type MatchInfo = object
   classToAdd:   string
 
 proc highlightMatches(r: Rope, info: var MatchInfo) =
-  var myMatchInfo: MatchInfo 
+  var myMatchInfo: MatchInfo
 
   if r == nil:
     return
@@ -1282,7 +1282,7 @@ proc highlightMatches(r: Rope, info: var MatchInfo) =
   if r.kind == RopeAtom:
     let asStr    = toLowerAscii($(r.text))
     var exploded = asStr.explode(info.terms)
-    
+
     if exploded.len() != 1:
       var newRope, prev, n: Rope
 
@@ -1344,14 +1344,14 @@ proc highlightMatches*(r: Rope, terms: seq[string], class = ""): Rope =
   ##
   ## Note that this does NOT do full-word matching.  So if you search
   ## for 'the', if will highlight the middle characters of 'other'.
-  
+
 
   var info = MatchInfo(terms: terms, classToAdd: class)
   r.highlightMatches(info)
   if info.replacements.len() == 0:
     return r
   return info.replacements[0][1]
-  
+
 
 proc installTheme*(tagStyles:   var Table[string, FmtStyle],
                    classStyles: var Table[string, FmtStyle]) =
@@ -1422,7 +1422,7 @@ proc useCrashTheme*() =
                              fgColor = c0Text, align = AlignL, lpad = 1,
                              rpad = 1),
       "th"        : newStyle(bgColor = c0Bg1, bold = BoldOn, overflow = OWrap,
-                           casing = CasingUpper, tpad = 1, bpad = 0, lpad = 1, 
+                           casing = CasingUpper, tpad = 1, bpad = 0, lpad = 1,
                            rpad = 1, fgColor = c0Accent2, align = AlignC),
       "tr"        : newStyle(lpad = 0, rpad = 0,
                              overflow = OWrap, tpad = 0, bpad = 0),
@@ -1445,7 +1445,7 @@ proc useCrashTheme*() =
                              bpad = 1, tpad = 0, align = AlignC,
                              italic = ItalicOn)
     }.toTable()
-    
+
     classStyles = {
       "callout"   : newStyle(fgColor = "fandango", bgColor = "jazzberry",
                              italic = ItalicOn),
@@ -1455,4 +1455,3 @@ proc useCrashTheme*() =
   defaultStyle = defaultStyle.mergeStyles(tagStyles["basic"])
 
   installTheme(tagStyles, classStyles)
-  

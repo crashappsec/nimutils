@@ -131,4 +131,4 @@ proc delByValue*[T](s: var seq[T], x: T): bool {.discardable.} =
 
   s.delete(ix)
 
-  return true  
+  return true
