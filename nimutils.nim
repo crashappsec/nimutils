@@ -16,12 +16,12 @@ import nimutils/[box, random, unicodeid, pubsub, sinks, misc, texttable, dict],
        nimutils/[sha, aes, prp, hexdump, markdown, htmlparse, net, colortable],
        nimutils/[rope_base, rope_styles, rope_construct, rope_prerender],
        nimutils/[rope_ansirender, rope_htmlrender, rope_textrender],
-       nimutils/[switchboard, subproc]
+       nimutils/[switchboard, subproc, int128_t]
 export box, random, unicodeid, pubsub, sinks, misc, random, texttable,
        file, filetable, encodings, advisory_lock, progress, sha,
        aes, prp, hexdump, markdown, htmlparse, net, colortable, rope_base,
        rope_styles, rope_construct, rope_prerender, rope_ansirender,
-       rope_htmlrender, rope_textrender, switchboard, subproc, dict
+       rope_htmlrender, rope_textrender, switchboard, subproc, dict, int128_t
 
 when defined(macosx):
   import nimutils/macproc
@@ -285,6 +285,23 @@ when isMainModule:
     print(h3("Decrypted:"))
     print(em(text))
 
+  proc int128Test() =
+    var x: int128 = (-100) * -1
+    var y: uint128 = 1 shl int128(64)
+    var z = high(uint128)
+    print h2("int128 tests. Never mind me.")
+    print h3("Test 1 should be: 0x640000000000000000")
+    print em(toRope((int128(x) * int128(y))))
+    print h3("lows for uint128 and int128")
+    print em((low(uint128)).toRope())
+    print em(low(int128).toRope())
+    print em(high(uint128).toRope())
+    print em(high(int128).toRope())
+    print h3("clz for y...")
+    print em($int(clzp128(addr y)))
+    print h3("clz for high(uint128)")
+    print em($int(clzp128(addr z)))
+    
   proc dictTests() =
     print(h2("Dictionary tests"))
 
@@ -453,6 +470,7 @@ Oh look, here comes a table!
   basic_subproc_tests()
   instantTableTests()
   calloutTest()
+  int128Test()
   
   var baddie = h1("hello") + fgColor(atom("Sup,"), "lime") + atom(" dawg!")
   print(pre(repr(baddie)))
