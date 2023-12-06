@@ -37,6 +37,8 @@ proc unixTimeInMS*(): uint64 =
 proc clzll*(argc: uint): cint {.cdecl, importc: "__builtin_clzll".}
 ## Call the 64-bit count-leading-zeros builtin.
 
+proc clzl*(argc: uint32): cint {.cdecl, importc: "__builtin_clzl".}
+
 proc log2*(s: uint): int = 63 - clzll(s)
 ## Calculate log base 2, truncating.
 

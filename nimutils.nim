@@ -287,10 +287,11 @@ when isMainModule:
 
   proc int128Test() =
     var x: int128 = (-100) * -1
-    var y: uint128 = 1 shl int128(64)
+    var y: uint128 = int128(1) shl int128(64)
     var z = high(uint128)
     print h2("int128 tests. Never mind me.")
-    print h3("Test 1 should be: 0x640000000000000000")
+    print h3("Test 1 should be:")
+    print h4("00000000000000640000000000000000").lpad(0)
     print em(toRope((int128(x) * int128(y))))
     print h3("lows for uint128 and int128")
     print em((low(uint128)).toRope())

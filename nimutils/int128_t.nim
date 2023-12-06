@@ -16,7 +16,7 @@ void hex64(uint64_t n, char *p) {
   *p-- = hextable[n];
 }
 
-void hex128(__uint64_t *x, char *p) {
+void hex128(uint64_t *x, char *p) {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
   hex64(x[0], p + 16);
   hex64(x[1], p);
@@ -34,8 +34,8 @@ void hex128(__uint64_t *x, char *p) {
 #define U128HIGH 0
 #endif
 
-int clzp128(__uint64_t *p) {
-  __uint64_t n = p[U128HIGH];
+int clzp128(uint64_t *p) {
+  uint64_t n = p[U128HIGH];
   if (!n) {
     n = p[U128LOW];
     return 64 + __builtin_clzll(n);
@@ -88,6 +88,22 @@ converter iToI128*[T: int|int32|int16|uint128](n: T): int128 =
   {.emit: "`result` = `n`;" .}
 converter iToU128*[T: uint|uint32|uint16|int128](n: T): uint128 =
   {.emit: "`result` = `n`;" .}
+converter u128ToU64*(n: uint128): uint64 =
+  {.emit: "`result` = (uint64_t)`n`;" .}
+converter u128ToU32*(n: uint128): uint32 =
+  {.emit: "`result` = (uint32_t)`n`;" .}
+converter u128ToU16*(n: uint128): uint16 =
+  {.emit: "`result` = (uint16_t)`n`;" .}
+converter u128ToU8*(n: uint128): uint8 =
+  {.emit: "`result` = (uint8_t)`n`;" .}
+converter i128ToI64*(n: int128): int64 =
+  {.emit: "`result` = (int64_t)`n`;" .}
+converter i128ToI32*(n: int128): int32 =
+  {.emit: "`result` = (int32_t)`n`;" .}
+converter i128ToI16*(n: int128): int16 =
+  {.emit: "`result` = (uint16_t)`n`;" .}
+converter i128ToI8*(n: int128): int8 =
+  {.emit: "`result` = (uint8_t)`n`;" .}
   
 proc `toRope`*[T: int128|uint128](x: T): string =
   var n = x
