@@ -380,4 +380,3 @@ extern void process_status_check(monitor_t *, bool);
 // pty params.
 // ASCII Cinema.
 #endif
-

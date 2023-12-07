@@ -203,6 +203,9 @@ proc close*(ctx: var SubProcess) {.cdecl, importc: "subproc_close", nodecl.}
   ## Closes down a subprocess; do not call any querying function after
   ## this, as the memory will be freed.
 
+proc `=destroy`*(ctx: var SubProcess) =
+    ctx.close()
+
 proc getPid*(ctx: var SubProcess): Pid
     {.cdecl, importc: "subproc_get_pid", nodecl.}
   ## Returns the process ID associated with the subprocess. This may
@@ -221,7 +224,6 @@ proc pausePassthrough*(ctx: var SubProcess, which: SpIoKind)
     {.cdecl, importc: "subproc_pause_passthrough", nodecl.}
   ## Stops passthrough data from being passed (though pending writes
   ## may still succeed).
-
 
 proc resumePassthrough*(ctx: var SubProcess, which: SpIoKind)
     {.cdecl, importc: "subproc_resume_passthrough", nodecl.}

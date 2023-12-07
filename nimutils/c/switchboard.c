@@ -271,7 +271,7 @@ sb_init_party_input_buf(switchboard_t *ctx, party_t *party, char *input,
 		size_t len, bool dup, bool free, bool close_fd_when_done)
 {
     char *to_set = input;
-    
+
     if (dup) {
 	free   = true;
 	to_set = (char *)calloc(len + 1, 1);
@@ -315,7 +315,7 @@ sb_party_input_buf_new_string(party_t *party, char *input, size_t len,
     }
     sobj->len                = len;
     sobj->close_fd_when_done = close_fd_when_done;
-    
+
     if (dup) {
 	sobj->strbuf = (char *)calloc(len + 1, 1);
 	memcpy(sobj->strbuf, input, len);
@@ -724,7 +724,7 @@ sb_route_is_active(switchboard_t *ctx, party_t *read_from, party_t *write_to)
     if (!read_from->open_for_read || !write_to->open_for_write) {
         return false;
     }
-    
+
     fd_party_t     *reader = get_fd_obj(read_from);
     subscription_t *cur    = reader->subscribers;
 
@@ -751,7 +751,7 @@ sb_route_is_paused(switchboard_t *ctx, party_t *read_from, party_t *write_to)
     if (!read_from->open_for_read || !write_to->open_for_write) {
         return false;
     }
-    
+
     fd_party_t     *reader = get_fd_obj(read_from);
     subscription_t *cur    = reader->subscribers;
 
@@ -779,7 +779,7 @@ sb_is_subscribed(switchboard_t *ctx, party_t *read_from, party_t *write_to)
     if (!read_from->open_for_read || !write_to->open_for_write) {
         return false;
     }
-    
+
     fd_party_t     *reader = get_fd_obj(read_from);
     subscription_t *cur    = reader->subscribers;
 
@@ -1401,7 +1401,7 @@ sb_destroy(switchboard_t *ctx, bool free_parties)
 	fd_party_t     *fdobj = get_fd_obj(cur);
 	subscription_t *sub   = fdobj->subscribers;
 
-	while (sub->subscriber) {
+	while (sub) {
 	    subscription_t *next_sub = sub->next;
 	    free(sub);
 	    sub = next_sub;
@@ -1409,7 +1409,6 @@ sb_destroy(switchboard_t *ctx, bool free_parties)
 
 	if (cur->party_type == PT_STRING) {
 	    str_src_party_t *sstr = get_sstr_obj(cur);
-
 	    if (sstr->strbuf != NULL) {
 		free(sstr->strbuf);
 	    }
@@ -1435,6 +1434,7 @@ sb_destroy(switchboard_t *ctx, bool free_parties)
 	}
 	cur = next;
     }
+
     if (free_parties) {
 	cur = ctx->party_loners;
 
@@ -1462,7 +1462,7 @@ sb_get_results(switchboard_t *ctx, sb_result_t *result)
     }
 
     result->inited = true;
-    
+
     while (party) {
 	if (party->party_type == PT_STRING && party->can_write_to_it) {
 	    capcount++;
@@ -1482,7 +1482,7 @@ sb_get_results(switchboard_t *ctx, sb_result_t *result)
 	    strobj = get_dstr_obj(party);
 	    r->tag = strobj->tag;
 	    r->len = strobj->ix;
-		
+
 	    if (strobj->ix) {
 		r->contents = strobj->strbuf;
 
@@ -1501,7 +1501,7 @@ char *
 sb_result_get_capture(sb_result_t *ctx, char *tag, bool caller_borrow)
 {
     char *result;
-    
+
     for (int i = 0; i < ctx->num_captures; i++) {
 	if (!strcmp(ctx->captures[i].tag, tag)) {
 	    result = ctx->captures[i].contents;
