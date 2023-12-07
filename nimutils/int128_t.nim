@@ -77,6 +77,10 @@ func `-=`*[T: int128|uint128](x: var T, y: T) =
   x = x - y
 func `*=`*[T: int128|uint128](x: var T, y: T) =
   x = x * y
+func `<`*[T: int128|uint128](x, y: T): bool =
+  {.emit: "`result` = `x` < `y`;" .}
+func `>`*[T: int128|uint128](x, y: T): bool =
+  {.emit: "`result` = `x` > `y`;" .}
 func high*[T: uint128](x: typedesc[T]): T =
   {.emit: "`result` = ~(__uint128_t)0;" .}
 func low*[T: uint128](x: typedesc[T]): T = 0
@@ -84,9 +88,9 @@ func high*[T: int128](x: typedesc[T]): T =
   {.emit: "`result` = (__int128_t)~(((__uint128_t)1) << 127);" .}
 func low*[T: int128](x: typedesc[T]): T =
   {.emit: "`result` = (__int128_t)((__uint128_t)1) << 127;" .}
-converter iToI128*[T: int|int32|int16|uint128](n: T): int128 =
+converter iToI128*[T: byte|int|int8|int32|int16|int64|uint128](n: T): int128 =
   {.emit: "`result` = `n`;" .}
-converter iToU128*[T: uint|uint32|uint16|int128](n: T): uint128 =
+converter iToU128*[T: uint8|uint|uint32|uint16|uint64|int128](n: T): uint128 =
   {.emit: "`result` = `n`;" .}
 converter u128ToU64*(n: uint128): uint64 =
   {.emit: "`result` = (uint64_t)`n`;" .}

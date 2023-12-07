@@ -255,7 +255,7 @@ pause_passthrough(subprocess_t *ctx, unsigned char which)
     }
     if (!ctx->pty_fd && (which & SP_IO_STDERR)) {
 	sb_pause_route(&ctx->sb, &ctx->subproc_stderr, &ctx->parent_stdout);
-	sb_pause_route(&ctx->sb, &ctx->subproc_stderr, &ctx->parent_stderr);	
+	sb_pause_route(&ctx->sb, &ctx->subproc_stderr, &ctx->parent_stderr);
     }
 }
 
@@ -283,7 +283,7 @@ resume_passthrough(subprocess_t *ctx, unsigned char which)
     }
     if (!ctx->pty_fd && (which & SP_IO_STDERR)) {
 	sb_resume_route(&ctx->sb, &ctx->subproc_stderr, &ctx->parent_stdout);
-	sb_resume_route(&ctx->sb, &ctx->subproc_stderr, &ctx->parent_stderr);	
+	sb_resume_route(&ctx->sb, &ctx->subproc_stderr, &ctx->parent_stderr);
     }
 }
 
@@ -300,7 +300,7 @@ pause_capture(subprocess_t *ctx, unsigned char which)
 
     if ((which & SP_IO_STDERR) && !ctx->pty_fd) {
 	sb_pause_route(&ctx->sb, &ctx->subproc_stderr, &ctx->capture_stdout);
-	sb_pause_route(&ctx->sb, &ctx->subproc_stderr, &ctx->capture_stderr);	
+	sb_pause_route(&ctx->sb, &ctx->subproc_stderr, &ctx->capture_stderr);
     }
 }
 
@@ -317,7 +317,7 @@ resume_capture(subprocess_t *ctx, unsigned char which)
 
     if ((which & SP_IO_STDERR) && !ctx->pty_fd) {
 	sb_resume_route(&ctx->sb, &ctx->subproc_stderr, &ctx->capture_stdout);
-	sb_resume_route(&ctx->sb, &ctx->subproc_stderr, &ctx->capture_stderr);	
+	sb_resume_route(&ctx->sb, &ctx->subproc_stderr, &ctx->capture_stderr);
     }
 }
 
@@ -541,7 +541,7 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 	if (ctx->pty_stdin_pipe) {
 	    close(stdin_pipe[0]);
 	    sb_init_party_fd(&ctx->sb, &ctx->subproc_stdin, stdin_pipe[1],
-			     O_WRONLY, false, false);
+			     O_WRONLY, false, true);
 	}
 
 	ctx->pty_fd = pty_fd;
@@ -568,7 +568,7 @@ subproc_spawn_forkpty(subprocess_t *ctx)
 
 	setvbuf(stdout, NULL, _IONBF, (size_t) 0);
 	setvbuf(stdin, NULL, _IONBF, (size_t) 0);
-	
+
 	if (ctx->pty_stdin_pipe) {
 	    close(stdin_pipe[1]);
 	    dup2(stdin_pipe[0], 0);
@@ -671,7 +671,7 @@ subproc_close(subprocess_t *ctx)
 {
     subproc_reset_terminal(ctx);
     sb_destroy(&ctx->sb, false);
-    
+
     deferred_cb_t *cbs = ctx->deferred_cbs;
     deferred_cb_t *next;
 

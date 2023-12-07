@@ -184,7 +184,6 @@ proc `=destroy`*[T, V](x: Dict[T, V]) =
     ## specifically allocated in C.
     hatrack_dict_cleanup(addr x)
 
-
 proc `[]=`*[T, V](dict: var Dict[T, V], key: T, value: sink V) =
   ## This assigns, whether or not there was a previous value
   ## associated with the passed key.

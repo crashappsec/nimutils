@@ -136,8 +136,10 @@ proc preRenderBoxToAnsiString*(b: TextPlane, noColor = false): string =
     if not b.softBreak:
       if canColor():
         result &= ansiReset() & "\r\n"
-      elif canColor():
-        result &= ansiReset()
+      else:
+        result &= "\r\n"
+    elif canColor():
+      result &= ansiReset()
   if canColor():
     result &= ansiReset()
 
@@ -164,7 +166,7 @@ proc unbufferIo*() =
 proc `$`*(r: Rope, width = 0, ensureNl = false, showLinks = false,
            noColor = false, style = defaultStyle): string =
   ## The default rope-to-string output function.
-  ## 
+  ##
   ## `width` sets the output width to render into. If it's zero or
   ## less, then it's interpreted as an offset from the current
   ## terminal width. Tho generally you should just create a box with
@@ -175,7 +177,7 @@ proc `$`*(r: Rope, width = 0, ensureNl = false, showLinks = false,
   ##
   ## If there are links (e.g., from html), `showLinks` will output
   ## them as if in a markdown doc.
-  ## 
+  ##
   ## The `noColor` flag will inhibit any ansi codes, despite any
   ## global settings allowing color.
   ##
@@ -196,7 +198,7 @@ proc print*(r: Rope, file = stdout, width = 0, ensureNl = true,
   ##
   ## If there are links (e.g., from html), `showLinks` will output
   ## them as if in a markdown doc.
-  ## 
+  ##
   ## The `noColor` flag will inhibit any ansi codes, despite any
   ## global settings allowing color.
   ##
@@ -208,7 +210,7 @@ proc print*(r: Rope, file = stdout, width = 0, ensureNl = true,
   file.write(r.render(width, showLinks, style, ensureNl, noColor))
 
 proc print*(s: string, file = stdout, forceMd = false, forceHtml = false,
-            width = 0, ensureNl = true, showLinks = false, detect = true, 
+            width = 0, ensureNl = true, showLinks = false, detect = true,
             noColor = false, pre = true, style = defaultStyle) =
   unbufferIo()
   ## Much like `echo()`, but more capable in terms of the processing
@@ -281,6 +283,5 @@ proc print*(s: string, file = stdout, forceMd = false, forceHtml = false,
     toRender = html(s)
   else:
     toRender = text(s, pre, detect)
-   
-  file.write(toRender.render(width, showLinks, style, ensureNl, noColor))
 
+  file.write(toRender.render(width, showLinks, style, ensureNl, noColor))
