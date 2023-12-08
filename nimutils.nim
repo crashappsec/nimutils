@@ -64,7 +64,7 @@ when isMainModule:
                                        columnInfo = widths))
 
   proc basic_subproc_tests() =
-    print(h2("Run: /bin/cat /etc/passwd /etc/file_that_doesnt_exist; " & 
+    print(h2("Run: /bin/cat /etc/passwd /etc/file_that_doesnt_exist; " &
              "show output."))
     let res = runCmdGetEverything("/bin/cat", @["/etc/passwd",
                                                 "/etc/file_that_doesnt_exist"],
@@ -302,7 +302,7 @@ when isMainModule:
     print em($int(clzp128(addr y)))
     print h3("clz for high(uint128)")
     print em($int(clzp128(addr z)))
-    
+
   proc dictTests() =
     print(h2("Dictionary tests"))
 
@@ -382,7 +382,7 @@ when isMainModule:
     print(tbl)
 
     var mess2 = @[@["1, 1", "Column 2", "Column 3", "Column 4"],
-                  @["Row 2", "has some medium length strings", 
+                  @["Row 2", "has some medium length strings",
 """This has one string that's pretty long, but the rest are short. But this one is really long. I mean, really long, long enough to drive the other column into oblivion.""", "Row 2"],
                   @["Row 3", "has some medium length strings", "Row 3", "Row 3"],
                   @["Row 4", "has some medium length strings", "Row 4", "Row 4"]]
@@ -407,8 +407,8 @@ when isMainModule:
     let t5 = t4.highlightMatches(@["medium", "the"])
     print(t5)
 
-    let t6 = atom("This has one string that's pretty long, ")  + 
-             atom("but the rest are short. But this one is ") + 
+    let t6 = atom("This has one string that's pretty long, ")  +
+             atom("but the rest are short. But this one is ") +
              atom("really long. I mean, really long, long ") +
              atom("enough to drive the other column into oblivion.")
 
@@ -472,7 +472,7 @@ Oh look, here comes a table!
   instantTableTests()
   calloutTest()
   int128Test()
-  
+
   var baddie = h1("hello") + fgColor(atom("Sup,"), "lime") + atom(" dawg!")
   print(pre(repr(baddie)))
   print(baddie)

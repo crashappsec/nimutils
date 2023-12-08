@@ -130,7 +130,7 @@ type
     id*:            string
     tag*:           string
     class*:         string
-    style*:         FmtStyle  # Cached 
+    style*:         FmtStyle  # Cached
     tweak*:         FmtStyle  # temporary
     processed*:     bool
     cycle*:         bool
@@ -257,19 +257,19 @@ proc `$`*(s: FmtStyle): string =
     of AlignL:
       result &= "align=left; "
     of AlignR:
-      result &= "align=right; "      
+      result &= "align=right; "
     of AlignC:
-      result &= "align=center; "      
+      result &= "align=center; "
     of AlignJ:
-      result &= "align=justify; "      
+      result &= "align=justify; "
     of AlignF:
       result &= "align=flush; "
     else:
       discard
-    
+
 template genericRopeWalk*(r: Rope, someFunc: untyped, someData: untyped) =
   ## This is a helper template to decompose calling the next level
-  ## down in a Rope. 
+  ## down in a Rope.
   ##
   ## This only goes down a single level, and it doesn't invoke
   ## siblings so that the caller can do things after descending but
@@ -304,7 +304,7 @@ template genericRopeWalk*(r: Rope, someFunc: untyped, someData: untyped) =
 
 proc buildWalk(r: Rope, results: var seq[Rope]) =
   if r != nil:
-    results.add(r)  
+    results.add(r)
     r.genericRopeWalk(buildWalk, results)
     for item in r.siblings:
       item.buildWalk(results)

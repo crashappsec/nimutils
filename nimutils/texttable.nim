@@ -1,10 +1,10 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import rope_base, rope_construct, rope_prerender, rope_styles, unicode, 
+import rope_base, rope_construct, rope_prerender, rope_styles, unicode,
        unicodeid, std/terminal, tables, sugar
 
-proc instantTable*[T: string|Rope](cells: openarray[T], title = Rope(nil), 
+proc instantTable*[T: string|Rope](cells: openarray[T], title = Rope(nil),
                                     caption = Rope(nil),
                                     width = 0, borders = defaultBorderStyle(),
                                     boxStyle = defaultBoxStyle()): Rope =
@@ -33,11 +33,11 @@ proc instantTable*[T: string|Rope](cells: openarray[T], title = Rope(nil),
       maxWidth = w
 
   numcol = remainingWidth div (maxWidth + 3)
-  
+
   if numcol == 0: numcol = 1
   if numcol > cells.len():
     numcol = cells.len()
-    
+
   for i, item in cells:
     if i != 0 and i mod numcol == 0:
       rows.add(tr(row))
@@ -57,13 +57,13 @@ proc instantTable*[T: string|Rope](cells: openarray[T], title = Rope(nil),
   result = table(tbody(rows), title = title(title), caption = caption(caption))
   result.setBorders(borders).boxStyle(boxStyle).colPcts(pcts)
   result = result.setWidth(remainingWidth)
-  
+
 proc instantTable*[T: string|Rope](cells: openarray[T], title: string,
                                    caption = "", width = 0,
                                    borders = defaultBorderStyle(),
                                    boxStyle = defaultBoxStyle()): Rope =
   result = instantTable[T](cells, atom(title), atom(caption), width, borders,
-                            boxStyle)  
+                            boxStyle)
 
 template quickTableNoHeaders[T: string|Rope](cells: seq[seq[T]],
                               tableTitle: Rope, tableCaption: Rope): Rope =
@@ -157,16 +157,16 @@ proc callOut*[T: string | Rope](contents: T, width = 0, borders = BorderAll,
   var box = container(contents)
 
   box.center.tpad(1).bpad(1).lpad(1).rpad(1)
-  
+
   result = quickTable(@[@[box]], false, false, Rope(nil), Rope(nil), width,
                       borders, boxStyle)
 
   result.searchOne(@["th", "td"]).get().tpad(0).bpad(0)
-  
+
   for item in result.ropeWalk():
     item.class = "callout"
 
-type 
+type
   TreeRopeWalker*[T] = (T) -> (Rope, seq[T])
   WalkState[T] = object
     walker:     TreeRopeWalker[T]
@@ -189,7 +189,7 @@ proc quickTree[T](cur: T, state: var WalkState): Rope =
   if len(kids) == 0:
     return
 
-  var 
+  var
     padStr:  seq[Rune]
     lastPad: seq[Rune]
 
@@ -206,7 +206,7 @@ proc quickTree[T](cur: T, state: var WalkState): Rope =
   for i in 0 ..< state.vpad:
     padstr.add(state.hChar)
     lastPad.add(state.hChar)
-  
+
   for i, kid in kids:
     if i == kids.len() - 1:
       state.padStr = lastPad
@@ -214,10 +214,10 @@ proc quickTree[T](cur: T, state: var WalkState): Rope =
       state.padStr = padStr
 
     result += quickTree[T](kid, state)
-  
+
 
 proc quickTree*[T](root: T, walker: TreeRopeWalker[T], tChar = Rune(0x251c),
-                   lChar = Rune(0x2514), hChar = Rune(0x2500), 
+                   lChar = Rune(0x2514), hChar = Rune(0x2500),
                    vChar = Rune(0x2502), vpad = 2, noNewlines = true): Rope =
   var state = WalkState[T](walker: walker, tChar: tChar, lChar: lChar,
                            hChar: hChar, vChar: vChar, vpad: vpad,

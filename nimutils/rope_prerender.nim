@@ -7,7 +7,7 @@
 # Everything else on my original wishlist is here now though.
 
 
-import tables, options, std/terminal, rope_base, rope_construct, rope_styles, 
+import tables, options, std/terminal, rope_base, rope_construct, rope_styles,
        unicodeid, unicode, misc
 
 type
@@ -55,7 +55,7 @@ proc unboxedRuneLength(r: Rope, results: var int) =
     r.genericRopeWalk(unboxedRuneLength, results)
     for item in r.siblings:
       item.unboxedRuneLength(results)
-    
+
 proc unboxedRuneLength*(r: Rope): int =
   ## Returns the approximate display-width of a rope, without
   ## considering the size of 'box' we're going to try to fit it into.
@@ -69,7 +69,7 @@ proc unboxedRuneLength*(r: Rope): int =
   ## Unicode standard. But there may occasionally be length
   ## calculation issues due to local fonts, etc.
   r.unboxedRuneLength(result)
-  
+
 
 template runelength*(r: Rope): int = r.unboxedRuneLength()
 
@@ -127,7 +127,7 @@ proc applyPadding(state: FmtState, box: RenderBox, lpad, rpad: int) =
     elif toFill > 0:
       box.contents.lines[i] = box.contents.lines[i] & state.pad(toFill)
 
-    
+
     box.contents.lines[i] = lpadTxt & box.contents.lines[i] & rpadTxt
 
 proc wrapTextPlane(p: TextPlane, lineStart, lineEnd: seq[uint32]) =
@@ -180,11 +180,11 @@ proc popStyle(state: var FmtState) =
 proc getNewStartStyle(state: FmtState, r: Rope): FmtStyle =
   if r == nil:
     return state.curStyle
-  
+
   # If there's an explicit style set, and no tweak, we are ok.
   if r.style != nil and r.tweak == nil:
     return r.style
-  
+
   # First, apply any style object associated with the rope's html tag.
   # Second, if the rope has a class, apply any style object associated w/ that.
   # Third, do the same w/ ID.
@@ -271,7 +271,7 @@ template applyContainerStyle(boxvar: untyped, code: untyped) =
     state.applyAlignment(collapsed)
     state.applyPadding(collapsed, lpad, rpad)
   boxvar = @[collapsed]
-  state.popStyle()    
+  state.popStyle()
 
 proc preRender*(state: var FmtState, r: Rope): seq[RenderBox]
 
@@ -383,7 +383,7 @@ proc getGenericBorder(state: var FmtState, colWidths: seq[int],
     for i, width in colWidths:
       for j in 0 ..< width:
         result &= uint32(horizontal)
-        
+
       if useSep and i != len(colWidths) - 1:
         result &= uint32(sep)
 
@@ -408,11 +408,11 @@ proc getAvailableSpace(state: var FmtState, r: Rope, n: int): int =
   if state.curStyle.useLeftBorder.getOrElse(false):
     result -= 1
   if state.curStyle.useRightBorder.getOrElse(false):
-    result -= 1  
+    result -= 1
   if state.curStyle.useVerticalSeparator.getOrElse(false):
     result -= (n - 1)
-  
-proc calculateColumnWidths(state: var FmtState, r: Rope, 
+
+proc calculateColumnWidths(state: var FmtState, r: Rope,
                            colInfo: seq[ColInfo]): seq[int] =
   # Percent is treated as a percent of AVAILABLE column width, meaning
   # after border overhead is removed.
@@ -457,7 +457,7 @@ proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
   # 3) For other columns, We give out width proportional to the total
   #    num of chars in each column.
   # 4) Anything available at the end is evenly distributed.
-  
+
   var
     happy:       seq[bool]
     maxWidths:   seq[int]
@@ -491,7 +491,7 @@ proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
 
   if len(maxWidths) <= 1:
     return  @[ColInfo(span: 0, wValue: 0, absVal: false)]
-  
+
   var evenDivision = (available div maxWidths.len())
 
   for i in 0 ..< happy.len():
@@ -508,7 +508,7 @@ proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
 
   # See if there's enough nicked space to make columns happy.
   for i, width in maxWidths:
-    if happy[i]: 
+    if happy[i]:
       continue
     let needed = (width + 2) - result[i].wValue
     if needed < available:
@@ -524,20 +524,20 @@ proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
   var proportionalSpace = available
 
   for i in 0 ..< totalWidths.len():
-    if happy[i]: 
+    if happy[i]:
       continue
     sum += totalWidths[i]
-    
+
   if sum != 0:
     for i, width in totalWidths:
       if available <= 0:
         break
       if happy[i]:
         break
-      var 
+      var
         myPct = (width * 100) div sum
         v     = (myPct * proportionalSpace) div 100
-    
+
       result[i].wValue += v
       available -= v
 
@@ -553,7 +553,7 @@ proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
     for i, width in totalWidths:
       if available <= 0:
         break
-      var 
+      var
         myPct = (width * 100) div sum
         v     = (myPct * proportionalSpace) div 100
 
@@ -561,7 +561,7 @@ proc guessColWidths(state: var FmtState, r: Rope): seq[ColInfo] =
       available -= v
 
   result[^1].wValue += available
-    
+
 proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
     var
       colWidths: seq[int]
@@ -573,7 +573,7 @@ proc preRenderTable(state: var FmtState, r: Rope): seq[RenderBox] =
       colInfo = state.guessColWidths(r)
     else:
       colInfo = r.colInfo
-          
+
     colWidths = state.calculateColumnWidths(r, colInfo)
     state.pushTableWidths(colWidths)
 
@@ -780,7 +780,7 @@ template textExit(r: Rope) =
   for item in r.siblings:
     result &= state.preRender(item)
   return
-  
+
 proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
   # This is the actual main worker for rendering. Generally, these
   # ropes are trees that may be concatenated, so we need to go down
@@ -808,14 +808,14 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
     return
 
   r.processed = true
-  
+
   case r.kind
   of RopeAtom:
     state.preRenderAtom(r)
     r.textExit()
   of RopeLink:
     state.preRenderLink(r)
-    r.textExit()    
+    r.textExit()
   of RopeFgColor, RopeBgColor:
     withRopeStyle:
       result = state.preRender(r.toColor)
@@ -874,7 +874,7 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
          else:
            result &= state.preRenderOrderedList(r)
   of RopeTable:
-    state.tableEven.add(false)    
+    state.tableEven.add(false)
     enterContainer:
       applyContainerStyle(result):
           result &= state.preRenderTable(r)
@@ -899,7 +899,7 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
 
   for item in r.siblings:
     result &= state.preRender(item)
-  
+
 proc preRender*(r: Rope, width = -1, showLinkTargets = false,
                 style = defaultStyle): TextPlane =
   ## This takes a Rope that is essentially stored as a tree annotated
@@ -920,24 +920,24 @@ proc preRender*(r: Rope, width = -1, showLinkTargets = false,
                        curPlane: TextPlane(lines: @[]))
 
   state.pushStyle(defaultStyle.mergeStyles(style))
-    
+
   if width <= 0:
     state.totalWidth = terminalWidth() + width
   else:
     state.totalWidth = width
-      
+
   var
-    preRenderBoxes = state.preRender(r)    
+    preRenderBoxes = state.preRender(r)
     noBox: bool
 
   while state.renderStack.len() != 0:
     preRenderBoxes &= state.preRender(state.renderStack.pop())
-    
+
   # If we had text linked at the end that started after the last container
   # closed, then we will need to get that in here. We can check here to see
   # if there were any breaks, and if there weren't, skip the collapse.
   flushCurPlane(preRenderBoxes)
-  
+
   if preRenderBoxes.len() == 0:
     nobox = true
 
@@ -956,7 +956,7 @@ proc preRender*(r: Rope, width = -1, showLinkTargets = false,
     result.softBreak = true
 
 proc asUtf8*(r: Rope, width = high(int)): string =
-  ## Return a string that has padding and alignment applied, but no other 
+  ## Return a string that has padding and alignment applied, but no other
   ## styling.
 
   let box = nocolors(r).preRender(width)

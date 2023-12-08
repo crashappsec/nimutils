@@ -231,7 +231,7 @@ proc_list_one(size_t *count, int pid) {
     int                name[] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, pid};
     size_t             i, len;
     size_t             valid    = 0;
-    int                failsafe = 0;    
+    int                failsafe = 0;
 
     while (true) {
 	err = sysctl(name, 4, NULL, &len, NULL, 0);

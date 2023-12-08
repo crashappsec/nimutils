@@ -355,7 +355,7 @@ proc indentWrap*( s: string,
 proc u32LineLength*(line: seq[uint32]): int =
   ## Returns the expected renderable length of a string... the sum of
   ## the `runewidth` for all codepoints in the string.
-  ## 
+  ##
   ## Operates on our internal u32 representation.
 
   for item in line:
