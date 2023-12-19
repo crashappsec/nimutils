@@ -7,7 +7,7 @@
 ## multiplexing switchboard that is now part of the library.
 
 import tables, sugar, options, json, strutils, std/terminal, unicodeid,
-       rope_ansirender, rope_construct
+       rope_ansirender, rope_construct, std/httpclient, auth
 
 type
   InitCallback*   = ((SinkConfig) -> bool)
@@ -33,8 +33,9 @@ type
     private*: RootRef        # It's funny to make 'private' public,
                              # but externally written sinks can store
                              # state here, like file pointers.
-    onFail*:   Option[FailCallback]
-    logFunc*:  Option[LogCallback]
+    onFail*:  Option[FailCallback]
+    logFunc*: Option[LogCallback]
+    auth*:    Option[AuthConfig]
     rmOnErr*: bool
 
   Topic* = ref object
@@ -46,7 +47,7 @@ proc getName*(config: SinkConfig): string = config.name
 
 var allSinks:   Table[string, SinkImplementation]
 var allTopics*: Table[string, Topic]
-var revTopics: Table[Topic, string]
+var revTopics:  Table[Topic, string]
 
 proc subscribe*(topic: Topic, config: SinkConfig): Topic {.discardable.} =
   if config notin topic.subscribers:
@@ -67,7 +68,6 @@ proc registerSink*(name: string, sink: SinkImplementation) =
 proc getSinkImplementation*(name: string): Option[SinkImplementation] =
   if name in allSinks:
     return some(allSinks[name])
-
   return none(SinkImplementation)
 
 proc iolog*(s: SinkConfig, t: Topic, m: string) =
@@ -81,34 +81,23 @@ proc configSink*(s:          SinkImplementation,
                  filters:    seq[MsgFilter] = @[],
                  handler:    Option[FailCallback] = none(FailCallback),
                  logger:     Option[LogCallback]  = none(LogCallback),
+                 auth:       Option[AuthConfig]   = none(AuthConfig),
                  rmOnErr:    bool = true,
                  raiseOnErr: bool = false
-
                 ): Option[SinkConfig] =
-  var params: StringTable
+  let params = `params?`.get(newOrderedTable[string, string]())
 
-  if `params?`.isSome():
-    params = `params?`.get()
-  else:
-    params = newOrderedTable[string, string]()
-
-  for k, v in params:
-    if k notin s.keys:
-      if raiseOnErr:
-        raise newException(ValueError, "Extraneous key: " & k)
-      else:
-        return none(SinkConfig)
-
-  for k, v in s.keys:
-    if v and k notin params:
-      if raiseOnErr:
-        raise newException(ValueError, "Required key missing: " & k)
-      else:
-        return none(SinkConfig) # Required key missing.
+  try:
+    ensureParamsHaveKeys(params, s.keys)
+  except:
+    if raiseOnErr:
+      raise
+    else:
+      return none(SinkConfig)
 
   let confObj = SinkConfig(mySink: s, name: name, params: params,
                            logFunc: logger, filters: filters, onFail: handler,
-                           rmOnErr: rmOnErr)
+                           auth: auth, rmOnErr: rmOnErr)
 
   if s.initFunction.isSome():
     let fptr = s.initFunction.get()
@@ -119,6 +108,7 @@ proc configSink*(s:          SinkImplementation,
         return none(SinkConfig)
 
   return some(confObj)
+
 
 proc registerTopic*(name: string): Topic =
   if name in allTopics: return allTopics[name]

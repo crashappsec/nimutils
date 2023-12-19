@@ -386,7 +386,13 @@ proc httpHeadersForSink(cfg: SinkConfig): HttpHeaders =
   # This might also get provided in the headers; not checking right now.
   tups.add(("Content-Type", contentType))
 
-  return newHTTPHeaders(tups)
+  var headers = newHTTPHeaders(tups)
+
+  if cfg.auth.isSome():
+    let auth = cfg.auth.get()
+    headers = auth.implementation.injectHeaders(auth, headers)
+
+  return headers
 
 template httpUriForSink(cfg: SinkConfig): Uri =
   parseURI(cfg.params["uri"])
@@ -474,8 +480,7 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
     client = httpClientForSink(cfg, uri)
     response = client.safeRequest(url        = uri,
                                   httpMethod = HttpPut,
-                                  body       = msg,
-                                  headers    = headers)
+                                  body       = msg)
 
   if not response.code.is2xx():
     raise newException(ValueError, response.status)
@@ -545,7 +550,8 @@ proc addPostSink*() =
       "disallow_http"    : false,
       "headers"          : false,
       "timeout"          : false,
-      "pinned_cert_file" : false
+      "pinned_cert_file" : false,
+      "auth"             : false,
     }.toTable()
 
   record.outputFunction = postSinkOut
@@ -562,7 +568,8 @@ proc addPresignSink*() =
       "disallow_http"    : false,
       "headers"          : false,
       "timeout"          : false,
-      "pinned_cert_file" : false
+      "pinned_cert_file" : false,
+      "auth"             : false,
     }.toTable()
 
   record.outputFunction = presignSinkOut
