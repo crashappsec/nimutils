@@ -1,3 +1,7 @@
+## Generic utility module for dealing with JWT tokens
+## For now it extracts json paylods from JWT tokens as well
+## has utility methods for checking if JWT token has expired
+
 import strutils, std/[base64, json, times]
 
 type
@@ -27,6 +31,7 @@ template base64Pad(data: string): string =
   data & "=".repeat(len(data) mod 4)
 
 proc parseJwtToken*(token: string): JwtToken =
+  ## Parse JWT Token
   let parts = token.split(".")
   if len(parts) != 3:
     raise newException(ValueError, "Invalid JWT")

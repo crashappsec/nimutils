@@ -7,29 +7,16 @@
 ## multiplexing switchboard that is now part of the library.
 
 import tables, sugar, options, json, strutils, std/terminal, unicodeid,
-       rope_ansirender, rope_construct, std/httpclient
+       rope_ansirender, rope_construct, std/httpclient, auth
 
 type
-  InitCallback*     = ((SinkConfig) -> bool)
-  OutputCallback*   = ((string, SinkConfig, Topic, StringTable) -> void)
-  CloseCallback*    = ((SinkConfig) -> bool)
-  FailCallback*     = ((SinkConfig, Topic, string, string, string) -> void)
-  LogCallback*      = ((SinkConfig, Topic, string) -> void)
-  ValidateCallback* = ((AuthConfig) -> void)
-  HeadersCallback*  = ((AuthConfig, HttpHeaders) -> HttpHeaders)
-  StringTable*      = OrderedTableRef[string, string]
-  MsgFilter*        = ((string, StringTable) -> (string, bool))
-
-  AuthImplementation* = ref object
-    name*:          string
-    keys*:          Table[string, bool]
-    validate*:      ValidateCallback
-    injectHeaders*: HeadersCallback
-
-  AuthConfig* = ref object
-    name*:           string
-    implementation*: AuthImplementation
-    params*:         StringTable
+  InitCallback*   = ((SinkConfig) -> bool)
+  OutputCallback* = ((string, SinkConfig, Topic, StringTable) -> void)
+  CloseCallback*  = ((SinkConfig) -> bool)
+  FailCallback*   = ((SinkConfig, Topic, string, string, string) -> void)
+  LogCallback*    = ((SinkConfig, Topic, string) -> void)
+  StringTable*    = OrderedTableRef[string, string]
+  MsgFilter*      = ((string, StringTable) -> (string, bool))
 
   SinkImplementation* = ref object
     name*:           string
@@ -59,7 +46,6 @@ proc getName*(sink: SinkImplementation): string = sink.name
 proc getName*(config: SinkConfig): string = config.name
 
 var allSinks:   Table[string, SinkImplementation]
-var allAuths:   Table[string, AuthImplementation]
 var allTopics*: Table[string, Topic]
 var revTopics:  Table[Topic, string]
 
@@ -84,29 +70,10 @@ proc getSinkImplementation*(name: string): Option[SinkImplementation] =
     return some(allSinks[name])
   return none(SinkImplementation)
 
-proc registerAuth*(name: string, auth: AuthImplementation) =
-  auth.name      = name
-  allAuths[name] = auth
-
-proc getAuthImplementation*(name: string): Option[AuthImplementation] =
-  if name in allAuths:
-    return some(allAuths[name])
-  return none(AuthImplementation)
-
 proc iolog*(s: SinkConfig, t: Topic, m: string) =
   if s.logFunc.isSome():
     let f = s.logFunc.get()
     f(s, t, m)
-
-proc ensureParamsHaveKeys(params: StringTable,
-                          keys: Table[string, bool]) =
-  for k, v in params:
-    if k notin keys:
-      raise newException(ValueError, "Extraneous key: " & k)
-
-  for k, v in keys:
-    if v and k notin params:
-      raise newException(ValueError, "Required key missing: " & k)
 
 proc configSink*(s:          SinkImplementation,
                  name:       string,
@@ -142,17 +109,6 @@ proc configSink*(s:          SinkImplementation,
 
   return some(confObj)
 
-proc configAuth*(a: AuthImplementation,
-                 name: string,
-                 `params?`: Option[StringTable] = none(StringTable)
-                 ): Option[AuthConfig] =
-  let
-    params = `params?`.get(newOrderedTable[string, string]())
-    auth   = AuthConfig(name: name, implementation: a, params: params)
-  ensureParamsHaveKeys(params, a.keys)
-  if a.validate != nil:
-    a.validate(auth)
-  return some(auth)
 
 proc registerTopic*(name: string): Topic =
   if name in allTopics: return allTopics[name]
