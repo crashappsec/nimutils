@@ -26,6 +26,7 @@ type
     keys*:           Table[string, bool]
 
   SinkConfig* = ref object
+    enabled*: bool
     name*:    string
     mySink*:  SinkImplementation
     filters*: seq[MsgFilter]
@@ -83,7 +84,8 @@ proc configSink*(s:          SinkImplementation,
                  logger:     Option[LogCallback]  = none(LogCallback),
                  auth:       Option[AuthConfig]   = none(AuthConfig),
                  rmOnErr:    bool = true,
-                 raiseOnErr: bool = false
+                 raiseOnErr: bool = false,
+                 enabled:    bool = true,
                 ): Option[SinkConfig] =
   let params = `params?`.get(newOrderedTable[string, string]())
 
@@ -97,7 +99,7 @@ proc configSink*(s:          SinkImplementation,
 
   let confObj = SinkConfig(mySink: s, name: name, params: params,
                            logFunc: logger, filters: filters, onFail: handler,
-                           auth: auth, rmOnErr: rmOnErr)
+                           auth: auth, rmOnErr: rmOnErr, enabled: enabled)
 
   if s.initFunction.isSome():
     let fptr = s.initFunction.get()
@@ -157,6 +159,9 @@ proc publish*(t:       Topic,
     tbl["topic"] = revTopics[t]
 
   for configObj in t.getSubscribers():
+    if not configObj.enabled:
+      continue
+
     var
       skipPublish = false
       currentMsg  = message # Each config gets to filter seprately
@@ -187,7 +192,6 @@ proc publish*(t:       Topic,
 proc publish*(t:       string,
               message: string,
               aux:     StringTable = nil): int {.discardable.} =
-
   if t notin allTopics: return 0
 
   return publish(allTopics[t], message, aux)
