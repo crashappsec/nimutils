@@ -1,3 +1,5 @@
+import std/[asyncfutures, net, httpclient, uri]
+
 {.emit: """
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -43,3 +45,54 @@ proc getMyIpV4Addr*(): string =
   ## access.
   var s  = get_external_ipv4_address()
   result = $(s)
+
+proc timeoutGuard(client: HttpClient | AsyncHttpClient, url: Uri | string) =
+  # https://github.com/nim-lang/Nim/issues/6792
+  # https://github.com/nim-lang/Nim/issues/14807
+  # std/httpclient request() does not honor timeout param for
+  # connect timeouts and if the TCP connection cannot be established
+  # in some cases it will wait until /proc/sys/net/ipv4/tcp_syn_retries
+  # is exhausted which is ~130sec
+  # by trying regular connect() with timeout first we can ensure
+  # TCP connection can be established before attempting to make
+  # HTTP request
+  if client.timeout > 0:
+    var uri: Uri
+    when url is string:
+      uri = parseUri(url)
+    else:
+      uri = url
+    let hostname = uri.hostname
+    # port is optional in the Uri so we use default ports
+    var port: Port
+    if uri.port == "":
+      port = if uri.scheme == "https": Port(443)
+             else:                     Port(80)
+    else:
+      port = Port(uri.port.parseInt)
+    let socket = newSocket()
+    # this throws the same TimeoutError http request throws
+    socket.connect(hostname, port, timeout = client.timeout)
+    socket.close()
+
+proc safeRequest*(client: AsyncHttpClient,
+                  url: Uri | string,
+                  httpMethod: HttpMethod | string = HttpGet,
+                  body = "",
+                  headers: HttpHeaders = nil,
+                  multipart: MultipartData = nil
+                  ): Future[AsyncResponse] =
+  timeoutGuard(client, url)
+  return client.request(url = url, httpMethod = httpMethod, body = body,
+                        headers = headers, multipart = multipart)
+
+proc safeRequest*(client: HttpClient,
+                  url: Uri | string,
+                  httpMethod: HttpMethod | string = HttpGet,
+                  body = "",
+                  headers: HttpHeaders = nil,
+                  multipart: MultipartData = nil
+                  ): Response =
+  timeoutGuard(client, url)
+  return client.request(url = url, httpMethod = httpMethod, body = body,
+                        headers = headers, multipart = multipart)

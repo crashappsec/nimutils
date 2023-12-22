@@ -12,8 +12,9 @@ from uri import parseUri
 
 type
   AwsCredentials* = tuple
-    id: string
+    id:     string
     secret: string
+    token:  string
 
   AwsScope* = object
     date*: string
@@ -202,8 +203,10 @@ proc create_aws_authorization*(creds: AwsCredentials,
                               scope: AwsScope,
                               opts: (string, string) = (alg, term)): string =
 
-  result = create_signing_key(creds[1], scope, opts[1])
+  result = create_signing_key(creds.secret, scope, opts[1])
+  if creds.token != "":
+    headers["X-Amz-Security-Token"] = @[creds.token]
   # add AWS authorization header
   # http://docs.aws.amazon.com/general/latest/gr/sigv4-add-signature-to-request.html
-  headers["Authorization"] = @[create_aws_authorization(creds[0], result,
+  headers["Authorization"] = @[create_aws_authorization(creds.id, result,
       request, headers, scope, opts)]

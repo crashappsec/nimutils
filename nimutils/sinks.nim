@@ -3,7 +3,7 @@
 
 import streams, tables, options, os, strutils, std/[net, uri, httpclient],
        s3client, pubsub, misc, random, encodings, std/tempfiles,
-       parseutils, openssl, file, std/asyncfutures
+       parseutils, openssl, file, std/asyncfutures, net
 
 const defaultLogSearchPath = @["/var/log/", "~/.log/", "."]
 
@@ -250,6 +250,7 @@ type S3SinkState* = ref object of RootRef
   uri*:      Uri
   uid*:      string
   secret*:   string
+  token*:    string
   bucket*:   string
   objPath*:  string
   nameBase*: string
@@ -263,6 +264,7 @@ proc s3SinkInit(cfg: SinkConfig): bool =
       bucket              = uri.hostname
       uid                 = cfg.params["uid"]
       secret              = cfg.params["secret"]
+      token               = cfg.params.getOrDefault("token", "")
       baseObj             = uri.path[1 .. ^1] # Strip the leading /
       (objPath, nameBase) = splitPath(baseObj)
 
@@ -277,8 +279,8 @@ proc s3SinkInit(cfg: SinkConfig): bool =
       extra = ""
 
     cfg.private = S3SinkState(region: region, uri: uri, uid: uid,
-                              secret: secret, bucket: bucket,
-                              objPath: objPath,
+                              secret: secret, token: token,
+                              bucket: bucket, objPath: objPath,
                               nameBase: nameBase,  extra: extra)
     return true
   except:
@@ -287,7 +289,7 @@ proc s3SinkInit(cfg: SinkConfig): bool =
 proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   var
     state  = S3SinkState(cfg.private)
-    client = newS3Client((state.uid, state.secret), state.region)
+    client = newS3Client((state.uid, state.secret, state.token), state.region)
 
   cfg.iolog(t, "Open") # Not really a connect...
 
@@ -304,7 +306,7 @@ proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   let
       newTail  = objParts.join("-")
       newPath  = joinPath(state.objPath, newTail)
-      response = client.putObject(state.bucket, newPath, msg)
+      response = client.put_object(state.bucket, newPath, msg)
 
   if response.status[0] != '2':
     raise newException(ValueError, response.status)
@@ -313,57 +315,6 @@ proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
 
 proc SSL_CTX_load_verify_file(ctx: SslCtx, CAfile: cstring):
                        cint {.cdecl, dynlib: DLLSSLName, importc.}
-
-proc timeoutGuard(client: HttpClient | AsyncHttpClient, url: Uri | string) =
-  # https://github.com/nim-lang/Nim/issues/6792
-  # https://github.com/nim-lang/Nim/issues/14807
-  # std/httpclient request() does not honor timeout param for
-  # connect timeouts and if the TCP connection cannot be established
-  # in some cases it will wait until /proc/sys/net/ipv4/tcp_syn_retries
-  # is exhausted which is ~130sec
-  # by trying regular connect() with timeout first we can ensure
-  # TCP connection can be established before attempting to make
-  # HTTP request
-  if client.timeout > 0:
-    var uri: Uri
-    when url is string:
-      uri = parseUri(url)
-    else:
-      uri = url
-    let hostname = uri.hostname
-    # port is optional in the Uri so we use default ports
-    var port: Port
-    if uri.port == "":
-      port = if uri.scheme == "https": Port(443)
-             else:                     Port(80)
-    else:
-      port = Port(uri.port.parseInt)
-    let socket = newSocket()
-    # this throws the same TimeoutError http request throws
-    socket.connect(hostname, port, timeout = client.timeout)
-    socket.close()
-
-proc safeRequest*(client: AsyncHttpClient,
-                  url: Uri | string,
-                  httpMethod: HttpMethod | string = HttpGet,
-                  body = "",
-                  headers: HttpHeaders = nil,
-                  multipart: MultipartData = nil
-                  ): Future[AsyncResponse] =
-  timeoutGuard(client, url)
-  return client.request(url = url, httpMethod = httpMethod, body = body,
-                        headers = headers, multipart = multipart)
-
-proc safeRequest*(client: HttpClient,
-                  url: Uri | string,
-                  httpMethod: HttpMethod | string = HttpGet,
-                  body = "",
-                  headers: HttpHeaders = nil,
-                  multipart: MultipartData = nil
-                  ): Response =
-  timeoutGuard(client, url)
-  return client.request(url = url, httpMethod = httpMethod, body = body,
-                        headers = headers, multipart = multipart)
 
 proc httpHeadersForSink(cfg: SinkConfig): HttpHeaders =
   var
@@ -530,6 +481,7 @@ proc addS3Sink*() =
     record = SinkImplementation()
     keys   = { "uid"     : true,
                "secret"  : true,
+               "token"   : false,
                "uri"     : true,
                "region"  : false,
                "extra"   : false
