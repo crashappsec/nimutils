@@ -36,6 +36,56 @@ type
     key*: string
     key_expires*: Time
 
+  Arn* = object
+    partition*: string
+    service*:   string
+    region*:    string
+    account*:   string
+    resource*:  string
+
+  StsCallerIdentity* = object
+    arn*:     Arn
+    userId*:  string
+    account*: string
+
+proc `$`*(arn: Arn): string =
+  return @[
+    "arn",
+    arn.partition,
+    arn.service,
+    arn.region,
+    arn.account,
+    arn.resource,
+  ].join(":")
+
+template `or`(a, b: string): string =
+  if a != "":
+    a
+  else:
+    b
+
+proc with*(arn: Arn,
+           partition: string = "",
+           service:   string = "",
+           region:    string = "",
+           account:   string = "",
+           resource:  string = ""): Arn =
+  return Arn(partition: partition or arn.partition,
+             service:   service   or arn.service,
+             region:    region    or arn.region,
+             account:   account   or arn.account,
+             resource:  resource  or arn.resource)
+
+proc parseArn*(arn: string): Arn =
+  let parts = arn.split(":", maxsplit=6)
+  if len(parts) < 6:
+    raise newException(ValueError, "invalid arn")
+  return Arn(partition: parts[1],
+             service:   parts[2],
+             region:    parts[3],
+             account:   parts[4],
+             resource:  parts[5])
+
 const iso_8601_aws = "yyyyMMdd'T'HHmmss'Z'"
 
 proc getAmzDateString*(): string =

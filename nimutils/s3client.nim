@@ -5,13 +5,15 @@
  ]#
 
 import strutils except toLower
-import times, unicode, tables, httpclient, xmlparser, xmltree, uri
+import times, unicode, tables, httpclient, xmlparser, xmltree, uri, std/[envvars]
 import awsclient
-
+export awsclient
 
 const
   awsURI = "https://amazonaws.com"
-  defRegion = "us-east-1"
+
+let
+  defRegion = getEnv("AWS_DEFAULT_REGION", "us-east-1")
 
 type
   S3Client* = object of AwsClient
