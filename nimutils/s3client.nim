@@ -5,13 +5,15 @@
  ]#
 
 import strutils except toLower
-import times, unicode, tables, httpclient, xmlparser, xmltree, uri
+import times, unicode, tables, httpclient, xmlparser, xmltree, uri, std/[envvars]
 import awsclient
-
+export awsclient
 
 const
   awsURI = "https://amazonaws.com"
-  defRegion = "us-east-1"
+
+let
+  defRegion = getEnv("AWS_DEFAULT_REGION", "us-east-1")
 
 type
   S3Client* = object of AwsClient
@@ -26,10 +28,9 @@ type
     etag*: string
     size*: int
 
-proc newS3Client*(credentials: (string, string), region: string = defRegion,
+proc newS3Client*(creds: AwsCredentials, region: string = defRegion,
     host: string = awsURI): S3Client =
   let
-    creds = AwsCredentials(credentials)
     # TODO - use some kind of template and compile-time variable to put the correct kernel used to build the sdk in the UA?
     httpclient = newHttpClient("nimaws-sdk/0.3.3; "&defUserAgent.replace(" ",
         "-").toLower&"; darwin/16.7.0")

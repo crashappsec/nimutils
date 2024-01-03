@@ -16,7 +16,7 @@
 import times, tables, unicode, uri
 import strutils except toLower
 import httpclient
-import sigv4
+import sigv4, net
 
 export sigv4.AwsCredentials, sigv4.AwsScope
 
@@ -36,15 +36,64 @@ type
     key*: string
     key_expires*: Time
 
+  Arn* = object
+    partition*: string
+    service*:   string
+    region*:    string
+    account*:   string
+    resource*:  string
+
+  StsCallerIdentity* = object
+    arn*:     Arn
+    userId*:  string
+    account*: string
+
+proc `$`*(arn: Arn): string =
+  return @[
+    "arn",
+    arn.partition,
+    arn.service,
+    arn.region,
+    arn.account,
+    arn.resource,
+  ].join(":")
+
+template `or`(a, b: string): string =
+  if a != "":
+    a
+  else:
+    b
+
+proc with*(arn: Arn,
+           partition: string = "",
+           service:   string = "",
+           region:    string = "",
+           account:   string = "",
+           resource:  string = ""): Arn =
+  return Arn(partition: partition or arn.partition,
+             service:   service   or arn.service,
+             region:    region    or arn.region,
+             account:   account   or arn.account,
+             resource:  resource  or arn.resource)
+
+proc parseArn*(arn: string): Arn =
+  let parts = arn.split(":", maxsplit=6)
+  if len(parts) < 6:
+    raise newException(ValueError, "invalid arn")
+  return Arn(partition: parts[1],
+             service:   parts[2],
+             region:    parts[3],
+             account:   parts[4],
+             resource:  parts[5])
+
 const iso_8601_aws = "yyyyMMdd'T'HHmmss'Z'"
 
 proc getAmzDateString*(): string =
   return format(utc(getTime()), iso_8601_aws)
 
-proc newAwsClient*(credentials: (string, string), region,
+proc newAwsClient*(creds: AwsCredentials, region,
     service: string): AwsClient =
   let
-    creds = AwsCredentials(credentials)
     # TODO - use some kind of template and compile-time variable to put the correct kernel used to build the sdk in the UA?
     httpclient = newHttpClient("nimaws-sdk/0.3.3; "&defUserAgent.replace(" ",
         "-").toLower&"; darwin/16.7.0")
@@ -53,7 +102,7 @@ proc newAwsClient*(credentials: (string, string), region,
   return AwsClient(httpClient: httpclient, credentials: creds, scope: scope,
       key: "", key_expires: getTime())
 
-proc request*(client: var AwsClient, params: Table): Response =
+proc request*(client: var AwsClient, params: Table, headers: HttpHeaders = newHttpHeaders()): Response =
   var
     action = "GET"
     payload = ""
@@ -104,8 +153,8 @@ proc request*(client: var AwsClient, params: Table): Response =
         client.httpClient.headers.table, client.scope)
     client.key_expires = getTime() + initTimeInterval(minutes = 5)
   else:
-    let auth = create_aws_authorization(client.credentials[0], client.key, req,
+    let auth = create_aws_authorization(client.credentials.id, client.key, req,
         client.httpClient.headers.table, client.scope)
     client.httpClient.headers.add("Authorization", auth)
 
-  return client.httpClient.request(url, action, payload)
+  return client.httpClient.safeRequest(url, action, payload, headers=headers)

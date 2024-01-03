@@ -7,7 +7,7 @@
 ## multiplexing switchboard that is now part of the library.
 
 import tables, sugar, options, json, strutils, std/terminal, unicodeid,
-       rope_ansirender, rope_construct, std/httpclient, auth
+       rope_ansirender, rope_construct, std/httpclient, auth, algorithm
 
 type
   InitCallback*   = ((SinkConfig) -> bool)
@@ -26,18 +26,19 @@ type
     keys*:           Table[string, bool]
 
   SinkConfig* = ref object
-    enabled*: bool
-    name*:    string
-    mySink*:  SinkImplementation
-    filters*: seq[MsgFilter]
-    params*:  StringTable
-    private*: RootRef        # It's funny to make 'private' public,
-                             # but externally written sinks can store
-                             # state here, like file pointers.
-    onFail*:  Option[FailCallback]
-    logFunc*: Option[LogCallback]
-    auth*:    Option[AuthConfig]
-    rmOnErr*: bool
+    enabled*:  bool
+    priority*: int
+    name*:     string
+    mySink*:   SinkImplementation
+    filters*:  seq[MsgFilter]
+    params*:   StringTable
+    private*:  RootRef        # It's funny to make 'private' public,
+                              # but externally written sinks can store
+                              # state here, like file pointers.
+    onFail*:   Option[FailCallback]
+    logFunc*:  Option[LogCallback]
+    auth*:     Option[AuthConfig]
+    rmOnErr*:  bool
 
   Topic* = ref object
     name*:       string
@@ -53,6 +54,8 @@ var revTopics:  Table[Topic, string]
 proc subscribe*(topic: Topic, config: SinkConfig): Topic {.discardable.} =
   if config notin topic.subscribers:
     topic.subscribers.add(config)
+    topic.subscribers = topic.subscribers.sorted(cmp = (a, b) => cmp(a.priority, b.priority),
+                                                 order = SortOrder.Descending)
 
   return topic
 
@@ -79,13 +82,14 @@ proc iolog*(s: SinkConfig, t: Topic, m: string) =
 proc configSink*(s:          SinkImplementation,
                  name:       string,
                  `params?`:  Option[StringTable]  = none(StringTable),
-                 filters:    seq[MsgFilter] = @[],
+                 filters:    seq[MsgFilter]       = @[],
                  handler:    Option[FailCallback] = none(FailCallback),
                  logger:     Option[LogCallback]  = none(LogCallback),
                  auth:       Option[AuthConfig]   = none(AuthConfig),
-                 rmOnErr:    bool = true,
-                 raiseOnErr: bool = false,
-                 enabled:    bool = true,
+                 rmOnErr:    bool                 = true,
+                 raiseOnErr: bool                 = false,
+                 enabled:    bool                 = true,
+                 priority:   int                  = 0,
                 ): Option[SinkConfig] =
   let params = `params?`.get(newOrderedTable[string, string]())
 
@@ -99,7 +103,8 @@ proc configSink*(s:          SinkImplementation,
 
   let confObj = SinkConfig(mySink: s, name: name, params: params,
                            logFunc: logger, filters: filters, onFail: handler,
-                           auth: auth, rmOnErr: rmOnErr, enabled: enabled)
+                           auth: auth, rmOnErr: rmOnErr, enabled: enabled,
+                           priority: priority)
 
   if s.initFunction.isSome():
     let fptr = s.initFunction.get()
