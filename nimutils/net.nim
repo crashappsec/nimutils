@@ -1,4 +1,4 @@
-import std/[asyncfutures, net, httpclient, uri]
+import std/[asyncfutures, net, httpclient, uri, math, os]
 
 {.emit: """
 #include <stdlib.h>
@@ -75,24 +75,46 @@ proc timeoutGuard(client: HttpClient | AsyncHttpClient, url: Uri | string) =
     socket.connect(hostname, port, timeout = client.timeout)
     socket.close()
 
+template withRetry(retries: int, firstRetryDelayMs: int, c: untyped) =
+  # retry code block with exponential backoff
+  var attempts = 0
+  while attempts <= retries:
+    try:
+      c
+    except:
+      if attempts == retries:
+        # reraise last exception to bubble error up
+        raise
+      let delayMs = firstRetryDelayMs * (2 ^ attempts)
+      if delayMs > 0:
+        sleep(delayMs)
+      attempts += 1
+  raise newException(ValueError, "retried code block didnt return. this should never happen")
+
 proc safeRequest*(client: AsyncHttpClient,
                   url: Uri | string,
                   httpMethod: HttpMethod | string = HttpGet,
                   body = "",
                   headers: HttpHeaders = nil,
-                  multipart: MultipartData = nil
+                  multipart: MultipartData = nil,
+                  retries: int = 0,
+                  firstRetryDelayMs: int = 0,
                   ): Future[AsyncResponse] =
   timeoutGuard(client, url)
-  return client.request(url = url, httpMethod = httpMethod, body = body,
-                        headers = headers, multipart = multipart)
+  withRetry(retries, firstRetryDelayMs):
+    return client.request(url = url, httpMethod = httpMethod, body = body,
+                          headers = headers, multipart = multipart)
 
 proc safeRequest*(client: HttpClient,
                   url: Uri | string,
                   httpMethod: HttpMethod | string = HttpGet,
                   body = "",
                   headers: HttpHeaders = nil,
-                  multipart: MultipartData = nil
+                  multipart: MultipartData = nil,
+                  retries: int = 0,
+                  firstRetryDelayMs: int = 0,
                   ): Response =
   timeoutGuard(client, url)
-  return client.request(url = url, httpMethod = httpMethod, body = body,
-                        headers = headers, multipart = multipart)
+  withRetry(retries, firstRetryDelayMs):
+    return client.request(url = url, httpMethod = httpMethod, body = body,
+                          headers = headers, multipart = multipart)
