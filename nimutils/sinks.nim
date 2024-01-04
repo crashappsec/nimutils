@@ -365,7 +365,7 @@ proc httpClientForSink(cfg: SinkConfig, uri: Uri, maxRedirects: int = 5): HttpCl
     elif timeout <= 0:
       timeout = -1
   else:
-    timeout = 500 # .5 seconds.
+    timeout = 1000 # in ms - 1 second
 
   if uri.scheme == "https":
     context = newContext(verifyMode = CVerifyPeer)
@@ -390,10 +390,12 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
     headers  = httpHeadersForSink(cfg)
     uri      = httpUriForSink(cfg)
     client   = httpClientForSink(cfg, uri)
-    response = client.safeRequest(url        = uri,
-                                  httpMethod = HttpPost,
-                                  body       = msg,
-                                  headers    = headers)
+    response = client.safeRequest(url               = uri,
+                                  httpMethod        = HttpPost,
+                                  body              = msg,
+                                  headers           = headers,
+                                  retries           = 2,
+                                  firstRetryDelayMs = 100)
 
   if not response.code.is2xx():
     raise newException(ValueError, response.status)
@@ -412,9 +414,11 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
     # which is why we disallow redirects here via maxRedirects
     # NOTE this assumes that the endpoint immediately returns presigned URL
     signClient   = httpClientForSink(cfg, signUri, maxRedirects = 0)
-    signResponse = signClient.safeRequest(url        = signUri,
-                                          httpMethod = HttpPut,
-                                          headers    = headers)
+    signResponse = signClient.safeRequest(url               = signUri,
+                                          httpMethod        = HttpPut,
+                                          headers           = headers,
+                                          retries           = 2,
+                                          firstRetryDelayMs = 100)
 
   if signResponse.code notin [Http302, Http307]:
     raise newException(ValueError, "Presign requires 302/307 redirect but received: " & signResponse.status)
@@ -429,9 +433,11 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
 
   let
     client = httpClientForSink(cfg, uri)
-    response = client.safeRequest(url        = uri,
-                                  httpMethod = HttpPut,
-                                  body       = msg)
+    response = client.safeRequest(url               = uri,
+                                  httpMethod        = HttpPut,
+                                  body              = msg,
+                                  retries           = 2,
+                                  firstRetryDelayMs = 100)
 
   if not response.code.is2xx():
     raise newException(ValueError, response.status)
