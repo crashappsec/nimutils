@@ -317,6 +317,9 @@ proc lookup*[T, V](dict: var Dict[T, V], key: T): Option[V] =
       var box = cast[StackBox[V]](retp)
       result = some(box.contents)
 
+proc lookup*[T, V](dict: var DictRef[T, V], key: T): Option[V] =
+  return lookup[T, V](dict[], key)
+
 proc contains*[T, V](dict: var Dict[T, V], key: T): bool =
   ## In a multi-threaded environment, this shouldn't be used when
   ## there might be any sort of race condition.  Use lookup() instead.

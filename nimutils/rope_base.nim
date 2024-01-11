@@ -340,9 +340,7 @@ proc search*(r: Rope,
       result.add(item)
     elif text.len() != 0 and item.kind == RopeAtom:
       for s in text:
-        # echo "Searching for string of len ", s.len()
         if s in $(item.text):
-          # echo "Got a hit: " & $(item.text)
           result.add(item)
           break
     if result.len() == 1 and first:

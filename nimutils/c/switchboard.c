@@ -1336,7 +1336,8 @@ handle_loop_end(switchboard_t *ctx)
     }
 
     if (!ctx->progress_callback) {
-	ctx->progress_callback = sb_default_check_exit_conditions;
+	ctx->progress_callback =
+	    (progress_cb_decl)sb_default_check_exit_conditions;
     }
 
     if (!ctx->progress_on_timeout_only) {

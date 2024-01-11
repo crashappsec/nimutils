@@ -292,7 +292,6 @@ let
     useHorizontalSeparator: some(false), boxStyle: some(BoxStylePlain),
     alignStyle: some(AlignIgnore))
 
-
 styleMap = { # Starting theme. Need to redo this to be a real theme API soon.
       "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow= OWrap),
       "basic"     : newStyle(bpad = 0),

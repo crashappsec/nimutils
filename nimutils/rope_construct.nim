@@ -200,7 +200,8 @@ proc copy*(r: Rope): Rope =
   r.cycle = false
 
 template canMergeTextRopes(r1, r2: Rope): bool =
-  if   r1.kind != RopeAtom: false
+  if r1 == nil or r2 == nil: false
+  elif   r1.kind != RopeAtom: false
   elif r2.kind != RopeAtom: false
   elif r1.siblings.len() > 0: false
   elif r2.siblings.len() > 0: false
