@@ -41,11 +41,22 @@ const MAXPAD = 1000
 template styleRunes(state: FmtState, runes: seq[uint32]): seq[uint32] =
   @[state.curStyle.getStyleId()] & runes & @[StylePop]
 
-template pad(state: FmtState, w: int): seq[uint32] =
-  if w > MAXPAD:
-    return
-  @[state.curStyle.getStyleId()] & uint32(Rune(' ')).repeat(w) & @[StylePop]
+proc pad(state: FmtState, w: int): seq[uint32] =
+  if w > MAXPAD or w <= 0:
+    return newSeq[uint32](0)
+  else:
+    result    = newSeq[uint32](w + 2)
+    result[0] = state.curStyle.getStyleId()
+    for i in 1 .. w:
+      result[i] = uint32(Rune(' '))
+    result[^1] = StylePop
 
+  #result.setLen(w+2)
+
+#template pad(state: FmtState, w: int): seq[uint32] =
+#  if w > MAXPAD:
+#    return
+#  @[state.curStyle.getStyleId()] & uint32(Rune(' ')).repeat(w) & @[StylePop]
 
 proc unboxedRuneLength(r: Rope, results: var int) =
   if r != nil:
@@ -377,19 +388,37 @@ proc getGenericBorder(state: var FmtState, colWidths: seq[int],
       useRight = style.useRightBorder.getOrElse(false)
       useSep   = style.useVerticalSeparator.getOrElse(false)
 
+    var ct = 0
     if useLeft:
-       result &= @[uint32(leftBorder)]
+      ct += 1
+    if useRight:
+      ct += 1
+    for i, width in colWidths:
+      ct += width
+      if useSep and i != len(colWidths):
+        ct += 1
+
+    result = newSeq[uint32](ct + 1)
+
+    var n = 0
+    if useLeft:
+       result[n] = uint32(leftBorder)
+       n += 1
 
     for i, width in colWidths:
       for j in 0 ..< width:
-        result &= uint32(horizontal)
+        result[n] = uint32(horizontal)
+        n += 1
 
       if useSep and i != len(colWidths) - 1:
-        result &= uint32(sep)
+        result[n] = uint32(sep)
+        n += 1
 
     if useRight:
-      result &= uint32(rightBorder)
+      result[n] = uint32(rightBorder)
+      n += 1
 
+    result.setLen(n)
 
 proc getTopBorder(state: var FmtState, s: BoxStyle): seq[uint32] =
   result = state.getGenericBorder(state.colStack[^1], state.curStyle,

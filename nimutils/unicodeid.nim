@@ -13,9 +13,10 @@ const magicRune* = Rune(0x200b)
 type AlignmentType* = enum AlignLeft, AlignCenter, AlignRight
 
 proc repeat*(ch: uint32, n: int): seq[uint32] =
-  for i in 0 ..< n:
-    result.add(ch)
-  #cast[seq[uint32]](Rune(ch).repeat(n))
+  if n > 0:
+    result = newSeq[uint32](n)
+    for i in 0 ..< n:
+      result[i] = ch
 
 proc isPostBreakingChar*(r: Rune): bool =
   ## Returns true if the codepoint is a hyphen break point.  Note that
@@ -259,16 +260,18 @@ proc truncateToWidth*(l: seq[uint32], width: int): seq[uint32] =
   ## Truncates a sequence of our internal representation of codepoints
   ## to a specific width.
 
+  result = newSeq[uint32](l.len())
+
   var total = 0
 
-  for ch in l:
+  for i, ch in l:
     if ch > 0x0010ffff:
-      result.add(ch)
+      result[i] = ch
     else:
       let w = ch.runeWidth()
       total += w
       if total <= width:
-        result.add(ch)
+        result[i] = ch
 
 proc count*[T](list: seq[T], target: T): int =
   ## Count the number of instance of a value in a sequence.

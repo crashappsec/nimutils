@@ -486,6 +486,7 @@ proc idToStyle*(n: uint32): FmtStyle =
   ## The inverse of `getStyleId()`, which enables renderers to look up
   ## style information associated with the text that follows (until
   ## seeing a reset marker or another style ID.)
+
   result = idToStyleMap[n]
 
   if result == defaultStyle:
