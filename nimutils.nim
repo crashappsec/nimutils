@@ -11,17 +11,18 @@
 ## few fixes have all been for compatability and are made under the
 ## same license. I also migrated the crypto to openssl.
 
-import nimutils/[box, random, unicodeid, pubsub, sinks, auth, misc, texttable, dict],
+import nimutils/[box, random, unicodeid, pubsub, sinks, auth, misc, texttable],
        nimutils/[file, filetable, encodings, advisory_lock, progress],
        nimutils/[sha, aes, prp, hexdump, markdown, htmlparse, net, colortable],
        nimutils/[rope_base, rope_styles, rope_construct, rope_prerender],
        nimutils/[rope_ansirender, rope_htmlrender, rope_textrender],
-       nimutils/[switchboard, subproc, int128_t]
+       nimutils/[switchboard, subproc, int128_t, dict, list]
 export box, random, unicodeid, pubsub, sinks, auth, misc, random, texttable,
        file, filetable, encodings, advisory_lock, progress, sha,
        aes, prp, hexdump, markdown, htmlparse, net, colortable, rope_base,
        rope_styles, rope_construct, rope_prerender, rope_ansirender,
-       rope_htmlrender, rope_textrender, switchboard, subproc, dict, int128_t
+       rope_htmlrender, rope_textrender, switchboard, subproc, int128_t,
+       dict, list
 
 when defined(macosx):
   import nimutils/macproc
