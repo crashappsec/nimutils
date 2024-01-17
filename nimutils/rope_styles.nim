@@ -292,7 +292,6 @@ let
     useHorizontalSeparator: some(false), boxStyle: some(BoxStylePlain),
     alignStyle: some(AlignIgnore))
 
-
 styleMap = { # Starting theme. Need to redo this to be a real theme API soon.
       "p"         : newStyle(bpad = 1, lpad = 1, rpad = 1, overflow= OWrap),
       "basic"     : newStyle(bpad = 0),
@@ -487,6 +486,7 @@ proc idToStyle*(n: uint32): FmtStyle =
   ## The inverse of `getStyleId()`, which enables renderers to look up
   ## style information associated with the text that follows (until
   ## seeing a reset marker or another style ID.)
+
   result = idToStyleMap[n]
 
   if result == defaultStyle:

@@ -60,7 +60,9 @@ func `-`*[T: int128|uint128](x, y: T): T =
 func `*`*[T: int128|uint128](x, y: T): T =
   {.emit: "`result` = `x` * `y`;" .}
 func `div`*[T: int128|uint128](x, y: T): T =
-  {.emit: "`result` = `x` / `y`';" .}
+  {.emit: "`result` = `x` / `y`;" .}
+func `mod`*[T: int128|uint128](x, y: T): T =
+  {.emit: "`result` = `x` % `y`;" .}
 func `shl`*[T: int128|uint128](x, y: T): T =
   {.emit: "`result` = `x` << `y`;" .}
 func `shr`*[T: int128|uint128](x, y: T): T =
@@ -81,6 +83,14 @@ func `<`*[T: int128|uint128](x, y: T): bool =
   {.emit: "`result` = `x` < `y`;" .}
 func `>`*[T: int128|uint128](x, y: T): bool =
   {.emit: "`result` = `x` > `y`;" .}
+func `<=`*[T: int128|uint128](x, y: T): bool =
+  {.emit: "`result` = `x` <= `y`;" .}
+func `>=`*[T: int128|uint128](x, y: T): bool =
+  {.emit: "`result` = `x` >= `y`;" .}
+func `eq`*[T: int128|uint128](x, y: T): bool =
+  {.emit: "`result` = `x` == `y`;" .}
+func `neq`*[T: int128|uint128](x, y: T): bool =
+  {.emit: "`result` = `x` != `y`;" .}
 func high*[T: uint128](x: typedesc[T]): T =
   {.emit: "`result` = ~(__uint128_t)0;" .}
 func low*[T: uint128](x: typedesc[T]): T = 0
@@ -109,7 +119,7 @@ converter i128ToI16*(n: int128): int16 =
 converter i128ToI8*(n: int128): int8 =
   {.emit: "`result` = (uint8_t)`n`;" .}
 
-proc `toRope`*[T: int128|uint128](x: T): string =
+proc toStr*[T: int128|uint128](x: T): string =
   var n = x
   result = newString(33)
   hex128(addr n, addr result[0])
