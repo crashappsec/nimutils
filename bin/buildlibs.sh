@@ -281,11 +281,7 @@ function ensure_hatrack {
 function ensure_ffi {
     if ! copy_from_package libffi.a ; then
         get_src libffi https://github.com/libffi/libffi.git
-        autoreconf -i
-        aclocal
-        autoheader
-        autoconf
-        automake
+	sh ./autogen.sh
         ./configure
         make
         mv */.libs/libffi.a ${MY_LIBS}
