@@ -1,18 +1,15 @@
-import httpclient, strutils, tables, times, uri, std/[envvars, json]
+import httpclient, strutils, tables, times, uri, std/[json]
 import awsclient
 export awsclient
 
 const
   awsURI = "https://amazonaws.com"
 
-let
-  defRegion = getEnv("AWS_DEFAULT_REGION", "us-east-1")
-
 type
   StsClient* = object of AwsClient
 
 proc newStsClient*(creds: AwsCredentials,
-                   region: string = defRegion,
+                   region: string = defaultRegion,
                    host: string = awsURI): StsClient =
   let
     # TODO - use some kind of template and compile-time variable to put the correct kernel used to build the sdk in the UA?

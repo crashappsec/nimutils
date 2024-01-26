@@ -5,15 +5,12 @@
  ]#
 
 import strutils except toLower
-import times, unicode, tables, httpclient, xmlparser, xmltree, uri, std/[envvars]
+import times, unicode, tables, httpclient, xmlparser, xmltree, uri
 import awsclient
 export awsclient
 
 const
   awsURI = "https://amazonaws.com"
-
-let
-  defRegion = getEnv("AWS_DEFAULT_REGION", "us-east-1")
 
 type
   S3Client* = object of AwsClient
@@ -28,7 +25,7 @@ type
     etag*: string
     size*: int
 
-proc newS3Client*(creds: AwsCredentials, region: string = defRegion,
+proc newS3Client*(creds: AwsCredentials, region: string = defaultRegion,
     host: string = awsURI): S3Client =
   let
     # TODO - use some kind of template and compile-time variable to put the correct kernel used to build the sdk in the UA?
