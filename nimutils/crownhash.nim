@@ -257,18 +257,18 @@ proc add*[T, V](dict: var Dict[T, V], key: T, value: sink V): bool =
     p = cast[pointer](key)
 
   when V is SomeOrdinal:
-    return dict.hatrack_dict_replace(p, cast[pointer](int64(value)))
+    return dict.hatrack_dict_add(p, cast[pointer](int64(value)))
   elif V is SomeFloat:
-    return dict.hatrack_dict_replace(p, cast[pointer](float(value)))
+    return dict.hatrack_dict_add(p, cast[pointer](float(value)))
   elif V is SomeString:
-    return dict.hatrack_dict_replace(p, cast[pointer](value.toStrBox()))
+    return dict.hatrack_dict_add(p, cast[pointer](value.toStrBox()))
   elif V is ref:
     GC_ref(value)
-    return dict.hatrack_dict_replace(p, cast[pointer](value))
+    return dict.hatrack_dict_add(p, cast[pointer](value))
   elif V is pointer:
-    return dict.hatrack_dict_replace(p, cast[pointer](value))
+    return dict.hatrack_dict_add(p, cast[pointer](value))
   else:
-    return dict.hatrack_dict_replace(p, cast[pointer](value.toStackBox()))
+    return dict.hatrack_dict_add(p, cast[pointer](value.toStackBox()))
 
 proc add*[T, V](dict: DictRef[T, V], key: T, value: sink V): bool =
   return add(dict[], key, value)
