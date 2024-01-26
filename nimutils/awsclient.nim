@@ -13,12 +13,14 @@
     * a request proc which takes an AwsClient and the request params to handle Sigv4 signing and async dispatch
  ]#
 
-import times, tables, unicode, uri
+import times, tables, unicode, uri, std/envvars
 import strutils except toLower
 import httpclient
 import sigv4, net
 
 export sigv4.AwsCredentials, sigv4.AwsScope
+
+let defaultRegion* = getEnv("AWS_REGION", getEnv("AWS_DEFAULT_REGION", "us-east-1"))
 
 type
   EAWSCredsMissing = object of IOError
