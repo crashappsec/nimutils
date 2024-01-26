@@ -258,25 +258,16 @@ type S3SinkState* = ref object of RootRef
 
 proc s3SinkInit(cfg: SinkConfig): bool =
   try:
-    var region, extra: string
     let
       uri                 = parseURI(cfg.params["uri"])
       bucket              = uri.hostname
       uid                 = cfg.params["uid"]
       secret              = cfg.params["secret"]
       token               = cfg.params.getOrDefault("token", "")
+      region              = cfg.params.getOrDefault("region", defaultRegion)
+      extra               = cfg.params.getOrDefault("extra", "")
       baseObj             = uri.path[1 .. ^1] # Strip the leading /
       (objPath, nameBase) = splitPath(baseObj)
-
-    if "region" in cfg.params:
-      region = cfg.params["region"]
-    else:
-      region = "us-east-1"
-
-    if "extra" in cfg.params:
-      extra = cfg.params["extra"]
-    else:
-      extra = ""
 
     cfg.private = S3SinkState(region: region, uri: uri, uid: uid,
                               secret: secret, token: token,
@@ -308,8 +299,8 @@ proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
       newPath  = joinPath(state.objPath, newTail)
       response = client.put_object(state.bucket, newPath, msg)
 
-  if response.status[0] != '2':
-    raise newException(ValueError, response.status)
+  if not response.code.is2xx():
+    raise newException(ValueError, response.status & ": " & response.body())
   else:
     cfg.iolog(t, "Post to: " & newPath & "; response = " & response.status)
 
@@ -398,7 +389,7 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
                                   firstRetryDelayMs = 100)
 
   if not response.code.is2xx():
-    raise newException(ValueError, response.status)
+    raise newException(ValueError, response.status & ": " & response.body())
 
   cfg.iolog(t, "Post " & response.status)
 
@@ -440,7 +431,7 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
                                   firstRetryDelayMs = 100)
 
   if not response.code.is2xx():
-    raise newException(ValueError, response.status)
+    raise newException(ValueError, response.status & ": " & response.body())
 
   cfg.iolog(t, "Presign " & response.status)
 
