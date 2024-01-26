@@ -64,7 +64,7 @@ import sugar, os, macros, options
 type
   Dict*[T, V] {. importc: "hatrack_dict_t", header: "crownhash.h", nodecl.} = object
   DictRef*[T, V] = ref Dict[T, V]
-  DictKeyType = enum
+  DictKeyType* = enum
     KTInt, KTFloat, KtCStr, KtPtr, KtObjInt, KtObjReal, KtObjCstr,
     KtObjPtr, KtObjCustom, KtForce32Bits = 0x0fffffff
   StackBox[T] = ref object
@@ -112,34 +112,34 @@ proc ejectStackBox[T](s: StackBox[T]) =
   if s.ownedByNim:
     GC_unref(s)
 
-proc hatrack_dict_init(ctx: var Dict, key_type: DictKeyType) {.hatc.}
-proc hatrack_dict_cleanup(ctx: ptr Dict) {.hatc.}
-proc hatrack_dict_set_consistent_views(ctx: var Dict, yes: bool) {.hatc.}
-proc hatrack_dict_get_consistent_views(ctx: var Dict): bool {.hatc.}
-proc hatrack_dict_set_hash_offset(ctx: var Dict, offset: cint) {.hatc.}
-proc hatrack_dict_get(ctx: var Dict, key: pointer, found: var bool):
+proc hatrack_dict_new*(a: DictKeyType): pointer {.hatc.};
+proc hatrack_dict_init*(ctx: var Dict, key_type: DictKeyType) {.hatc.}
+proc hatrack_dict_cleanup*(ctx: ptr Dict) {.hatc.}
+proc hatrack_dict_set_consistent_views*(ctx: var Dict, yes: bool) {.hatc.}
+proc hatrack_dict_get_consistent_views*(ctx: var Dict): bool {.hatc.}
+proc hatrack_dict_set_hash_offset*(ctx: var Dict, offset: cint) {.hatc.}
+proc hatrack_dict_get*(ctx: var Dict, key: pointer, found: var bool):
                      pointer {.hatc.}
-proc hatrack_dict_put(ctx: var Dict, key: pointer,
-                            value: pointer) {.
-  hatc.}
-proc hatrack_dict_replace(ctx: var Dict, key: pointer, value: pointer):
+proc hatrack_dict_put*(ctx: var Dict, key: pointer,
+                       value: pointer) {.hatc.}
+proc hatrack_dict_replace*(ctx: var Dict, key: pointer, value: pointer):
                      bool {.hatc.}
 proc hatrack_dict_add*(ctx: var Dict, key: pointer, value: pointer):
                      bool {.hatc.}
-proc hatrack_dict_remove(ctx: var Dict, key: pointer): bool {.hatc.}
-proc hatrack_dict_keys_sort(ctx: var Dict, n: ptr uint64):
+proc hatrack_dict_remove*(ctx: var Dict, key: pointer): bool {.hatc.}
+proc hatrack_dict_keys_sort*(ctx: var Dict, n: ptr uint64):
                            pointer {.hatc.}
-proc hatrack_dict_values_sort(ctx: var Dict, n: ptr uint64):
+proc hatrack_dict_values_sort*(ctx: var Dict, n: ptr uint64):
                              pointer {.hatc.}
-proc hatrack_dict_items_sort(ctx: var Dict, n: ptr uint64):
+proc hatrack_dict_items_sort*(ctx: var Dict, n: ptr uint64):
                             pointer {.hatc.}
-proc hatrack_dict_keys_nosort(ctx: var Dict, n: ptr uint64):
+proc hatrack_dict_keys_nosort*(ctx: var Dict, n: ptr uint64):
                              pointer {.hatc.}
-proc hatrack_dict_values_nosort(ctx: var Dict, n: ptr uint64):
+proc hatrack_dict_values_nosort*(ctx: var Dict, n: ptr uint64):
                                pointer {.hatc.}
-proc hatrack_dict_items_nosort(ctx: var Dict, n: ptr uint64):
+proc hatrack_dict_items_nosort*(ctx: var Dict, n: ptr uint64):
                               pointer {.hatc.}
-proc hatrack_dict_set_free_handler[T, V](ctx: var Dict[T, V],
+proc hatrack_dict_set_free_handler*[T, V](ctx: var Dict[T, V],
                        cb: (var Dict[T, V], ptr RawItem) -> void) {.hatc.}
 proc register_thread() {.cdecl, importc: "mmm_register_thread" .}
 
@@ -257,18 +257,18 @@ proc add*[T, V](dict: var Dict[T, V], key: T, value: sink V): bool =
     p = cast[pointer](key)
 
   when V is SomeOrdinal:
-    return dict.hatrack_dict_replace(p, cast[pointer](int64(value)))
+    return dict.hatrack_dict_add(p, cast[pointer](int64(value)))
   elif V is SomeFloat:
-    return dict.hatrack_dict_replace(p, cast[pointer](float(value)))
+    return dict.hatrack_dict_add(p, cast[pointer](float(value)))
   elif V is SomeString:
-    return dict.hatrack_dict_replace(p, cast[pointer](value.toStrBox()))
+    return dict.hatrack_dict_add(p, cast[pointer](value.toStrBox()))
   elif V is ref:
     GC_ref(value)
-    return dict.hatrack_dict_replace(p, cast[pointer](value))
+    return dict.hatrack_dict_add(p, cast[pointer](value))
   elif V is pointer:
-    return dict.hatrack_dict_replace(p, cast[pointer](value))
+    return dict.hatrack_dict_add(p, cast[pointer](value))
   else:
-    return dict.hatrack_dict_replace(p, cast[pointer](value.toStackBox()))
+    return dict.hatrack_dict_add(p, cast[pointer](value.toStackBox()))
 
 proc add*[T, V](dict: DictRef[T, V], key: T, value: sink V): bool =
   return add(dict[], key, value)

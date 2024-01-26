@@ -16,13 +16,13 @@ import nimutils/[box, random, unicodeid, pubsub, sinks, auth, misc, texttable],
        nimutils/[sha, aes, prp, hexdump, markdown, htmlparse, net, colortable],
        nimutils/[rope_base, rope_styles, rope_construct, rope_prerender],
        nimutils/[rope_ansirender, rope_htmlrender, rope_textrender],
-       nimutils/[switchboard, subproc, int128_t, dict, list]
+       nimutils/[switchboard, subproc, int128_t, dict, list, c4str]
 export box, random, unicodeid, pubsub, sinks, auth, misc, random, texttable,
        file, filetable, encodings, advisory_lock, progress, sha,
        aes, prp, hexdump, markdown, htmlparse, net, colortable, rope_base,
        rope_styles, rope_construct, rope_prerender, rope_ansirender,
        rope_htmlrender, rope_textrender, switchboard, subproc, int128_t,
-       dict, list
+       dict, list, c4str
 
 when defined(macosx):
   import nimutils/macproc

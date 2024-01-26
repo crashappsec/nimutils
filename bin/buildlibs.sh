@@ -264,14 +264,29 @@ EOL
 function ensure_hatrack {
     if ! copy_from_package libhatrack.a ; then
         get_src hatrack https://github.com/viega/hatrack
+        autoreconf -i
         aclocal
         autoheader
         autoconf
         automake
-        ./configure
+        ./configure --enable-quark=yes
         make libhatrack.a
+        mv libhatrack.a ${MY_LIBS}
         if [[ -f ${MY_LIBS}/libhatrack.a ]] ; then
             echo $(color GREEN Installed libhatrack to:) ${MY_LIBS}/libhatrack.a
+        fi
+    fi
+}
+
+function ensure_ffi {
+    if ! copy_from_package libffi.a ; then
+        get_src libffi https://github.com/libffi/libffi.git
+	sh ./autogen.sh
+        ./configure
+        make
+        mv */.libs/libffi.a ${MY_LIBS}
+        if [[ -f ${MY_LIBS}/libffi.a ]] ; then
+            echo $(color GREEN Installed libhffi to:) ${MY_LIBS}/libffi.a
         fi
     fi
 }
@@ -293,6 +308,7 @@ ensure_openssl
 ensure_pcre
 ensure_gumbo
 ensure_hatrack
+ensure_ffi
 
 colorln GREEN All dependencies satisfied.
 remove_src

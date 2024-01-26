@@ -113,7 +113,6 @@ proc preRenderBoxToAnsiString*(b: TextPlane, noColor = false): string =
           shouldTitle = true
       else:
         if ch == uint32('\e'):
-          continue
           raise newException(ValueError, "ANSI escape codes are not allowed " &
             "in text in this API")
         case styleInfo.casing

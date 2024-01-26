@@ -3,7 +3,7 @@ import options
 {.pragma: hatc, cdecl, importc.}
 
 type
-  FlexArrayObj = pointer
+  FlexArrayObj* = pointer
 
   FlexArray*[T] = ref object
     arr*:      ptr FlexArrayObj
