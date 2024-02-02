@@ -27,12 +27,15 @@ proc staticListFiles*(arg: string): seq[string] =
   result = @[]
 
   let
-    lines = staticExec("ls --color=never -pF " & arg &
-      " | grep -v \"[^a-zA-Z0-9]$\"")
+    lines = staticExec("find " & arg  & " -type f " &
+                       " | grep -v \"[^a-zA-Z0-9]$\"")
     items = split(lines, "\n")
 
   for item in items:
-    result.add(item.strip())
+    var path = item
+    path.removePrefix(arg)
+    path.removePrefix(DirSep)
+    result.add(path.strip())
 
 
 template newFileTable*(dir: static[string]): FileTable =
@@ -55,7 +58,7 @@ template newFileTable*(dir: static[string]): FileTable =
     let
       pathToFile   = pwd.joinPath(filename)
       fileContents = staticRead(pathToFile)
-      key          = splitFile(filename).name
+      key          = splitFile(filename).name.toLower()
 
     ret[key] = fileContents
   ret
