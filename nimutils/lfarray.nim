@@ -37,13 +37,12 @@ proc flexarray_add*(a1, a2: ptr FlexArrayObj): ptr FlexArrayObj {.hatc.}
 proc arrayItemDecref[T](item: T) =
   GC_unref(item)
 
-proc newArray*[T](): FlexArray[T] =
-  result = FlexArray[T]()
-  result.arr = flexarray_new(0)
+proc newArray*[T](n = 0): FlexArray[T] =
+  result     = FlexArray[T]()
+  result.arr = flexarray_new(uint64(n))
 
   when T is ref:
     result.arr.flexarray_set_eject_callback(cast[pointer](arrayItemDecref[T]))
-
 
 proc get*[T](fa: FlexArray[T], ix: int): Option[T] =
   var code: cint
