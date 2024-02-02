@@ -308,9 +308,9 @@ when isMainModule:
     print(h2("Dictionary tests"))
 
     var
-      x: DictRef[int, string] = {42: "bar", 1000 : "zork", 17 : "foo",
-                                 500: "boz"}.toDict()
-      y: Dict[int, string]
+      x: Dict[int, string] = {42: "bar", 1000 : "zork", 17 : "foo",
+                              500: "boz"}.toDict()
+      y: Dict[int, string] = newDict[int, string]()
 
     y[500]  = "boz"
     y[1000] = "zork"
@@ -336,7 +336,7 @@ when isMainModule:
     echo y.keys()
     echo y.values()
     echo y.items()
-    var d2: DictRef[string, int] = newDict[string, int]()
+    var d2: Dict[string, int] = newDict[string, int]()
     var seqstr = ["ay", "bee", "cee", "dee", "e", "eff", "gee", "h", "i", "j"]
 
     for i, item in seqstr:
