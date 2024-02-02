@@ -401,7 +401,8 @@ proc `[]`*[T, V](d: Dict[T, V], key: T) : V =
 
 proc toDict*[T, V](pairs: openarray[(T, V)]): Dict[T, V] =
   ## Use this to convert a nim {} literal to a Dict.
-  result = Dict[T, V]()
+  initDict[T, V](result)
+
   for (k, v) in pairs:
     result[k] = v
 
