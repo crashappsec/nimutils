@@ -510,15 +510,15 @@ template html*(s: string): Rope =
   ## If your input is not well-formed, what you get is
   ## undefined. Basically, we seem to always get trees of some sort
   ## from the underlying library, but it may not map to what you want.
-  s.strip().htmlStringToRope(markdown = false, add_div = true)
+  unicode.strip(s).htmlStringToRope(markdown = false, add_div = true)
 
 proc markdown*(s: string, add_div = true): Rope =
   ## Process the text as markdown.
-  s.strip().htmlStringToRope(markdown = true, add_div = true)
+  unicode.strip(s).htmlStringToRope(markdown = true, add_div = true)
 
 proc text*(s: string, pre = true, detect = false): Rope =
   if detect:
-    let n = s.strip(trailing = false)
+    let n = unicode.strip(s, trailing = false)
     if n.len() != 0:
       case n[0]
       of '#':
