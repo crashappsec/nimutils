@@ -43,20 +43,15 @@ template styleRunes(state: FmtState, runes: seq[uint32]): seq[uint32] =
 
 proc pad(state: FmtState, w: int): seq[uint32] =
   if w > MAXPAD or w <= 0:
-    return newSeq[uint32](0)
+    return @[]
   else:
     result    = newSeq[uint32](w + 2)
     result[0] = state.curStyle.getStyleId()
     for i in 1 .. w:
       result[i] = uint32(Rune(' '))
-    result[^1] = StylePop
+    result[w + 1] = StylePop
 
-  #result.setLen(w+2)
-
-#template pad(state: FmtState, w: int): seq[uint32] =
-#  if w > MAXPAD:
-#    return
-#  @[state.curStyle.getStyleId()] & uint32(Rune(' ')).repeat(w) & @[StylePop]
+  result.setLen(w + 2)
 
 proc unboxedRuneLength(r: Rope, results: var int) =
   if r != nil:
@@ -398,12 +393,12 @@ proc getGenericBorder(state: var FmtState, colWidths: seq[int],
       if useSep and i != len(colWidths):
         ct += 1
 
-    result = newSeq[uint32](ct + 1)
+    result = newSeq[uint32](ct)
 
     var n = 0
     if useLeft:
-       result[n] = uint32(leftBorder)
-       n += 1
+      result[n] = uint32(leftBorder)
+      n += 1
 
     for i, width in colWidths:
       for j in 0 ..< width:

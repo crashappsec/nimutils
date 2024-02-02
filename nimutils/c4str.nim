@@ -18,6 +18,11 @@ proc newC4Str*(s: string): C4Str {.cdecl, exportc.} =
   if l != 0:
     copyMem(cast[pointer](result), addr s[0], l)
 
+proc toNimStr*(s: C4Str): string =
+  let l  = s.len()
+  result = newString(l)
+  copyMem(addr result[0], cast[pointer](s), l)
+
 proc c4str_eq*(s1, s2: C4Str): bool {.cdecl, exportc.} =
   if s1.len() != s2.len():
     return false
