@@ -2,16 +2,24 @@ import std/[asyncfutures, net, httpclient, uri, math, os, streams, strutils]
 import openssl
 import ./managedtmp
 
-template getRootCAStoreContent(): string =
+proc getRootCAStoreContent(): string =
+  const
+    # stdlib times cannot generate times at compile-time
+    (today, exit) = gorgeEx("date -u +%Y-%m-%d")
+  if exit != 0:
+    raise newException(ValueError, "Cannot find todays date")
   const
     caWiki  = "https://wiki.mozilla.org/CA/Included_Certificates"
+    # link is taken directly from wiki page above
+    # p.s. kind of odd its to salesforce vs one of mozilla-owned domains :shrug:
     caURL   = "https://ccadb.my.salesforce-sites.com/mozilla/IncludedRootsPEMTxt?TrustBitsInclude=Websites"
+    cache   = "mozilla-root-store-" & today # cache certs by day
     curlCmd = "curl -fsSL --retry 5 " & caURL
-    (contents, curlExitCode) = gorgeEx(curlCmd, cache="mozilla-root-store")
+    (contents, curlExitCode) = gorgeEx(curlCmd, cache=cache)
   if curlExitCode != 0:
     raise newException(
       ValueError,
-      "Could not downlaod CA root store: " & contents
+      "Could not download CA root store: " & contents
     )
   const
     opensslCmd             = "openssl storeutl -noout -certs /dev/stdin"
@@ -95,11 +103,10 @@ proc timeoutGuard(client: HttpClient | AsyncHttpClient, url: Uri | string) =
   # TCP connection can be established before attempting to make
   # HTTP request
   if client.timeout > 0:
-    var uri: Uri
-    when url is string:
-      uri = parseUri(url)
+    let uri = when url is string:
+      parseUri(url)
     else:
-      uri = url
+      url
     let hostname = uri.hostname
     # port is optional in the Uri so we use default ports
     var port: Port
@@ -211,11 +218,10 @@ proc safeRequest*(url: Uri | string,
                   maxRedirects: int = 3,
                   disallowHttp: bool = false,
                   ): Response =
-  var uri: Uri
-  when url is string:
-    uri = parseUri(url)
+  let uri = when url is string:
+    parseUri(url)
   else:
-    uri = url
+    url
   let client = createHttpClient(uri           = uri,
                                 maxRedirects  = maxRedirects,
                                 timeout       = timeout,
