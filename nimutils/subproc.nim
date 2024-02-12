@@ -467,10 +467,13 @@ proc runCmdGetEverything*(exe:  string,
   ## process.  This is similar to Nim's `execCmdEx` but allows for
   ## optional passthrough, timeouts, and sending an input string to
   ## stdin.
-  return runCommand(exe, args, newStdin, closeStdin, pty = false,
+  let isStdInTTY = isatty(0) != 0
+  return runCommand(exe, args, newStdin, closeStdin,
+                    pty         = if passthrough: isStdInTTY else: false,
                     passthrough = if passthrough: SpIoAll else: SpIoNone,
-                    timeoutUSec = timeoutUsec, capture = SpIoOutErr,
-                                  waitForExit = ensureExit)
+                    timeoutUSec = timeoutUsec,
+                    capture     = SpIoOutErr,
+                    waitForExit = ensureExit)
 
 proc runPager*(s: string) =
   var
