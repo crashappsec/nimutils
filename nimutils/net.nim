@@ -4,16 +4,11 @@ import ./managedtmp
 
 proc getRootCAStoreContent(): string =
   const
-    # stdlib times cannot generate times at compile-time
-    (today, exit) = gorgeEx("date -u +%Y-%m-%d")
-  if exit != 0:
-    raise newException(ValueError, "Cannot find todays date")
-  const
     caWiki  = "https://wiki.mozilla.org/CA/Included_Certificates"
     # link is taken directly from wiki page above
     # p.s. kind of odd its to salesforce vs one of mozilla-owned domains :shrug:
     caURL   = "https://ccadb.my.salesforce-sites.com/mozilla/IncludedRootsPEMTxt?TrustBitsInclude=Websites"
-    cache   = "mozilla-root-store-" & today # cache certs by day
+    cache   = "mozilla-root-store-" & CompileDate # cache certs by day
     curlCmd = "curl -fsSL --retry 5 " & caURL
     (contents, curlExitCode) = gorgeEx(curlCmd, cache=cache)
   if curlExitCode != 0:
