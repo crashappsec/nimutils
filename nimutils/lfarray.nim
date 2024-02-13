@@ -55,6 +55,7 @@ proc get*[T](fa: FlexArray[T], ix: int): Option[T] =
 proc `[]`*[T](fa: FlexArray[T], ix: int): T =
   var code: cint
   let p = flexarray_get(fa.arr, uint64(ix), addr code)
+
   if code == 0:
     return cast[T](p)
   else:
@@ -72,9 +73,6 @@ proc put*[T](fa: FlexArray[T], ix: int, item: T): bool {.discardable.} =
   return flexarray_set(fa.arr, uint64(ix), cast[pointer](item))
 
 proc newArrayFromSeq*[T](s: seq[T]): FlexArray[T] =
-  var
-    err: cint
-
   result = FlexArray[T]()
   result.arr = flexarray_new(uint64(s.len()))
 

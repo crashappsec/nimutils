@@ -511,7 +511,7 @@ proc values*[T, V](d: Dict[T, V], sort = false): seq[V] =
     when V is SomeOrdinal or V is SomeFloat:
       result.add(V(p[i]))
     elif V is SomeRef:
-      var r = V(p[i])
+      var r = p[i]
       result.add(r)
     elif V is string:
       result.add(unboxStr(p[i]))
@@ -555,7 +555,7 @@ proc items*[T, V](d: Dict[T, V], sort = false): seq[(T, V)] =
     elif T is SomeFloat:
       item.key = T(cast[float](uncast.key))
     else: # T is SomeRef
-      item.key = T(uncast.key)
+      item.key = uncast.key
 
     when V is string:
       item.value = unboxStr(cast[StrBox](uncast.value))
