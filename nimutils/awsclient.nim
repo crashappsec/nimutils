@@ -97,8 +97,9 @@ proc newAwsClient*(creds: AwsCredentials, region,
     service: string): AwsClient =
   let
     # TODO - use some kind of template and compile-time variable to put the correct kernel used to build the sdk in the UA?
-    httpclient = newHttpClient("nimaws-sdk/0.3.3; "&defUserAgent.replace(" ",
-        "-").toLower&"; darwin/16.7.0")
+    httpclient = createHttpClient(
+      userAgent = "nimaws-sdk/0.3.3; "&defUserAgent.replace(" ", "-").toLower&"; darwin/16.7.0",
+    )
     scope = AwsScope(date: getAmzDateString(), region: region, service: service)
 
   return AwsClient(httpClient: httpclient, credentials: creds, scope: scope,
