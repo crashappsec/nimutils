@@ -222,10 +222,13 @@ proc safeRequest*(url: Uri | string,
                                 timeout       = timeout,
                                 pinnedCert    = pinnedCert,
                                 disallowHttp  = disallowHttp)
-  return client.safeRequest(url               = uri,
-                            httpMethod        = httpMethod,
-                            body              = body,
-                            headers           = headers,
-                            multipart         = multipart,
-                            retries           = retries,
-                            firstRetryDelayMs = firstRetryDelayMs)
+  try:
+    return client.safeRequest(url               = uri,
+                              httpMethod        = httpMethod,
+                              body              = body,
+                              headers           = headers,
+                              multipart         = multipart,
+                              retries           = retries,
+                              firstRetryDelayMs = firstRetryDelayMs)
+  finally:
+    client.close()
