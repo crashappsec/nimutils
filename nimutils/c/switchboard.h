@@ -236,7 +236,7 @@ typedef struct switchboard_t {
     fd_set            readset;
     fd_set            writeset;
     int               max_fd;
-    int               fds_ready; // Used to determine if we timed out.
+    int               fds_ready;
     party_t          *parties_for_reading;
     party_t          *parties_for_writing;
     party_t          *party_loners;
