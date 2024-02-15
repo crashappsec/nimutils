@@ -393,7 +393,8 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
                                pinnedCert        = params.pinnedCert,
                                httpMethod        = HttpPut,
                                retries           = 2,
-                               firstRetryDelayMs = 100)
+                               firstRetryDelayMs = 100,
+                               maxRedirects      = 0)
 
   if signResponse.code notin [Http302, Http307]:
     raise newException(ValueError, "Presign requires 302/307 redirect but received: " & signResponse.status)
