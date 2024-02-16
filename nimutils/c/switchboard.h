@@ -89,6 +89,7 @@ typedef struct {
     sb_msg_t       *first_msg;
     sb_msg_t       *last_msg;
     subscription_t *subscribers;
+    bool            close_fd_when_done; // Close the fd after writing?
 } fd_party_t;
 
 /*
@@ -309,8 +310,8 @@ extern void sb_init_party_listener(switchboard_t *, party_t *, int,
 	 		        accept_cb_t, bool, bool);
 extern party_t * sb_new_party_listener(switchboard_t *, int, accept_cb_t, bool,
 				    bool);
-extern void sb_init_party_fd(switchboard_t *, party_t *, int , int , bool, bool);
-extern party_t *sb_new_party_fd(switchboard_t *, int, int, bool, bool);
+extern void sb_init_party_fd(switchboard_t *, party_t *, int , int , bool, bool, bool);
+extern party_t *sb_new_party_fd(switchboard_t *, int, int, bool, bool, bool);
 extern void sb_init_party_input_buf(switchboard_t *, party_t *, char *,
 				    size_t, bool, bool, bool);
 extern party_t *sb_new_party_input_buf(switchboard_t *, char *, size_t,
@@ -342,7 +343,7 @@ extern bool sb_operate_switchboard(switchboard_t *, bool);
 extern void sb_get_results(switchboard_t *, sb_result_t *);
 extern char *sb_result_get_capture(sb_result_t *, char *, bool);
 extern void sb_result_destroy(sb_result_t *);
-extern void subproc_init(subprocess_t *, char *, char *[]);
+extern void subproc_init(subprocess_t *, char *, char *[], bool);
 extern bool subproc_set_envp(subprocess_t *, char *[]);
 extern bool subproc_pass_to_stdin(subprocess_t *, char *, size_t, bool);
 extern bool subproc_set_passthrough(subprocess_t *, unsigned char, bool);

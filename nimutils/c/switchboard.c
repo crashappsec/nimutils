@@ -218,7 +218,8 @@ sb_new_party_listener(switchboard_t *ctx, int sockfd, accept_cb_t callback,
  */
 void
 sb_init_party_fd(switchboard_t *ctx, party_t *party, int fd, int perms,
-                 bool stop_when_closed, bool close_on_destroy)
+                 bool stop_when_closed, bool close_on_destroy,
+                 bool close_when_done)
 {
     memset(party, 0, sizeof(party_t));
 
@@ -231,13 +232,13 @@ sb_init_party_fd(switchboard_t *ctx, party_t *party, int fd, int perms,
     fd_obj->first_msg            = NULL;
     fd_obj->last_msg             = NULL;
     fd_obj->subscribers          = NULL;
+    fd_obj->close_fd_when_done   = close_when_done;
     fd_obj->fd                   = fd;
 
     if (perms != O_WRONLY) {
         party->open_for_read    = true;
         party->can_read_from_it = true;
         register_read_fd(ctx, party);
-
     }
     if (perms != O_RDONLY) {
         party->open_for_write  = true;
@@ -251,11 +252,12 @@ sb_init_party_fd(switchboard_t *ctx, party_t *party, int fd, int perms,
 
 party_t *
 sb_new_party_fd(switchboard_t *ctx, int fd, int perms,
-                bool stop_when_closed, bool close_on_destroy)
+                bool stop_when_closed, bool close_on_destroy,
+                bool close_when_done)
 {
     party_t *result = (party_t *)calloc(sizeof(party_t), 1);
     sb_init_party_fd(ctx, result, fd, perms, stop_when_closed,
-                     close_on_destroy);
+                     close_on_destroy, close_when_done);
 
     return result;
 }
@@ -1007,21 +1009,25 @@ handle_one_read(switchboard_t *ctx, party_t *party)
             ctx->done = true;
         }
 
-        /* When there is no input read, we need to propagate close
+        /*
+         * When there is no input read, we need to propagate close
          * to all the subscribers.
          * As this happens via event-loop we can do that by passing
          * empty write message to the subscriber
          * (see comment in handle_one_write)
          */
-        fd_party_t     *obj     = get_fd_obj(party);
-        subscription_t *sublist = obj->subscribers;
-
-        while (sublist != NULL) {
-            party_t *sub = sublist->subscriber;
-            if (sub->party_type == PT_FD) {
-                publish(ctx, "", 0, sub);
+        if (party->party_type == PT_FD) {
+            fd_party_t     *obj     = get_fd_obj(party);
+            subscription_t *sublist = obj->subscribers;
+            if (obj->close_fd_when_done) {
+                while (sublist != NULL) {
+                    party_t *sub = sublist->subscriber;
+                    if (sub->party_type == PT_FD) {
+                        publish(ctx, NULL, 0, sub);
+                    }
+                    sublist = sublist->next;
+                }
             }
-            sublist = sublist->next;
         }
     } else {
         #ifdef SB_DEBUG

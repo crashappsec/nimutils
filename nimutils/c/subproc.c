@@ -33,7 +33,7 @@ extern int party_fd(party_t *party);
  * anything passed into this API until the process is done.
  */
 void
-subproc_init(subprocess_t *ctx, char *cmd, char *argv[])
+subproc_init(subprocess_t *ctx, char *cmd, char *argv[], bool close_stdin_when_done)
 {
     memset(ctx, 0, sizeof(subprocess_t));
     sb_init(&ctx->sb, DEFAULT_HEAP_SIZE);
@@ -42,9 +42,9 @@ subproc_init(subprocess_t *ctx, char *cmd, char *argv[])
     ctx->capture     = 0;
     ctx->passthrough = 0;
 
-    sb_init_party_fd(&ctx->sb, &ctx->parent_stdin,  0, O_RDONLY, false, false);
-    sb_init_party_fd(&ctx->sb, &ctx->parent_stdout, 1, O_WRONLY, false, false);
-    sb_init_party_fd(&ctx->sb, &ctx->parent_stderr, 2, O_WRONLY, false, false);
+    sb_init_party_fd(&ctx->sb, &ctx->parent_stdin,  0, O_RDONLY, false, false, close_stdin_when_done);
+    sb_init_party_fd(&ctx->sb, &ctx->parent_stdout, 1, O_WRONLY, false, false, false);
+    sb_init_party_fd(&ctx->sb, &ctx->parent_stderr, 2, O_WRONLY, false, false, false);
 }
 
 /*
@@ -82,7 +82,7 @@ subproc_pass_to_stdin(subprocess_t *ctx, char *str, size_t len, bool close_fd)
     }
 
     sb_init_party_input_buf(&ctx->sb, &ctx->str_stdin, str, len, true, true,
-    close_fd);
+                            close_fd);
 
     if (ctx->run) {
         return sb_route(&ctx->sb, &ctx->str_stdin, &ctx->subproc_stdin);
@@ -471,11 +471,11 @@ subproc_spawn_fork(subprocess_t *ctx)
         close(stderr_pipe[1]);
 
         sb_init_party_fd(&ctx->sb, &ctx->subproc_stdin, stdin_pipe[1],
-                         O_WRONLY, false, true);
+                         O_WRONLY, false, true, false);
         sb_init_party_fd(&ctx->sb, &ctx->subproc_stdout, stdout_pipe[0],
-                         O_RDONLY, false, true);
+                         O_RDONLY, false, true, false);
         sb_init_party_fd(&ctx->sb, &ctx->subproc_stderr, stderr_pipe[0],
-                         O_RDONLY, false, true);
+                         O_RDONLY, false, true, false);
 
         sb_monitor_pid(&ctx->sb, pid, &ctx->subproc_stdin, &ctx->subproc_stdout,
                        &ctx->subproc_stderr, true);
@@ -543,13 +543,13 @@ subproc_spawn_forkpty(subprocess_t *ctx)
         if (ctx->pty_stdin_pipe) {
             close(stdin_pipe[0]);
             sb_init_party_fd(&ctx->sb, &ctx->subproc_stdin, stdin_pipe[1],
-                             O_WRONLY, false, true);
+                             O_WRONLY, false, true, false);
         }
 
         ctx->pty_fd = pty_fd;
 
         sb_init_party_fd(&ctx->sb, &ctx->subproc_stdout,
-                         pty_fd, O_RDWR, true, true);
+                         pty_fd, O_RDWR, true, true, false);
 
         sb_monitor_pid(&ctx->sb, pid, &ctx->subproc_stdout,
                        &ctx->subproc_stdout, NULL, true);
@@ -808,7 +808,7 @@ test1() {
     sb_result_t *result;
     struct timeval timeout = {.tv_sec = 0, .tv_usec = 1000 };
 
-    subproc_init(&ctx, cmd, args);
+    subproc_init(&ctx, cmd, args, true);
     subproc_use_pty(&ctx);
     subproc_set_passthrough(&ctx, SP_IO_ALL, false);
     subproc_set_capture(&ctx, SP_IO_ALL, false);
@@ -839,7 +839,7 @@ test2() {
     sb_result_t *result;
     struct timeval timeout = {.tv_sec = 0, .tv_usec = 1000 };
 
-    subproc_init(&ctx, cmd, args);
+    subproc_init(&ctx, cmd, args, true);
     subproc_set_passthrough(&ctx, SP_IO_ALL, false);
     subproc_set_capture(&ctx, SP_IO_ALL, false);
     subproc_pass_to_stdin(&ctx, test_txt, strlen(test_txt), true);
@@ -869,7 +869,7 @@ test3() {
     sb_result_t *result;
     struct timeval timeout = {.tv_sec = 0, .tv_usec = 1000 };
 
-    subproc_init(&ctx, cmd, args);
+    subproc_init(&ctx, cmd, args, true);
     subproc_use_pty(&ctx);
     subproc_set_passthrough(&ctx, SP_IO_ALL, false);
     subproc_set_capture(&ctx, SP_IO_ALL, false);
@@ -900,7 +900,7 @@ test4() {
     sb_result_t *result;
     struct timeval timeout = {.tv_sec = 0, .tv_usec = 1000 };
 
-    subproc_init(&ctx, cmd, args);
+    subproc_init(&ctx, cmd, args, true);
     subproc_use_pty(&ctx);
     subproc_set_passthrough(&ctx, SP_IO_ALL, false);
     subproc_set_capture(&ctx, SP_IO_ALL, false);

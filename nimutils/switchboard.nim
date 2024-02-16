@@ -65,7 +65,7 @@ proc sb_init*(ctx: var SwitchBoard, heap_elems: csize_t) {.sb.}
 
 proc sb_init_party_fd(ctx: var Switchboard, party: var Party, fd: cint,
                       perms: SbFdPerms, stopWhenClosed: bool,
-                      closeOnDestroy: bool) {.sb.}
+                      closeOnDestroy: bool, closeWhenDone: bool) {.sb.}
 
 proc initPartyCallback*(ctx: var Switchboard, party: var Party,
                         callback: SBCallback) {.cdecl,
@@ -182,7 +182,7 @@ proc setString*(party: var Party, input: string, closeAfter: bool = false) =
                                       true, true, closeAfter)
 proc initPartyFd*(ctx: var SwitchBoard, party: var Party, fd: int,
                   perms: SbFdPerms, stopWhenClosed = false,
-                  closeOnDestroy = false) =
+                  closeOnDestroy = false, closeWhenDone = true) =
   ## Initializes a file descriptor that can be both a subscriber and
   ## subscribed to, depending on the fd's permissions (which are
   ## passed, not discovered).
@@ -196,7 +196,7 @@ proc initPartyFd*(ctx: var SwitchBoard, party: var Party, fd: int,
   ## If `closeOnDestroy` is true, we will call close() on the fd for
   ## you whenever the switchboard is torn down.
   sb_init_party_fd(ctx, party, cint(fd), perms, stopWhenClosed,
-                   closeOnDestroy)
+                   closeOnDestroy, closeWhenDone)
 
 proc sb_destroy(ctx: var Switchboard, free: bool) {.sb.}
 
