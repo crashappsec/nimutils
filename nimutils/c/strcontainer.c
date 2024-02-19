@@ -16,8 +16,9 @@
 #define BG_COLOR_ON     0x0040
 #define UL_DOUBLE       0x0080
 #define UPPER_CASE      0x0100
-#define TITLE_CASE      0x0200
-#define LOWER_CASE      0x0300
+#define LOWER_CASE      0x0200
+#define TITLE_CASE      0x0300 (UPPER | LOWER)
+// The remaining 5 flags will currently be used for fonts.
 
 typedef struct {
     uint64_t  offset;

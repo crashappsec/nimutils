@@ -11,7 +11,11 @@ proc c4str_len*(s: C4Str): int64 {.importc: "c4string_len", cdecl.}
 proc c4str_from_file*(name: cstring, err: var cint): C4Str {.importc, cdecl.}
 proc free*(s: C4Str) {.importc: "c4string_free", cdecl.}
 
-template len*(s: C4Str): int = int(s.c4str_len())
+proc len*(s: C4Str): int =
+  if s == nil:
+    return 0
+  else:
+    return int(s.c4str_len())
 
 proc newC4Str*(s: string): C4Str {.cdecl, exportc.} =
   let l = s.len()
