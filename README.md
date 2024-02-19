@@ -1,5 +1,5 @@
 This is a collection of random utilities that were developed for
-[Chalk](https://github.com/crashappsec/chalk) and     
+[Chalk](https://github.com/crashappsec/chalk) and
 [Con4m](https://github.com/crashappsec/con4m), that were more general.
 
 This is nowhere near a proper 1.0 release. Functionality will grow
