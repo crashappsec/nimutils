@@ -89,7 +89,7 @@ typedef struct {
     sb_msg_t       *first_msg;
     sb_msg_t       *last_msg;
     subscription_t *subscribers;
-    bool            close_fd_when_done; // Close the fd after writing?
+    bool            proxy_close; // close fd when proxy input is closed
 } fd_party_t;
 
 /*
@@ -258,6 +258,7 @@ typedef struct {
     int             signal_fd;
     int             pty_fd;
     bool            pty_stdin_pipe;
+    bool            proxy_stdin_close;
     bool            use_pty;
     bool            str_waiting;
     char           *cmd;

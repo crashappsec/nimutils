@@ -64,7 +64,7 @@ proc tcsetattr*(fd: cint, opt: TcsaConst, info: var Termcap):
 proc termcap_get*(termcap: var Termcap) {.sproc.}
 proc termcap_set*(termcap: var Termcap) {.sproc.}
 proc subproc_init(ctx: var SubProcess, cmd: cstring, args: cStringArray,
-                  closeStdinWhenDone: bool)
+                  proxyStdinClose: bool)
     {.sproc.}
 proc subproc_set_envp(ctx: var SubProcess, args: cStringArray)
     {.sproc.}
@@ -272,12 +272,12 @@ template binaryCstringToString*(s: cstring, l: int): string =
 # for the time being. We should clean them up in a destructor.
 
 proc initSubProcess*(ctx: var SubProcess, cmd: string,
-                     args: openarray[string], closeStdinWhenDone: bool) =
+                     args: openarray[string], proxyStdinClose: bool) =
   ## Initialize a subprocess with the command to call. This does *NOT*
   ## run the sub-process. Instead, you can first configure it, and
   ## then call `run()` when ready.
   var cargs = allocCstringArray(args)
-  subproc_init(ctx, cstring(cmd), cargs, closeStdinWhenDone)
+  subproc_init(ctx, cstring(cmd), cargs, proxyStdinClose)
 
 proc setEnv*(ctx: var SubProcess, env: openarray[string]) =
   ## Explicitly set the environment the subprocess should inherit. If
@@ -354,7 +354,7 @@ proc runCommand*(exe:  string,
                  args: seq[string],
                  newStdin                = "",
                  closeStdin              = false,
-                 closeStdinWhenDone      = true,
+                 proxyStdinClose         = true,
                  pty                     = false,
                  passthrough             = SpIoNone,
                  passStderrToStdout      = false,
@@ -375,8 +375,8 @@ proc runCommand*(exe:  string,
   ##               after it starts.
   ## - `closeStdin`: If true, will close stdin after writing the contents
   ##                 of `newStdin` to the subprocess.
-  ## - `closeStdinWhenDone`: If true, will close stdin after passthrough stdin
-  ##                         is closed.
+  ## - `proxyStdinClose`: If true, will close stdin subscribers after
+  ##                      source stdin is closed.
   ## - `pty`: Whether to use a pseudo-terminal (pty) to run the sub-process.
   ## - `passthrough`: Whether to proxy between the parent's stdin/stdout/stderr
   ##                  and the child's. You can specify which ones to proxy.
@@ -410,7 +410,7 @@ proc runCommand*(exe:  string,
   timeout.tv_sec  = Time(timeoutUsec / 1000000)
   timeout.tv_usec = Suseconds(timeoutUsec mod 1000000)
 
-  subproc.initSubprocess(binloc, @[exe] & args, closeStdinWhenDone)
+  subproc.initSubprocess(binloc, @[exe] & args, proxyStdinClose)
   subproc.setTimeout(timeout)
 
   if len(env) != 0:

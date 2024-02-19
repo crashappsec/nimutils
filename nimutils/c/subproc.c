@@ -33,16 +33,17 @@ extern int party_fd(party_t *party);
  * anything passed into this API until the process is done.
  */
 void
-subproc_init(subprocess_t *ctx, char *cmd, char *argv[], bool close_stdin_when_done)
+subproc_init(subprocess_t *ctx, char *cmd, char *argv[], bool proxy_stdin_close)
 {
     memset(ctx, 0, sizeof(subprocess_t));
     sb_init(&ctx->sb, DEFAULT_HEAP_SIZE);
-    ctx->cmd         = cmd;
-    ctx->argv        = argv;
-    ctx->capture     = 0;
-    ctx->passthrough = 0;
+    ctx->cmd               = cmd;
+    ctx->argv              = argv;
+    ctx->capture           = 0;
+    ctx->passthrough       = 0;
+    ctx->proxy_stdin_close = proxy_stdin_close;
 
-    sb_init_party_fd(&ctx->sb, &ctx->parent_stdin,  0, O_RDONLY, false, false, close_stdin_when_done);
+    sb_init_party_fd(&ctx->sb, &ctx->parent_stdin,  0, O_RDONLY, false, false, false);
     sb_init_party_fd(&ctx->sb, &ctx->parent_stdout, 1, O_WRONLY, false, false, false);
     sb_init_party_fd(&ctx->sb, &ctx->parent_stderr, 2, O_WRONLY, false, false, false);
 }
@@ -471,7 +472,7 @@ subproc_spawn_fork(subprocess_t *ctx)
         close(stderr_pipe[1]);
 
         sb_init_party_fd(&ctx->sb, &ctx->subproc_stdin, stdin_pipe[1],
-                         O_WRONLY, false, true, false);
+                         O_WRONLY, false, true, ctx->proxy_stdin_close);
         sb_init_party_fd(&ctx->sb, &ctx->subproc_stdout, stdout_pipe[0],
                          O_RDONLY, false, true, false);
         sb_init_party_fd(&ctx->sb, &ctx->subproc_stderr, stderr_pipe[0],
@@ -543,7 +544,7 @@ subproc_spawn_forkpty(subprocess_t *ctx)
         if (ctx->pty_stdin_pipe) {
             close(stdin_pipe[0]);
             sb_init_party_fd(&ctx->sb, &ctx->subproc_stdin, stdin_pipe[1],
-                             O_WRONLY, false, true, false);
+                             O_WRONLY, false, true, ctx->proxy_stdin_close);
         }
 
         ctx->pty_fd = pty_fd;
