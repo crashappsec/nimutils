@@ -182,7 +182,11 @@ suite "misc":
     check resolvePath("~") == (if home[^1] == '/': home[0 ..< ^1] else: home)
     check resolvePath("") == getCurrentDir()
     check resolvePath("~fred") == joinPath(base, "fred")
-    check resolvePath("../../src/../../eoeoeo") == "/Users/eoeoeo"
+
+    const
+      expectedDir = currentSourcePath() / ".." / ".." / ".." / ".." / ".."
+
+    check resolvePath("../../src/../../eoeoeo") == expectedDir / "eoeoeo"
   test "random":
     let
       words = getRandomWords(3)
