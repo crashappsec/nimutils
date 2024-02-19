@@ -37,15 +37,15 @@ read_one(int fd, char *buf, size_t nbytes)
     ssize_t  n;
 
     while (true) {
-	n = read(fd, buf, nbytes);
+        n = read(fd, buf, nbytes);
 
-	if (n == -1) {
-	    if (errno == EINTR || errno == EAGAIN) {
-		continue;
-	    }
-	}
+        if (n == -1) {
+            if (errno == EINTR || errno == EAGAIN) {
+                continue;
+            }
+        }
 
-	return n;
+        return n;
     }
 }
 
@@ -75,7 +75,7 @@ static inline void
 register_fd(switchboard_t *ctx, int fd)
 {
     if (ctx->max_fd <= fd) {
-	ctx->max_fd = fd + 1;
+        ctx->max_fd = fd + 1;
     }
 }
 
@@ -83,10 +83,10 @@ int
 party_fd(party_t *party)
 {
     if (party->party_type == PT_FD) {
-	return party->info.fdinfo.fd;
+        return party->info.fdinfo.fd;
     }
     else {
-	return party->info.listenerinfo.fd;
+        return party->info.listenerinfo.fd;
     }
 }
 
@@ -165,8 +165,8 @@ register_loner(switchboard_t *ctx, party_t *loner)
  */
 void
 sb_init_party_listener(switchboard_t *ctx, party_t *party, int sockfd,
-		       accept_cb_t callback, bool stop_when_closed,
-		       bool close_on_destroy)
+                       accept_cb_t callback, bool stop_when_closed,
+                       bool close_on_destroy)
 {
     /* Stop on close should really only be applied to stdin/out/err,
      * and socket FDs. For subprocesses, add the flag when registering
@@ -187,18 +187,18 @@ sb_init_party_listener(switchboard_t *ctx, party_t *party, int sockfd,
     register_read_fd(ctx, party);
 
     if (stop_when_closed) {
-	party->stop_on_close = true;
+        party->stop_on_close = true;
     }
 }
 
 // allocate and call sb_init_party_listener.
 party_t *
 sb_new_party_listener(switchboard_t *ctx, int sockfd, accept_cb_t callback,
-		   bool stop_when_closed, bool close_on_destroy)
+                      bool stop_when_closed, bool close_on_destroy)
 {
     party_t *result = (party_t *)calloc(sizeof(party_t), 1);
     sb_init_party_listener(ctx, result, sockfd, callback, stop_when_closed,
-			   close_on_destroy);
+                           close_on_destroy);
 
     return result;
 }
@@ -218,7 +218,8 @@ sb_new_party_listener(switchboard_t *ctx, int sockfd, accept_cb_t callback,
  */
 void
 sb_init_party_fd(switchboard_t *ctx, party_t *party, int fd, int perms,
-	      bool stop_when_closed, bool close_on_destroy)
+                 bool stop_when_closed, bool close_on_destroy,
+                 bool proxy_close)
 {
     memset(party, 0, sizeof(party_t));
 
@@ -231,31 +232,32 @@ sb_init_party_fd(switchboard_t *ctx, party_t *party, int fd, int perms,
     fd_obj->first_msg            = NULL;
     fd_obj->last_msg             = NULL;
     fd_obj->subscribers          = NULL;
+    fd_obj->proxy_close          = proxy_close;
     fd_obj->fd                   = fd;
 
     if (perms != O_WRONLY) {
-	party->open_for_read    = true;
-	party->can_read_from_it = true;
-	register_read_fd(ctx, party);
-
+        party->open_for_read    = true;
+        party->can_read_from_it = true;
+        register_read_fd(ctx, party);
     }
     if (perms != O_RDONLY) {
-	party->open_for_write  = true;
-	party->can_write_to_it = true;
-	register_writer_fd(ctx, party);
+        party->open_for_write  = true;
+        party->can_write_to_it = true;
+        register_writer_fd(ctx, party);
     }
     if (stop_when_closed) {
-	party->stop_on_close = true;
+        party->stop_on_close = true;
     }
 }
 
 party_t *
 sb_new_party_fd(switchboard_t *ctx, int fd, int perms,
-		   bool stop_when_closed, bool close_on_destroy)
+                bool stop_when_closed, bool close_on_destroy,
+                bool proxy_close)
 {
     party_t *result = (party_t *)calloc(sizeof(party_t), 1);
     sb_init_party_fd(ctx, result, fd, perms, stop_when_closed,
-		     close_on_destroy);
+                     close_on_destroy, proxy_close);
 
     return result;
 }
@@ -268,14 +270,14 @@ sb_new_party_fd(switchboard_t *ctx, int fd, int perms,
  */
 void
 sb_init_party_input_buf(switchboard_t *ctx, party_t *party, char *input,
-		size_t len, bool dup, bool free, bool close_fd_when_done)
+                        size_t len, bool dup, bool free, bool close_fd_when_done)
 {
     char *to_set = input;
 
     if (dup) {
-	free   = true;
-	to_set = (char *)calloc(len + 1, 1);
-	memcpy(to_set, input, len);
+        free   = true;
+        to_set = (char *)calloc(len + 1, 1);
+        memcpy(to_set, input, len);
     }
     party->open_for_read        = true;
     party->open_for_write       = false;
@@ -293,35 +295,35 @@ sb_init_party_input_buf(switchboard_t *ctx, party_t *party, char *input,
 
 party_t *
 sb_new_party_input_buf(switchboard_t *ctx, char *input, size_t len,
-		       bool dup, bool free, bool close_fd_when_done)
+                       bool dup, bool free, bool close_fd_when_done)
 {
     party_t *result = (party_t *)calloc(sizeof(party_t), 1);
     sb_init_party_input_buf(ctx, result, input, len, dup, free,
-			    close_fd_when_done);
+                            close_fd_when_done);
 
     return result;
 }
 
 void
 sb_party_input_buf_new_string(party_t *party, char *input, size_t len,
-			      bool dup, bool close_fd_when_done)
+                              bool dup, bool close_fd_when_done)
 {
     if (party->party_type != PT_STRING || !party->can_read_from_it) {
-	return;
+        return;
     }
     str_src_party_t *sobj = get_sstr_obj(party);
     if (sobj->free_on_close && sobj->strbuf) {
-	free(sobj->strbuf);
+        free(sobj->strbuf);
     }
     sobj->len                = len;
     sobj->close_fd_when_done = close_fd_when_done;
 
     if (dup) {
-	sobj->strbuf = (char *)calloc(len + 1, 1);
-	memcpy(sobj->strbuf, input, len);
-	sobj->free_on_close = true;
+        sobj->strbuf = (char *)calloc(len + 1, 1);
+        memcpy(sobj->strbuf, input, len);
+        sobj->free_on_close = true;
     } else {
-	sobj->strbuf = input;
+        sobj->strbuf = input;
     }
 }
 
@@ -338,16 +340,16 @@ sb_party_input_buf_new_string(party_t *party, char *input, size_t len,
  */
 void
 sb_init_party_output_buf(switchboard_t *ctx, party_t *party, char *tag,
-		      size_t buflen)
+                         size_t buflen)
 {
     if (buflen < PIPE_BUF) {
-	buflen = PIPE_BUF;
+        buflen = PIPE_BUF;
     }
 
     size_t n = buflen / PIPE_BUF;
 
     if (buflen % PIPE_BUF) {
-	n++;
+        n++;
     }
 
     party->can_read_from_it     = false;
@@ -404,8 +406,8 @@ sb_init_party_callback(switchboard_t *ctx, party_t *party, switchboard_cb_t cb)
  */
 void
 sb_monitor_pid(switchboard_t *ctx, pid_t pid, party_t *stdin_fd_party,
-	       party_t *stdout_fd_party, party_t *stderr_fd_party,
-	       bool shutdown)
+               party_t *stdout_fd_party, party_t *stderr_fd_party,
+               bool shutdown)
 {
     monitor_t *monitor = (monitor_t *)calloc(sizeof(monitor_t), 1);
 
@@ -473,7 +475,7 @@ get_msg_slot(switchboard_t *ctx)
     sb_heap_t *heap;
 
     if (!ctx->heap || (ctx->heap->cur_cell >= ctx->heap_elems)) {
-	add_heap(ctx);
+        add_heap(ctx);
     }
 
     if (ctx->freelist != NULL) {
@@ -481,9 +483,9 @@ get_msg_slot(switchboard_t *ctx)
         ctx->freelist = result->next;
 
         #ifdef SB_DEBUG
-	printf("get_slot: freelist (%p). New freelist: %p\n",
-	       result, ctx->freelist);
-	#endif
+        printf("get_slot: freelist (%p). New freelist: %p\n",
+               result, ctx->freelist);
+        #endif
         return result;
     }
 
@@ -518,25 +520,25 @@ static inline void
 publish(switchboard_t *ctx, char *buf, ssize_t len, party_t *party)
 {
     if (!party->open_for_write) {
-	return;
+        return;
     }
 
     fd_party_t *receiver = get_fd_obj(party);
     sb_msg_t   *msg      = get_msg_slot(ctx);
 
     if (len) {
-	memcpy(msg->data, buf, len);
-	msg->len       = len;
+        memcpy(msg->data, buf, len);
+        msg->len       = len;
     } else {
-	msg->len = 0;
+        msg->len = 0;
     }
 
     msg->next = NULL;
 
     if (receiver->first_msg == NULL) {
-	receiver->first_msg = msg;
+        receiver->first_msg = msg;
     } else {
-	receiver->last_msg->next = msg;
+        receiver->last_msg->next = msg;
     }
 
     receiver->last_msg = msg;
@@ -570,7 +572,7 @@ bool
 sb_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 {
     if (read_from == NULL || write_to == NULL) {
-	return false;
+        return false;
     }
 
     if (!read_from->open_for_read || !write_to->open_for_write) {
@@ -578,70 +580,70 @@ sb_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
     }
 
     if (read_from->party_type & (PT_LISTENER | PT_CALLBACK)) {
-	return false;
+        return false;
     }
 
     if (write_to->party_type & PT_LISTENER) {
-	return false;
+        return false;
     }
 
     if (read_from->party_type == PT_STRING) {
-	if (write_to->party_type != PT_FD) {
-	    return false;
-	}
-	str_src_party_t *s         = get_sstr_obj(read_from);
-	size_t           remaining = s->len;
-	char            *p         = s->strbuf;
-	char            *end       = p + remaining;
-	int              total     = 0;
+        if (write_to->party_type != PT_FD) {
+            return false;
+        }
+        str_src_party_t *s         = get_sstr_obj(read_from);
+        size_t           remaining = s->len;
+        char            *p         = s->strbuf;
+        char            *end       = p + remaining;
+        int              total     = 0;
 
-	while (p < (end - SB_MSG_LEN)) {
-	    publish(ctx, p, SB_MSG_LEN, write_to);
-	    p     += SB_MSG_LEN;
-	    total += SB_MSG_LEN;
-	}
-	if (p != end) {
-	    publish(ctx, p, end - p, write_to);
-	    total += end - p;
-	}
+        while (p < (end - SB_MSG_LEN)) {
+            publish(ctx, p, SB_MSG_LEN, write_to);
+            p     += SB_MSG_LEN;
+            total += SB_MSG_LEN;
+        }
+        if (p != end) {
+            publish(ctx, p, end - p, write_to);
+            total += end - p;
+        }
 
-	if (s->close_fd_when_done) {
-	    publish(ctx, NULL, 0, write_to);
-	}
+        if (s->close_fd_when_done) {
+            publish(ctx, NULL, 0, write_to);
+        }
 
-	return true;
+        return true;
     }
     else {
-	// Will be PT_FD.
-	fd_party_t     *r_fd_obj = get_fd_obj(read_from);
+        // Will be PT_FD.
+        fd_party_t     *r_fd_obj = get_fd_obj(read_from);
 
-	subscription_t *subscription;
-	subscription = (subscription_t *)calloc(sizeof(subscription_t), 1);
+        subscription_t *subscription;
+        subscription = (subscription_t *)calloc(sizeof(subscription_t), 1);
 
-	if (write_to->party_type == PT_FD) {
+        if (write_to->party_type == PT_FD) {
             #if defined(SB_DEBUG) || defined(SB_TEST)
-	    printf("sub(src_fd=%d, dst_fd=%d)\n",
-		   party_fd(read_from), party_fd(write_to));
-	    #endif
-	}
-	else if (write_to->party_type == PT_CALLBACK) {
-            #if defined(SB_DEBUG) || defined(SB_TEST)
-	    printf("sub(src_fd=%d, dst = callback)\n",
-		   party_fd(read_from));
-	    #endif
-	}
-        else {
-	    str_dst_party_t *dob = get_dstr_obj(write_to);
-	    if (!dob->tag) {
-		return false;
-	    }
-	    #if defined(SB_DEBUG) || defined(SB_TEST)
-	    printf("sub(src=%d, tag=%s)\n", party_fd(read_from), dob->tag);
-	    #endif
+            printf("sub(src_fd=%d, dst_fd=%d)\n",
+                   party_fd(read_from), party_fd(write_to));
+            #endif
         }
-	subscription->subscriber = write_to;
-	subscription->next       = r_fd_obj->subscribers;
-	r_fd_obj->subscribers    = subscription;
+        else if (write_to->party_type == PT_CALLBACK) {
+            #if defined(SB_DEBUG) || defined(SB_TEST)
+            printf("sub(src_fd=%d, dst = callback)\n",
+                   party_fd(read_from));
+            #endif
+        }
+        else {
+            str_dst_party_t *dob = get_dstr_obj(write_to);
+            if (!dob->tag) {
+                return false;
+            }
+            #if defined(SB_DEBUG) || defined(SB_TEST)
+            printf("sub(src=%d, tag=%s)\n", party_fd(read_from), dob->tag);
+            #endif
+        }
+        subscription->subscriber = write_to;
+        subscription->next       = r_fd_obj->subscribers;
+        r_fd_obj->subscribers    = subscription;
     }
 
     return true;
@@ -660,23 +662,23 @@ bool
 sb_pause_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 {
     if (read_from == NULL || write_to == NULL) {
-	return false;
+        return false;
     }
 
     fd_party_t     *reader = get_fd_obj(read_from);
     subscription_t *cur    = reader->subscribers;
 
     while (cur != NULL) {
-	if (cur->subscriber != write_to) {
-	    cur  = cur->next;
-	    continue;
-	}
-	if (cur->paused) {
-	    return false;
-	} else {
-	    cur->paused = true;
-	    return true;
-	}
+        if (cur->subscriber != write_to) {
+            cur  = cur->next;
+            continue;
+        }
+        if (cur->paused) {
+            return false;
+        } else {
+            cur->paused = true;
+            return true;
+        }
     }
     return false;
 }
@@ -690,23 +692,23 @@ bool
 sb_resume_route(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 {
     if (read_from == NULL || write_to == NULL) {
-	return false;
+        return false;
     }
 
     fd_party_t     *reader = get_fd_obj(read_from);
     subscription_t *cur    = reader->subscribers;
 
     while (cur != NULL) {
-	if (cur->subscriber != write_to) {
-	    cur  = cur->next;
-	    continue;
-	}
-	if (cur->paused) {
-	    cur->paused = true;
-	    return true;
-	} else {
-	    return false;
-	}
+        if (cur->subscriber != write_to) {
+            cur  = cur->next;
+            continue;
+        }
+        if (cur->paused) {
+            cur->paused = true;
+            return true;
+        } else {
+            return false;
+        }
     }
     return false;
 }
@@ -718,7 +720,7 @@ bool
 sb_route_is_active(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 {
     if (read_from == NULL || write_to == NULL) {
-	return false;
+        return false;
     }
 
     if (!read_from->open_for_read || !write_to->open_for_write) {
@@ -729,11 +731,11 @@ sb_route_is_active(switchboard_t *ctx, party_t *read_from, party_t *write_to)
     subscription_t *cur    = reader->subscribers;
 
     while (cur != NULL) {
-	if (cur->subscriber != write_to) {
-	    cur  = cur->next;
-	    continue;
-	}
-	return !cur->paused;
+        if (cur->subscriber != write_to) {
+            cur  = cur->next;
+            continue;
+        }
+        return !cur->paused;
     }
     return false;
 }
@@ -745,7 +747,7 @@ bool
 sb_route_is_paused(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 {
     if (read_from == NULL || write_to == NULL) {
-	return false;
+        return false;
     }
 
     if (!read_from->open_for_read || !write_to->open_for_write) {
@@ -756,11 +758,11 @@ sb_route_is_paused(switchboard_t *ctx, party_t *read_from, party_t *write_to)
     subscription_t *cur    = reader->subscribers;
 
     while (cur != NULL) {
-	if (cur->subscriber != write_to) {
-	    cur  = cur->next;
-	    continue;
-	}
-	return cur->paused;
+        if (cur->subscriber != write_to) {
+            cur  = cur->next;
+            continue;
+        }
+        return cur->paused;
     }
     return false;
 }
@@ -773,7 +775,7 @@ bool
 sb_is_subscribed(switchboard_t *ctx, party_t *read_from, party_t *write_to)
 {
     if (read_from == NULL || write_to == NULL) {
-	return false;
+        return false;
     }
 
     if (!read_from->open_for_read || !write_to->open_for_write) {
@@ -784,11 +786,11 @@ sb_is_subscribed(switchboard_t *ctx, party_t *read_from, party_t *write_to)
     subscription_t *cur    = reader->subscribers;
 
     while (cur != NULL) {
-	if (cur->subscriber != write_to) {
-	    cur  = cur->next;
-	    continue;
-	}
-	return true;
+        if (cur->subscriber != write_to) {
+            cur  = cur->next;
+            continue;
+        }
+        return true;
     }
     return false;
 }
@@ -836,45 +838,45 @@ set_fdinfo(switchboard_t *ctx)
     cur = ctx->parties_for_reading;
 
     while (cur != NULL) {
-	fd_party_t     *r_fd_obj    = get_fd_obj(cur);
-	subscription_t *subscribers = r_fd_obj->subscribers;
+        fd_party_t     *r_fd_obj    = get_fd_obj(cur);
+        subscription_t *subscribers = r_fd_obj->subscribers;
 
-	if (cur->open_for_read) {
-	    while (subscribers != NULL) {
-		if (cur->party_type == PT_FD) {
-		    party_t *onesub = subscribers->subscriber;
+        if (cur->open_for_read) {
+            while (subscribers != NULL) {
+                if (cur->party_type == PT_FD) {
+                    party_t *onesub = subscribers->subscriber;
 
-		    if (onesub && onesub->open_for_write) {
-			FD_SET(party_fd(cur), &ctx->readset);
-			open = true;
-			break;
+                    if (onesub && onesub->open_for_write) {
+                        FD_SET(party_fd(cur), &ctx->readset);
+                        open = true;
+                        break;
 
-		    }
-		} else {
-		    open = true;
-		    FD_SET(party_fd(cur), &ctx->readset);
-		    break;
-		}
-	       subscribers = subscribers->next;
-	    }
-	}
-	cur = cur->next_reader;
+                    }
+                } else {
+                    open = true;
+                    FD_SET(party_fd(cur), &ctx->readset);
+                    break;
+                }
+                subscribers = subscribers->next;
+            }
+        }
+        cur = cur->next_reader;
     }
 
     cur = ctx->parties_for_writing;
     while (cur != NULL) {
-	if (cur->party_type == PT_FD && cur->open_for_write &&
-	    cur->info.fdinfo.first_msg != NULL) {
-	    open = true;
-	    FD_SET(party_fd(cur), &ctx->writeset);
-	}
-	cur = cur->next_writer;
+        if (cur->party_type == PT_FD && cur->open_for_write &&
+            cur->info.fdinfo.first_msg != NULL) {
+            open = true;
+            FD_SET(party_fd(cur), &ctx->writeset);
+        }
+        cur = cur->next_writer;
     }
 
     // If nothing w/ a file descriptor is left standing, then we will
     // finish up.
     if (!open) {
-	ctx->done = true;
+        ctx->done = true;
     }
 }
 
@@ -890,11 +892,11 @@ void
 sb_set_io_timeout(switchboard_t *ctx, struct timeval *timeout)
 {
     if (timeout == NULL) {
-	ctx->io_timeout_ptr = NULL;
+        ctx->io_timeout_ptr = NULL;
     }
     else {
-	ctx->io_timeout_ptr = &ctx->io_timeout;
-	memcpy(ctx->io_timeout_ptr, timeout, sizeof(struct timeval));
+        ctx->io_timeout_ptr = &ctx->io_timeout;
+        memcpy(ctx->io_timeout_ptr, timeout, sizeof(struct timeval));
     }
 }
 
@@ -909,8 +911,8 @@ static inline bool
 reader_ready(switchboard_t *ctx, party_t *party)
 {
     if (party->open_for_read && FD_ISSET(party_fd(party), &ctx->readset) != 0) {
-	FD_CLR(party_fd(party), &ctx->writeset);
-	return true;
+        FD_CLR(party_fd(party), &ctx->writeset);
+        return true;
     }
     return false;
 }
@@ -920,8 +922,8 @@ static inline bool
 writer_ready(switchboard_t *ctx, party_t *party)
 {
     if (party->open_for_write &&
-	FD_ISSET(party_fd(party), &ctx->writeset) != 0) {
-	return true;
+        FD_ISSET(party_fd(party), &ctx->writeset) != 0) {
+        return true;
     }
     return false;
 }
@@ -941,21 +943,21 @@ add_data_to_string_out(str_dst_party_t *party, char *buf, ssize_t len) {
     #endif
 
     if (party->ix + len >= party->len) {
-	int newlen = party->len + len + party->step;
-	int rem    = newlen % party->step;
+        int newlen = party->len + len + party->step;
+        int rem    = newlen % party->step;
 
-	newlen       -= rem;
-	party->strbuf = realloc(party->strbuf, newlen);
+        newlen       -= rem;
+        party->strbuf = realloc(party->strbuf, newlen);
 
-	if (party->strbuf == 0) {
-	    #ifdef SB_DEBUG
-	    printf("REALLOC FAILED.  Skipping capture.\n");
-	    #endif
-	    return;
-	}
+        if (party->strbuf == 0) {
+            #ifdef SB_DEBUG
+            printf("REALLOC FAILED.  Skipping capture.\n");
+            #endif
+            return;
+        }
 
-	party->len = newlen;
-	memset(party->strbuf + party->ix, 0, newlen - party->ix);
+        party->len = newlen;
+        memset(party->strbuf + party->ix, 0, newlen - party->ix);
     }
 
     memcpy(&party->strbuf[party->ix], buf, len);
@@ -996,45 +998,69 @@ handle_one_read(switchboard_t *ctx, party_t *party)
     ssize_t read_result = read_one(party_fd(party), buf, SB_MSG_LEN);
 
     if (read_result <= 0) {
-	party->found_errno = errno;
-	party->open_for_read  = false;
-	#ifdef SB_DEBUG
-	printf("Shut down reading on fd %d in h1r top\n", party_fd(party));
-	#endif
-	if (party->stop_on_close) {
-	    ctx->done = true;
-	}
-    }
-    else {
-	#ifdef SB_DEBUG
-	printf(">>One read from fd %d", party_fd(party));
-	print_hex(buf, read_result, ": ");
-	#endif
+        if (read_result < 0) {
+            party->found_errno = errno;
+        }
+        party->open_for_read  = false;
+        #ifdef SB_DEBUG
+        printf("Shut down reading on fd %d in h1r top\n", party_fd(party));
+        #endif
+        if (party->stop_on_close) {
+            ctx->done = true;
+        }
 
-	fd_party_t     *obj     = get_fd_obj(party);
-	subscription_t *sublist = obj->subscribers;
+        /*
+         * When there is no input read, we need to propagate close
+         * to all the subscribers.
+         * This is driven by proxy_close subscriber attribute.
+         * As this happens via event-loop we can do that by passing
+         * empty write message to the subscriber
+         * (see comment in handle_one_write)
+         */
+        if (party->party_type == PT_FD) {
+            fd_party_t     *obj     = get_fd_obj(party);
+            subscription_t *sublist = obj->subscribers;
+            while (sublist != NULL) {
+                party_t *sub = sublist->subscriber;
+                if (sub->party_type == PT_FD) {
+                    fd_party_t *sub_fd = get_fd_obj(sub);
+                    if (sub_fd->proxy_close) {
+                        publish(ctx, NULL, 0, sub);
+                    }
+                }
+                sublist = sublist->next;
+            }
+        }
+    } else {
+        #ifdef SB_DEBUG
+        printf(">>One read from fd %d", party_fd(party));
+        print_hex(buf, read_result, ": ");
+        #endif
 
-	while (sublist != NULL) {
-	    party_t *sub = sublist->subscriber;
+        fd_party_t     *obj     = get_fd_obj(party);
+        subscription_t *sublist = obj->subscribers;
 
-	    if (!sublist->paused) {
-		switch(sub->party_type) {
-		case PT_FD:
-		    publish(ctx, buf, read_result, sub);
-		    break;
-		case PT_STRING:
-		    add_data_to_string_out(get_dstr_obj(sub), buf, read_result);
-		    break;
-		case PT_CALLBACK:
-		    (*sub->info.cbinfo.callback)(ctx->extra, sub->extra, buf,
-						 (size_t)read_result);
-		    break;
-		default:
-		    break;
-		}
-	    }
-	    sublist = sublist->next;
-	}
+        while (sublist != NULL) {
+            party_t *sub = sublist->subscriber;
+
+            if (!sublist->paused) {
+                switch(sub->party_type) {
+                    case PT_FD:
+                        publish(ctx, buf, read_result, sub);
+                        break;
+                    case PT_STRING:
+                        add_data_to_string_out(get_dstr_obj(sub), buf, read_result);
+                        break;
+                    case PT_CALLBACK:
+                        (*sub->info.cbinfo.callback)(ctx->extra, sub->extra, buf,
+                                                     (size_t)read_result);
+                        break;
+                    default:
+                        break;
+                }
+            }
+            sublist = sublist->next;
+        }
     }
 }
 
@@ -1051,21 +1077,21 @@ handle_one_accept(switchboard_t *ctx, party_t *party)
     socklen_t         address_len;
 
     while (true) {
-	int sockfd = accept(listener_fd, &address, &address_len);
+        int sockfd = accept(listener_fd, &address, &address_len);
 
-	if (sockfd >= 0) {
-	    (*listener_obj->accept_cb)(ctx, sockfd, &address, &address_len);
-	    break;
-	}
-	if (errno == EINTR || errno == EAGAIN) {
-	    continue;
-	}
-	if (errno == ECONNABORTED) {
-	    break;
-	}
-	party->found_errno   = errno;
-	party->open_for_read = false;
-	break;
+        if (sockfd >= 0) {
+            (*listener_obj->accept_cb)(ctx, sockfd, &address, &address_len);
+            break;
+        }
+        if (errno == EINTR || errno == EAGAIN) {
+            continue;
+        }
+        if (errno == ECONNABORTED) {
+            break;
+        }
+        party->found_errno   = errno;
+        party->open_for_read = false;
+        break;
     }
 }
 
@@ -1084,35 +1110,34 @@ handle_one_write(switchboard_t *ctx, party_t *party)
     fd_party_t *fdobj = get_fd_obj(party);
     sb_msg_t   *msg   = fdobj->first_msg;
 
-
     if (!msg) {
-	return;
+        return;
     }
 
     if (msg && (msg->next == NULL || msg == fdobj->last_msg)) {
-	fdobj->first_msg = NULL;
-	fdobj->last_msg = NULL;
+        fdobj->first_msg = NULL;
+        fdobj->last_msg = NULL;
     } else {
-	fdobj->first_msg = msg->next;
+        fdobj->first_msg = msg->next;
     }
 
     if (!msg->len) {
-	/* Real messages should always have lengths. We get passed a
-	 * zero-length message only if a string was fed in for input,
-	 * with instructions for us to close after it's consumed.
-	 *
-	 * The close instruction is communicated by sending a null
-	 * message. So when we see it, we mark ourselves as closed.
-	 */
+        /* Real messages should always have lengths. We get passed a
+         * zero-length message only if a string was fed in for input,
+         * with instructions for us to close after it's consumed.
+         *
+         * The close instruction is communicated by sending a null
+         * message. So when we see it, we mark ourselves as closed.
+         */
         #ifdef SB_DEBUG
-	printf("0-length write; shutting down write-side of fd.\n");
-	#endif
-	party->open_for_write = false;
-	if (!party->open_for_read) {
-	    close(party_fd(party));
-	}
-	free_msg_slot(ctx, msg);
-	return;
+        printf("0-length write; shutting down write-side of fd.\n");
+        #endif
+        party->open_for_write = false;
+        if (!party->open_for_read) {
+            close(party_fd(party));
+        }
+        free_msg_slot(ctx, msg);
+        return;
     }
 
     #ifdef SB_DEBUG
@@ -1121,32 +1146,32 @@ handle_one_write(switchboard_t *ctx, party_t *party)
     #endif
 
     if (!write_data(party_fd(party), msg->data, msg->len)) {
-	party->found_errno = errno;
+        party->found_errno = errno;
 
-	party->open_for_write = false;
-	if (!party->open_for_read) {
-	    close(party_fd(party));
-	}
+        party->open_for_write = false;
+        if (!party->open_for_read) {
+            close(party_fd(party));
+        }
 
-	if (party->stop_on_close) {
-	    ctx->done = true;
-	}
-	/* If the write failed, we'll never try to write again.
-	 * The message slot we tried to write gets freed below
-	 * no matter what, but let's free any other queued slots
-	 * here.
-	 */
-	sb_msg_t *to_free = fdobj->first_msg;
+        if (party->stop_on_close) {
+            ctx->done = true;
+        }
+        /* If the write failed, we'll never try to write again.
+     * The message slot we tried to write gets freed below
+     * no matter what, but let's free any other queued slots
+     * here.
+        */
+        sb_msg_t *to_free = fdobj->first_msg;
 
-	while (to_free) {
-	    sb_msg_t *next = to_free->next;
+        while (to_free) {
+            sb_msg_t *next = to_free->next;
 
-	    free_msg_slot(ctx, to_free);
-	    to_free = next;
-	}
-	fdobj->first_msg = NULL;
-	fdobj->last_msg  = NULL;
-	return;
+            free_msg_slot(ctx, to_free);
+            to_free = next;
+        }
+        fdobj->first_msg = NULL;
+        fdobj->last_msg  = NULL;
+        return;
     }
 
     free_msg_slot(ctx, msg);
@@ -1159,16 +1184,16 @@ handle_ready_reads(switchboard_t *ctx)
     party_t *reader = ctx->parties_for_reading;
 
     while(reader != NULL) {
-	if (reader_ready(ctx, reader)) {
-	    FD_CLR(party_fd(reader), &ctx->readset);
+        if (reader_ready(ctx, reader)) {
+            FD_CLR(party_fd(reader), &ctx->readset);
 
-	    if (reader->party_type == PT_FD) {
-		handle_one_read(ctx, reader);
-	    } else {
-		handle_one_accept(ctx, reader);
-	    }
-	}
-	reader = reader->next_reader;
+            if (reader->party_type == PT_FD) {
+                handle_one_read(ctx, reader);
+            } else {
+                handle_one_accept(ctx, reader);
+            }
+        }
+        reader = reader->next_reader;
     }
 }
 
@@ -1179,12 +1204,12 @@ handle_ready_writes(switchboard_t *ctx)
     party_t *writer = ctx->parties_for_writing;
 
     while (writer != NULL) {
-	if (writer_ready(ctx, writer)) {
-	    FD_CLR(party_fd(writer), &ctx->readset);
+        if (writer_ready(ctx, writer)) {
+            FD_CLR(party_fd(writer), &ctx->readset);
 
-	    handle_one_write(ctx, writer);
-	}
-	writer = writer->next_writer;
+            handle_one_write(ctx, writer);
+        }
+        writer = writer->next_writer;
     }
 }
 
@@ -1195,7 +1220,7 @@ subproc_mark_closed(monitor_t *proc, bool error)
     proc->closed = true;
 
     if (error) {
-	proc->found_errno = errno;
+        proc->found_errno = errno;
     }
 
     // We can mark the write side of this as closed right away. But we
@@ -1203,7 +1228,7 @@ subproc_mark_closed(monitor_t *proc, bool error)
     // first.
 
     if (proc->stdin_fd_party) {
-	proc->stdin_fd_party->open_for_write = false;
+        proc->stdin_fd_party->open_for_write = false;
     }
 }
 
@@ -1214,58 +1239,58 @@ sb_default_check_exit_conditions(switchboard_t *ctx)
     bool       close_if_drained = false;
 
     while (subproc) {
-	if (subproc->closed && subproc->shutdown_when_closed) {
-	    close_if_drained = true;
-	    break;
-	}
-	subproc = subproc->next;
+        if (subproc->closed && subproc->shutdown_when_closed) {
+            close_if_drained = true;
+            break;
+        }
+        subproc = subproc->next;
     }
 
     if (!close_if_drained) {
-	return false;
+        return false;
     }
 
     if (subproc->stdout_fd_party && subproc->stdout_fd_party->open_for_read) {
-	return false;
+        return false;
     } else {
         #if defined(SB_DEBUG) || defined(SB_TEST)
-	printf("Subproc stdout is closed for business.\n");
-	#endif
+        printf("Subproc stdout is closed for business.\n");
+        #endif
     }
 
     if (subproc->stderr_fd_party && subproc->stderr_fd_party->open_for_read) {
         #if defined(SB_DEBUG) || defined(SB_TEST)
-	printf("Read side of stderr is still open.\n");
-	#endif
-	return false;
+        printf("Read side of stderr is still open.\n");
+        #endif
+        return false;
     }
 
     party_t *writers = ctx->parties_for_writing;
 
     while (writers) {
 
-	if (writers->party_type == PT_FD) {
-	    fd_party_t *fd_writer = get_fd_obj(writers);
+        if (writers->party_type == PT_FD) {
+            fd_party_t *fd_writer = get_fd_obj(writers);
 
             #if defined(SB_DEBUG) || defined(SB_TEST)
-	    printf("checking for pending writes to fd %d\n", fd_writer->fd);
-	    #endif
-	    if (writers->open_for_write && fd_writer->first_msg) {
+            printf("checking for pending writes to fd %d\n", fd_writer->fd);
+            #endif
+            if (writers->open_for_write && fd_writer->first_msg) {
                 #if defined(SB_DEBUG) || defined(SB_TEST)
-		printf("Don't exit yet.\n");
-		#endif
-		return false;
-	    }
+                printf("Don't exit yet.\n");
+                #endif
+                return false;
+            }
             #if defined(SB_DEBUG) || defined(SB_TEST)
-	    if (writers->open_for_write) {
-		printf("No queue.\n");
-	    }
-	    else {
-		printf("Already closed.\n");
-	    }
-	    #endif
+            if (writers->open_for_write) {
+                printf("No queue.\n");
+            }
+            else {
+                printf("Already closed.\n");
+            }
+            #endif
         }
-	writers = writers->next_writer;
+        writers = writers->next_writer;
     }
 
     return true;
@@ -1279,35 +1304,35 @@ process_status_check(monitor_t *subproc, bool wait_on_exit)
 
 
     if (wait_on_exit) {
-	flag = 0;
+        flag = 0;
     } else {
-	flag = WNOHANG;
+        flag = WNOHANG;
     }
 
     if (subproc->closed) {
-	return;
+        return;
     }
 
     while (true) {
-	switch (waitpid(subproc->pid, &stat_info, flag)) {
-	case 0:
-	    return; // Process is sill running.
-	case -1:
-	    if (errno == EINTR) {
-		continue;
-	    }
-	    subproc->closed      = true;
-	    subproc->found_errno = errno;
-	    return;
-	default:
-	    subproc->closed      = true;
-	    subproc->exit_status = WEXITSTATUS(stat_info);
+        switch (waitpid(subproc->pid, &stat_info, flag)) {
+            case 0:
+                return; // Process is sill running.
+            case -1:
+                if (errno == EINTR) {
+                    continue;
+                }
+                subproc->closed      = true;
+                subproc->found_errno = errno;
+                return;
+            default:
+                subproc->closed      = true;
+                subproc->exit_status = WEXITSTATUS(stat_info);
 
-	    if (WIFSIGNALED(stat_info)) {
-		subproc->term_signal = WTERMSIG(stat_info);
-	    }
-	    return;
-	}
+                if (WIFSIGNALED(stat_info)) {
+                    subproc->term_signal = WTERMSIG(stat_info);
+                }
+                return;
+        }
     }
 }
 
@@ -1331,19 +1356,19 @@ handle_loop_end(switchboard_t *ctx)
     monitor_t *subproc = ctx->pid_watch_list;
 
     while (subproc != NULL) {
-	process_status_check(subproc, false);
-	subproc = subproc->next;
+        process_status_check(subproc, false);
+        subproc = subproc->next;
     }
 
     if (!ctx->progress_callback) {
-	ctx->progress_callback =
-	    (progress_cb_decl)sb_default_check_exit_conditions;
+        ctx->progress_callback =
+            (progress_cb_decl)sb_default_check_exit_conditions;
     }
 
     if (!ctx->progress_on_timeout_only) {
-	if ((*ctx->progress_callback)(ctx)) {
-	    ctx->done = true;
-	}
+        if ((*ctx->progress_callback)(ctx)) {
+            ctx->done = true;
+        }
     }
 }
 
@@ -1358,10 +1383,10 @@ is_registered_writer(switchboard_t *ctx, party_t *target)
     party_t *cur = ctx->parties_for_writing;
 
     while (cur) {
-	if (target == cur) {
-	    return true;
-	}
-	cur = cur->next_writer;
+        if (target == cur) {
+            return true;
+        }
+        cur = cur->next_writer;
     }
 
     return false;
@@ -1377,15 +1402,15 @@ void
 sb_destroy(switchboard_t *ctx, bool free_parties)
 {
     while (ctx->heap) {
-	sb_heap_t *to_free = ctx->heap;
-	ctx->heap          = ctx->heap->next;
-	free(to_free);
+        sb_heap_t *to_free = ctx->heap;
+        ctx->heap          = ctx->heap->next;
+        free(to_free);
     }
 
     while (ctx->pid_watch_list) {
-	monitor_t *to_free  = ctx->pid_watch_list;
-	ctx->pid_watch_list = ctx->pid_watch_list->next;
-	free(to_free);
+        monitor_t *to_free  = ctx->pid_watch_list;
+        ctx->pid_watch_list = ctx->pid_watch_list->next;
+        free(to_free);
     }
 
     party_t *cur, *next;
@@ -1393,57 +1418,57 @@ sb_destroy(switchboard_t *ctx, bool free_parties)
     cur = ctx->parties_for_reading;
 
     while (cur) {
-	if (cur->close_on_destroy) {
-	    if (cur->party_type & (PT_FD | PT_LISTENER) ) {
-		close(party_fd(cur));
-	    }
-	}
+        if (cur->close_on_destroy) {
+            if (cur->party_type & (PT_FD | PT_LISTENER) ) {
+                close(party_fd(cur));
+            }
+        }
 
-	fd_party_t     *fdobj = get_fd_obj(cur);
-	subscription_t *sub   = fdobj->subscribers;
+        fd_party_t     *fdobj = get_fd_obj(cur);
+        subscription_t *sub   = fdobj->subscribers;
 
-	while (sub) {
-	    subscription_t *next_sub = sub->next;
-	    free(sub);
-	    sub = next_sub;
-	}
+        while (sub) {
+            subscription_t *next_sub = sub->next;
+            free(sub);
+            sub = next_sub;
+        }
 
-	if (cur->party_type == PT_STRING) {
-	    str_src_party_t *sstr = get_sstr_obj(cur);
-	    if (sstr->strbuf != NULL) {
-		free(sstr->strbuf);
-	    }
-	}
-	next = cur->next_reader;
+        if (cur->party_type == PT_STRING) {
+            str_src_party_t *sstr = get_sstr_obj(cur);
+            if (sstr->strbuf != NULL) {
+                free(sstr->strbuf);
+            }
+        }
+        next = cur->next_reader;
 
-	if (free_parties) {
-	    if (!cur->can_write_to_it || !is_registered_writer(ctx, cur)) {
-		free(cur);
-	    }
-	}
-	cur = next;
+        if (free_parties) {
+            if (!cur->can_write_to_it || !is_registered_writer(ctx, cur)) {
+                free(cur);
+            }
+        }
+        cur = next;
     }
 
     cur = ctx->parties_for_writing;
     while (cur) {
-	if (cur->close_on_destroy && cur->party_type == PT_FD) {
-	    close(party_fd(cur));
-	}
-	next = cur->next_writer;
-	if (free_parties) {
-	    free(cur);
-	}
-	cur = next;
+        if (cur->close_on_destroy && cur->party_type == PT_FD) {
+            close(party_fd(cur));
+        }
+        next = cur->next_writer;
+        if (free_parties) {
+            free(cur);
+        }
+        cur = next;
     }
 
     if (free_parties) {
-	cur = ctx->party_loners;
+        cur = ctx->party_loners;
 
-	while (cur) {
-	    next = cur->next_loner;
-	    free(cur);
-	    cur = next;
-	}
+        while (cur) {
+            next = cur->next_loner;
+            free(cur);
+            cur = next;
+        }
     }
 }
 
@@ -1459,16 +1484,16 @@ sb_get_results(switchboard_t *ctx, sb_result_t *result)
     int               ix        = 0;
 
     if (result->inited) {
-	return;
+        return;
     }
 
     result->inited = true;
 
     while (party) {
-	if (party->party_type == PT_STRING && party->can_write_to_it) {
-	    capcount++;
-	}
-	party = party->next_loner;
+        if (party->party_type == PT_STRING && party->can_write_to_it) {
+            capcount++;
+        }
+        party = party->next_loner;
     }
 
     result->num_captures    = capcount;
@@ -1477,24 +1502,24 @@ sb_get_results(switchboard_t *ctx, sb_result_t *result)
     party = ctx->party_loners;
 
     while (party) {
-	if (party->party_type == PT_STRING && party->can_write_to_it) {
-	    capture_result_t *r = result->captures + ix;
+        if (party->party_type == PT_STRING && party->can_write_to_it) {
+            capture_result_t *r = result->captures + ix;
 
-	    strobj = get_dstr_obj(party);
-	    r->tag = strobj->tag;
-	    r->len = strobj->ix;
+            strobj = get_dstr_obj(party);
+            r->tag = strobj->tag;
+            r->len = strobj->ix;
 
-	    if (strobj->ix) {
-		r->contents = strobj->strbuf;
+            if (strobj->ix) {
+                r->contents = strobj->strbuf;
 
-		strobj->strbuf = 0;
-		strobj->ix     = 0;
-	    } else {
-		r->contents = NULL;
-	    }
-	    ix += 1;
-	}
-	party = party->next_loner;
+                strobj->strbuf = 0;
+                strobj->ix     = 0;
+            } else {
+                r->contents = NULL;
+            }
+            ix += 1;
+        }
+        party = party->next_loner;
     }
 }
 
@@ -1504,14 +1529,14 @@ sb_result_get_capture(sb_result_t *ctx, char *tag, bool caller_borrow)
     char *result;
 
     for (int i = 0; i < ctx->num_captures; i++) {
-	if (!strcmp(ctx->captures[i].tag, tag)) {
-	    result = ctx->captures[i].contents;
+        if (!strcmp(ctx->captures[i].tag, tag)) {
+            result = ctx->captures[i].contents;
 
-	    if (!caller_borrow) {
-		ctx->captures[i].contents = NULL;
-	    }
-	    return result;
-	}
+            if (!caller_borrow) {
+                ctx->captures[i].contents = NULL;
+            }
+            return result;
+        }
     }
     return NULL;
 }
@@ -1525,9 +1550,9 @@ sb_result_get_capture(sb_result_t *ctx, char *tag, bool caller_borrow)
 void
 sb_result_destroy(sb_result_t *ctx) {
     for (int i = 0; i < ctx->num_captures; i++) {
-	if(ctx->captures[i].contents) {
-	    free(ctx->captures[i].contents);
-	}
+        if(ctx->captures[i].contents) {
+            free(ctx->captures[i].contents);
+        }
     }
     free(ctx->captures);
 }
@@ -1541,14 +1566,14 @@ waiting_writes(switchboard_t *ctx)
     party_t *writer = ctx->parties_for_writing;
 
     while(writer) {
-	if (writer->open_for_write) {
-	    fd_party_t *fd_obj = get_fd_obj(writer);
+        if (writer->open_for_write) {
+            fd_party_t *fd_obj = get_fd_obj(writer);
 
-	    if (fd_obj->first_msg != NULL) {
-		return true;
-	    }
-	}
-	writer = writer->next_writer;
+            if (fd_obj->first_msg != NULL) {
+                return true;
+            }
+        }
+        writer = writer->next_writer;
     }
 
     return false;
@@ -1563,21 +1588,30 @@ bool
 sb_operate_switchboard(switchboard_t *ctx, bool loop)
 {
     if (ctx->done && !waiting_writes(ctx)) {
-	return true;
+        return true;
     }
     do {
-	set_fdinfo(ctx);
-	if (sb_default_check_exit_conditions(ctx)) {
-	    return true;
-	}
-	if (ctx->done && !waiting_writes(ctx)) {
-		return true;
-	}
-	ctx->fds_ready = select(ctx->max_fd, &ctx->readset, &ctx->writeset,
-				NULL, ctx->io_timeout_ptr);
-	handle_ready_reads(ctx);
-	handle_ready_writes(ctx);
-	handle_loop_end(ctx);
+        set_fdinfo(ctx);
+        if (sb_default_check_exit_conditions(ctx)) {
+            return true;
+        }
+        if (ctx->done && !waiting_writes(ctx)) {
+            return true;
+        }
+        ctx->fds_ready = select(ctx->max_fd, &ctx->readset, &ctx->writeset,
+                                NULL, ctx->io_timeout_ptr);
+        if (ctx->fds_ready > 0) {
+            handle_ready_reads(ctx);
+            handle_ready_writes(ctx);
+            handle_loop_end(ctx);
+        } else if (ctx->fds_ready == -1) {
+            // select returned error
+            if (errno == EINTR) {
+                continue;
+            }
+            ctx->done = true;
+            return false;
+        }
     } while(loop);
     return false;
 }

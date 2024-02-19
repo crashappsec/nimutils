@@ -63,7 +63,8 @@ proc tcsetattr*(fd: cint, opt: TcsaConst, info: var Termcap):
               cint {. cdecl, importc, header: "<termios.h>", discardable.}
 proc termcap_get*(termcap: var Termcap) {.sproc.}
 proc termcap_set*(termcap: var Termcap) {.sproc.}
-proc subproc_init(ctx: var SubProcess, cmd: cstring, args: cStringArray)
+proc subproc_init(ctx: var SubProcess, cmd: cstring, args: cStringArray,
+                  proxyStdinClose: bool)
     {.sproc.}
 proc subproc_set_envp(ctx: var SubProcess, args: cStringArray)
     {.sproc.}
@@ -271,12 +272,12 @@ template binaryCstringToString*(s: cstring, l: int): string =
 # for the time being. We should clean them up in a destructor.
 
 proc initSubProcess*(ctx: var SubProcess, cmd: string,
-                      args: openarray[string]) =
+                     args: openarray[string], proxyStdinClose: bool) =
   ## Initialize a subprocess with the command to call. This does *NOT*
   ## run the sub-process. Instead, you can first configure it, and
   ## then call `run()` when ready.
   var cargs = allocCstringArray(args)
-  subproc_init(ctx, cstring(cmd), cargs)
+  subproc_init(ctx, cstring(cmd), cargs, proxyStdinClose)
 
 proc setEnv*(ctx: var SubProcess, env: openarray[string]) =
   ## Explicitly set the environment the subprocess should inherit. If
@@ -352,7 +353,8 @@ type ExecOutput* = ref object
 proc runCommand*(exe:  string,
                  args: seq[string],
                  newStdin                = "",
-                 closeStdIn              = false,
+                 closeStdin              = false,
+                 proxyStdinClose         = true,
                  pty                     = false,
                  passthrough             = SpIoNone,
                  passStderrToStdout      = false,
@@ -369,10 +371,12 @@ proc runCommand*(exe:  string,
   ## - `exe`: The path to the executable to run.
   ## - `args`: The arguments to pass. DO NOT include `exe` again as
   ##           the first argument, as it is automatically added.
-  ## - `newStdIn`: If not empty, the contents will be fed to the subprocess
+  ## - `newStdin`: If not empty, the contents will be fed to the subprocess
   ##               after it starts.
-  ## - `closeStdIn`: If true, will close stdin after writing the contents
-  ##                 of `newStdIn` to the subprocess.
+  ## - `closeStdin`: If true, will close stdin after writing the contents
+  ##                 of `newStdin` to the subprocess.
+  ## - `proxyStdinClose`: If true, will close stdin subscribers after
+  ##                      source stdin is closed.
   ## - `pty`: Whether to use a pseudo-terminal (pty) to run the sub-process.
   ## - `passthrough`: Whether to proxy between the parent's stdin/stdout/stderr
   ##                  and the child's. You can specify which ones to proxy.
@@ -406,7 +410,7 @@ proc runCommand*(exe:  string,
   timeout.tv_sec  = Time(timeoutUsec / 1000000)
   timeout.tv_usec = Suseconds(timeoutUsec mod 1000000)
 
-  subproc.initSubprocess(binloc, @[exe] & args)
+  subproc.initSubprocess(binloc, @[exe] & args, proxyStdinClose)
   subproc.setTimeout(timeout)
 
   if len(env) != 0:
@@ -418,7 +422,7 @@ proc runCommand*(exe:  string,
   if capture != SpIoNone:
     subproc.setCapture(capture, combineCapture)
 
-  if newStdIn != "":
+  if newStdin != "":
     discard subproc.pipeToStdin(newStdin, closeStdin)
   subproc.run()
 
@@ -458,8 +462,8 @@ template runInteractiveCmd*(path: string,
 
 proc runCmdGetEverything*(exe:  string,
                           args: seq[string],
-                          newStdIn    = "",
-                          closeStdIn  = true,
+                          newStdin    = "",
+                          closeStdin  = true,
                           passthrough = false,
                           timeoutUsec = 1000000,
                           ensureExit  = true): ExecOutput =
@@ -467,10 +471,13 @@ proc runCmdGetEverything*(exe:  string,
   ## process.  This is similar to Nim's `execCmdEx` but allows for
   ## optional passthrough, timeouts, and sending an input string to
   ## stdin.
-  return runCommand(exe, args, newStdin, closeStdin, pty = false,
+  let isStdinTTY = isatty(0) != 0
+  return runCommand(exe, args, newStdin, closeStdin,
+                    pty         = if passthrough: isStdinTTY else: false,
                     passthrough = if passthrough: SpIoAll else: SpIoNone,
-                    timeoutUSec = timeoutUsec, capture = SpIoOutErr,
-                                  waitForExit = ensureExit)
+                    timeoutUSec = timeoutUsec,
+                    capture     = SpIoOutErr,
+                    waitForExit = ensureExit)
 
 proc runPager*(s: string) =
   var
