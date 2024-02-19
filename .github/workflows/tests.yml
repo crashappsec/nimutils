@@ -33,7 +33,7 @@ jobs:
         with:
           version: "binary:2.0.0"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Avoid rate limiting.
+          GITHUB_TOKEN: ${{ github.token }} # Avoid rate limiting.
 
       - name: Install Nimble dependencies
         run: nimble --accept install --depsOnly
