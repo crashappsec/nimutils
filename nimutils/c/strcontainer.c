@@ -62,7 +62,8 @@ c4string_from_cstr(char *s) {
 str_t *
 c4str_from_file(char *name, int *err)
 {
-    int fd = open(name, O_RDONLY|O_EXLOCK);
+    // O_EXLOCK
+    int fd = open(name, O_RDONLY);
     if (fd == -1) {
 	*err = errno;
 	return NULL;
