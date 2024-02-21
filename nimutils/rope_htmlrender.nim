@@ -48,18 +48,18 @@ proc toHtml*(r: Rope, indent = 0): string =
     result = r.toColor.toHtml()
 
   of RopeTable:
-    var title, thead, tbody, tfoot, caption : string
+    var title, caption, thead, tbody, tfoot: string
 
+    if r.title != nil:
+      title = r.title.toHtml()
+    if r.caption != nil:
+      caption = r.caption.toHtml()
     if r.thead != nil:
       thead = element("thead", r.thead.toHtml())
     if r.tbody != nil:
       tbody = element("tbody", r.tbody.toHtml())
     if r.tfoot != nil:
       tfoot = element("tfoot", r.tfoot.toHtml())
-    if r.title != nil:
-      title = r.title.toHtml()
-    if r.caption != nil:
-      caption = r.caption.toHtml()
 
     if title != "" and caption != "":
       title = element("h2", title)
@@ -69,7 +69,7 @@ proc toHtml*(r: Rope, indent = 0): string =
     elif caption != "":
       caption = element("caption", caption)
 
-    result = nobreak("table", thead & tbody & tfoot & caption)
+    result = nobreak("table", caption & thead & tbody & tfoot)
 
   of RopeTableRows:
     result = ""
