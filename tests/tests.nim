@@ -215,6 +215,7 @@ suite "ropes":
   test "rope_htmlrender":
     const s = """
       <table>
+        <caption>Commands</caption>
         <tbody>
           <tr>
             <th>Command Name</th>
@@ -237,6 +238,10 @@ suite "ropes":
 
       <div>
       <table>
+      <caption>
+      Commands
+      </caption>
+
       <tbody>
 
       <tr>

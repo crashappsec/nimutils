@@ -67,7 +67,9 @@ proc toHtml*(r: Rope, indent = 0): string =
       caption = element("caption", title)
       title   = ""
     elif caption != "":
-      caption = element("caption", caption)
+      let i = caption.find('<')
+      if not caption.continuesWith("<caption>", i):
+        caption = element("caption", caption)
 
     result = nobreak("table", caption & thead & tbody & tfoot)
 
