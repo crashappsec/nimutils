@@ -5,7 +5,7 @@ const tagsToConvert = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "td", "th",
 import unicode, rope_base, strutils
 
 proc element(name, contents: string): string =
-  result = "\n<" & name & ">\n" & contents & "</" & name & ">\n"
+  result = "\n<" & name & ">\n" & contents & "\n</" & name & ">\n"
 
 proc nobreak(name, contents: string): string =
   result = "<" & name & ">" & contents  & "</" & name & ">"
@@ -69,17 +69,16 @@ proc toHtml*(r: Rope, indent = 0): string =
     else:
       caption = element("caption", caption)
 
-    result = element("table", thead & tbody & tfoot & caption)
+    result = nobreak("table", thead & tbody & tfoot & caption)
 
   of RopeTableRows:
-    var rows: seq[string]
+    result = ""
     if r.cells.len() != 0:
       for item in r.cells:
-        rows.add(item.toHtml())
-      result = rows.join("\n")
+        result.add(item.toHtml())
 
   of RopeTableRow:
-    var cells: seq[string]
+    var cells = ""
     if r.cells.len() != 0:
       for item in r.cells:
         var cell = item.toHtml()
@@ -88,7 +87,7 @@ proc toHtml*(r: Rope, indent = 0): string =
           cells.add(cell)
         else:
           cells.add(element("td", cell))
-      result = element("tr", cells.join("\n"))
+      result = element("tr", cells)
 
   for item in r.siblings:
     result &= item.toHtml()
