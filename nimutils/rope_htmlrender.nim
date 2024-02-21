@@ -83,11 +83,12 @@ proc toHtml*(r: Rope, indent = 0): string =
     if r.cells.len() != 0:
       for item in r.cells:
         var cell = item.toHtml()
-        if cell.startswith("<td>") or cell.startswith("<th>"):
+        let i = cell.find('<')
+        if cell.continuesWith("<td>", i) or cell.continuesWith("<th>", i):
           cells.add(cell)
         else:
           cells.add(element("td", cell))
-      result = cells.join("\n")
+      result = element("tr", cells.join("\n"))
 
   for item in r.siblings:
     result &= item.toHtml()
