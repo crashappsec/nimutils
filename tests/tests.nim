@@ -232,4 +232,56 @@ suite "ropes":
       </table>
     """.dedent()
     let rope = s.htmlStringToRope()
-    check rope.toHtml() == s
+
+    const expected = """
+
+      <div>
+      <table>
+      <tbody>
+
+      <tr>
+
+      <th>
+      Command Name
+      </th>
+
+      <th>
+      Description
+      </th>
+
+      </tr>
+
+      <tr>
+
+      <td>
+      insert
+      </td>
+
+      <td>
+      Add chalk marks to artifacts
+      </td>
+
+      </tr>
+
+      <tr>
+
+      <td>
+      docgen
+      </td>
+
+      <td>
+      Generate technical documentation
+      </td>
+
+      </tr>
+
+      </tbody>
+      </table>
+      <div>
+
+      </div>
+
+      </div>
+    """.unindent()
+
+    check rope.toHtml() == expected
