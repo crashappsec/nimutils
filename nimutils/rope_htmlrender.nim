@@ -66,7 +66,7 @@ proc toHtml*(r: Rope, indent = 0): string =
     elif title != "":
       caption = element("caption", title)
       title   = ""
-    else:
+    elif caption != "":
       caption = element("caption", caption)
 
     result = nobreak("table", thead & tbody & tfoot & caption)
