@@ -1603,8 +1603,10 @@ sb_operate_switchboard(switchboard_t *ctx, bool loop)
         if (ctx->fds_ready > 0) {
             handle_ready_reads(ctx);
             handle_ready_writes(ctx);
+        }
+        if (ctx->fds_ready >= 0) {
             handle_loop_end(ctx);
-        } else if (ctx->fds_ready == -1) {
+        } else {
             // select returned error
             if (errno == EINTR) {
                 continue;
