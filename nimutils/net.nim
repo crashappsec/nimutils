@@ -180,21 +180,22 @@ proc createHttpClient*(uri: Uri = parseUri(""),
                        disallowHttp: bool = false,
                        userAgent: string = defUserAgent,
                        ): HttpClient =
-  var context: SslContext
-
-  if uri.scheme in @["", "https"]:
-    context = getSSLContext(caFile = pinnedCert)
-  else:
+  if uri.scheme == "http":
     if disallowHttp:
       raise newException(ValueError, "http:// URLs not allowed (only https).")
     elif pinnedCert != "":
       raise newException(ValueError, "Pinned cert not allowed with http " &
                                      "URL (only https).")
 
-  let client = newHttpClient(sslContext   = context,
-                             userAgent    = userAgent,
-                             timeout      = timeout,
-                             maxRedirects = maxRedirects)
+  let
+    # always pass ssl context to client
+    # as otherwise if http server returns redirect to https
+    # nim segfaults vs throwing exception
+    context = getSSLContext(caFile = pinnedCert)
+    client  = newHttpClient(sslContext   = context,
+                            userAgent    = userAgent,
+                            timeout      = timeout,
+                            maxRedirects = maxRedirects)
 
   if client == nil:
     raise newException(ValueError, "Invalid HTTP configuration")
