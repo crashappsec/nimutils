@@ -1,4 +1,5 @@
-import misc, sugar, rope_ansirender, rope_styles, terminal, strformat, unicode
+import std/[sugar, terminal, strformat, unicode]
+import "."/[misc, rope_ansirender, rope_styles]
 
 type
   ProgressWinchCb = () -> bool

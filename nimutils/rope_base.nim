@@ -1,5 +1,6 @@
-import unicode, options, unicodeid, unicodedb/properties, misc, strutils,
-       random, hexdump, tables
+import std/[unicode, options, strutils, tables]
+import pkg/[unicodedb/properties]
+import "."/[unicodeid, misc, random, hexdump]
 
 
 const

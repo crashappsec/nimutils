@@ -1,7 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import os, posix, strutils, posix_utils
+import std/[os, posix, strutils, posix_utils]
 
 when hostOs == "macosx":
   {.emit: """

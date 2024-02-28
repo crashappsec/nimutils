@@ -1,10 +1,9 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import options, unicode, misc, colortable, rope_construct, rope_base,
-       rope_prerender, rope_styles
-
-from strutils import join, endswith
+import std/[options, unicode]
+from std/strutils import join, endswith
+import "."/[misc, colortable, rope_construct, rope_base, rope_prerender, rope_styles]
 
 template ansiReset(): string = "\e[0m"
 

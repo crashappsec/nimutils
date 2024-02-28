@@ -9,7 +9,7 @@
 ## :Copyright: 2022, 2023, Crash Override, Inc.
 
 
-import tables, strutils, os
+import std/[tables, strutils, os]
 
 type
   FileTable*        = Table[string, string]

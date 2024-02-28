@@ -1,4 +1,4 @@
-import openssl, strutils
+import std/[openssl, strutils]
 
 {.pragma: lcrypto, cdecl, dynlib: DLLUtilName, importc.}
 

@@ -6,7 +6,7 @@
 ## haven't removed it is because there is code in Con4m that is still
 ## using it for the time being.
 
-import macros
+import std/macros
 
 type
   Either*[T, U] = object

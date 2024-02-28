@@ -1,4 +1,4 @@
-import os
+import std/os
 
 static:
   {.compile: joinPath(splitPath(currentSourcePath()).head, "c/strcontainer.c").}

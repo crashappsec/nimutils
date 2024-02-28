@@ -6,8 +6,8 @@
 ## probably should be updated / merged with the lower level IO
 ## multiplexing switchboard that is now part of the library.
 
-import tables, sugar, options, json, strutils, std/terminal, unicodeid,
-       rope_ansirender, rope_construct, std/httpclient, auth, algorithm
+import std/[tables, sugar, options, json, strutils, terminal, httpclient, algorithm]
+import "."/[unicodeid, rope_ansirender, rope_construct, auth]
 
 type
   InitCallback*   = ((SinkConfig) -> bool)
