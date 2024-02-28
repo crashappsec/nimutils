@@ -10,10 +10,12 @@ type
 
 proc newStsClient*(creds: AwsCredentials,
                    region: string = defaultRegion,
-                   host: string = awsURI): StsClient =
+                   host: string = awsURI,
+                   timeoutMilliseconds = 1000): StsClient =
   let
     # TODO - use some kind of template and compile-time variable to put the correct kernel used to build the sdk in the UA?
-    httpclient = newHttpClient("nimaws-sdk/0.3.3; "&defUserAgent.replace(" ", "-").toLower&"; darwin/16.7.0")
+    httpclient = newHttpClient("nimaws-sdk/0.3.3; "&defUserAgent.replace(" ", "-").toLower&"; darwin/16.7.0",
+                               timeout = timeoutMilliseconds)
     scope = AwsScope(date: getAmzDateString(), region: region, service: "sts")
 
   var
