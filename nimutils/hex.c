@@ -38,7 +38,7 @@ add_offset(char **optr, uint64_t start_offset, uint64_t offset_len,
     uint8_t  chr;
     char     *p    = *optr;
     uint64_t value = start_offset + (uint64_t)(line * cpl);
-    uint64_t ix    = offset_len;    
+    uint64_t ix    = offset_len;
     char buf[offset_len];
 
 
@@ -51,7 +51,7 @@ add_offset(char **optr, uint64_t start_offset, uint64_t offset_len,
 	value     = value >> 4;
 	buf[--ix] = hex_map[chr];
     }
-    
+
     for (ix = 0; ix < offset_len; ix++) {
 	*p++ = buf[ix];
     }
@@ -72,7 +72,7 @@ add_offset(char **optr, uint64_t start_offset, uint64_t offset_len,
 char *
 chexl(void *ptr, unsigned int len, unsigned int start_offset,
      unsigned int width, char *prefix) {
-    
+
     struct winsize ws;
     uint64_t       offset_len  = calculate_size_prefix(len, start_offset);
     uint64_t       chars_per_line;
@@ -257,7 +257,7 @@ chex(void *ptr, unsigned int len, unsigned int start_offset,
     char buf[1024] = {0, };
 
     sprintf(buf, "Dump of %d bytes at: %p\n", len, ptr);
-    
+
     return chexl(ptr, len, start_offset, width, buf);
 }
 

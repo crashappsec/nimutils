@@ -1,4 +1,4 @@
-char *test_txt = 
+char *test_txt =
 " 9:  9  -#  -&  -=   A\n"
 "12: 12  -#  -&  -=   a\n"
 " 2:  2  -#  -&  -=   A.\n"
