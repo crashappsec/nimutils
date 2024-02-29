@@ -16,7 +16,7 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 
-#define DEFAULT_HEAP_SIZE (256) 
+#define DEFAULT_HEAP_SIZE (256)
 #define SB_ALLOC_LEN (PIPE_BUF + sizeof(struct sb_msg_t))
 #define SB_MSG_LEN PIPE_BUF
 
@@ -134,7 +134,7 @@ typedef struct {
  * The union for the five party types above.
  */
 typedef union {
-    str_src_party_t  rstrinfo;     // Strings used as an input source only 
+    str_src_party_t  rstrinfo;     // Strings used as an input source only
     str_dst_party_t  wstrinfo;     // Strings used as an output sink only
     fd_party_t       fdinfo;       // Can be source, sink or both.
     listener_party_t listenerinfo; // We only read from it to kick off accept cb
@@ -147,10 +147,10 @@ typedef union {
  *    ran accross. This is only used for PT_FD and PT_LISTENER.
  * - `open` tracks whether we should deal with this party at all anymore;
  *   it can mean the fd is closed, or that nothing is routed to it anymore.
- * - `can_read_from_it` and `can_write_to_it` indicates whether a party is 
+ * - `can_read_from_it` and `can_write_to_it` indicates whether a party is
  *   a source (the former) or a sink (the later). Can be both, too.
  * - `close_on_destroy` indicates that we should call close() on any file
- *   descriptors when tearing down the switchboard. 
+ *   descriptors when tearing down the switchboard.
  *   When this is set, we do not report errors in close(), and we
  *   assume the same fd won't have been reused if it was otherwise
  *   closed during the switchboard operation.
@@ -186,9 +186,9 @@ typedef struct party_t {
     bool            close_on_destroy;
     bool            stop_on_close;
     struct party_t *next_reader;
-    struct party_t *next_writer;    
+    struct party_t *next_writer;
     struct party_t *next_loner;
-    void           *extra;    
+    void           *extra;
 } party_t;
 
 /*
@@ -201,14 +201,14 @@ typedef struct monitor_t {
     struct monitor_t *next;
     int               exit_status;
     pid_t             pid;
-    party_t          *stdin_fd_party; 
+    party_t          *stdin_fd_party;
     party_t          *stdout_fd_party;
     party_t          *stderr_fd_party;
     bool              shutdown_when_closed;
     bool              closed;
     int               found_errno;
     int               term_signal;
-} monitor_t;    
+} monitor_t;
 
 typedef struct {
     char *tag;
@@ -353,7 +353,7 @@ extern int subproc_get_errno(subprocess_t *, bool);
 extern int subproc_get_signal(subprocess_t *, bool);
 extern void subproc_set_extra(subprocess_t *, void *);
 extern void *subproc_get_extra(subprocess_t *);
-extern int subproc_get_pty_fd(subprocess_t *); 
+extern int subproc_get_pty_fd(subprocess_t *);
 extern void termcap_get(struct termios *);
 extern void termcap_set(struct termios *);
 extern void termcap_set_typical_parent();
@@ -361,4 +361,3 @@ extern void process_status_check(monitor_t *, bool);
 // pty params.
 // ASCII Cinema.
 #endif
-

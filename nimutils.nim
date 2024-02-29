@@ -28,5 +28,3 @@ export colortable, rope_base, rope_styles, rope_construct, rope_prerender,
 ## `logging`    because importing it sets up data structures that you might
 ##              not use; you should explicitly choose to import it.
 ## `managedtmp` because it adds a destructor you might not want.
-## `randwords`  because it does have a huge data structure embedded, which
-##              isn't worth it if you're not using it.
