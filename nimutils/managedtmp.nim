@@ -46,6 +46,20 @@ proc getNewTempFile*(prefix = defaultTmpPrefix,
 
   result = (newFileStream(f), path)
 
+proc writeNewTempFile*(data:     string,
+                       prefix    = defaultTmpPrefix,
+                       suffix    = defaultTmpSuffix,
+                       autoClean = true): string =
+  ## Return path for new temporary file with provided data written to it.
+  let (f, path) = getNewTempFile(prefix    = prefix,
+                                 suffix    = suffix,
+                                 autoClean = autoClean)
+  try:
+    f.write(data)
+  finally:
+    f.close()
+  return path
+
 template registerTempFile*(path: string) =
   ## Register a managed temp file created via some other interface.
   managedTmpFiles.add(path)
