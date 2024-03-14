@@ -47,52 +47,45 @@ type PrpCtx = object
   round1, round2, round3, round4: string
 
 proc initPrpContext(key, nonce, msg: string): PrpCtx =
-  var ks: string
-
-  result.contents = msg
-
   if key.len() notin [16, 24, 32]:
     raise newException(ValueError, "Invalid AES key size")
 
   if nonce.len() != 16:
     raise newException(ValueError, "Nonce must be 16 bytes.")
 
-  ks = aesPrfOneShot(key, 16*4, nonce)
+  let ks = aesPrfOneShot(key, 16*4, nonce)
 
-  result.round1 = ks[0  ..< 16]
-  result.round2 = ks[16 ..< 32]
-  result.round3 = ks[32 ..< 48]
-  result.round4 = ks[48 ..< 64]
+  result = PrpCtx(
+    contents: msg,
+    round1: ks[0  ..< 16],
+    round2: ks[16 ..< 32],
+    round3: ks[32 ..< 48],
+    round4: ks[48 ..< 64],
+  )
 
-{.emit: """
-  void xor_in_place(char *out, char *s2, int len) {
-    for (int i = 0; i < len; i++) {
-      out[i] ^= s2[i];
-    }
-  }
-"""}
+proc xorInPlace(a: var string, b: string, n: int) =
+  assert a.len >= n
+  assert b.len >= n
+  for i in 0 ..< n:
+    a[i] = char(a[i].uint8 xor b[i].uint8)
 
-proc xor_in_place(o: pointer, s: cstring, i: cint):
-                 void {.cdecl, importc, nodecl.}
-
-proc runHmacPrf(ctx: PrpCtx, key: string) =
-  var toXor = key.hmacSha3(ctx.contents[16..^1])
-
-  xor_in_place(addr ctx.contents[0], cstring(toXor), cint(16))
+proc runHmacPrf(ctx: var PrpCtx, key: string) =
+  let toXor = key.hmacSha3(ctx.contents[16..^1])
+  xorInPlace(ctx.contents, toXor, 16)
 
 proc runCtrPrf(ctx: PrpCtx, key: string) =
   aesCtrInPlaceOneShot(key, addr ctx.contents[16], cint(len(ctx.contents) - 16))
 
-template round1(ctx: PrpCtx) =
+proc round1(ctx: var PrpCtx) =
   ctx.runHmacPrf(ctx.round1)
 
-template round2(ctx: PrpCtx) =
+proc round2(ctx: var PrpCtx) =
   ctx.runCtrPrf(ctx.round2)
 
-template round3(ctx: PrpCtx) =
+proc round3(ctx: var PrpCtx) =
   ctx.runHmacPrf(ctx.round3)
 
-template round4(ctx: PrpCtx) =
+proc round4(ctx: var PrpCtx) =
   ctx.runCtrPrf(ctx.round4)
 
 proc prp*(key, toEncrypt: string, nonce: var string, randomNonce = true):
@@ -132,7 +125,7 @@ proc prp*(key, toEncrypt: string, nonce: var string, randomNonce = true):
   ctx.round3()
   ctx.round4()
 
-  return $(ctx.contents)
+  return ctx.contents
 
 proc brb*(key, toDecrypt: string, nonce: string): string =
   ## The reverse permutation for our 4-round Luby Rackoff PRP.
