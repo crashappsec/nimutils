@@ -6,9 +6,12 @@ import nimutils/box
 import nimutils/unicodeid
 import nimutils/randwords # large code size, not imported by default.
 import nimutils/either    # Not working well, not import by default.
+import nimutils/rope_construct
+import nimutils/rope_htmlrender
 import tables
 import json
 import os
+import strutils
 
 proc removeSpaces(s: string): string =
   for c in s:
@@ -207,3 +210,83 @@ suite "misc":
     y = flatten[int](x)
     check y == @[1,2,3,4,5,6,7,8,9,10,11,12]
     check not compiles(y = flatten[int](z))
+
+suite "ropes":
+  test "rope_htmlrender":
+    const s = """
+      <table>
+        <caption>Commands</caption>
+        <tbody>
+          <tr>
+            <th>Command Name</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>insert</td>
+            <td>Add chalk marks to artifacts</td>
+          </tr>
+          <tr>
+            <td>docgen</td>
+            <td>Generate technical documentation</td>
+          </tr>
+        </tbody>
+      </table>
+    """.dedent()
+    let rope = s.htmlStringToRope()
+
+    const expected = """
+
+      <div>
+      <table>
+      <caption>
+      Commands
+      </caption>
+
+      <tbody>
+
+      <tr>
+
+      <th>
+      Command Name
+      </th>
+
+      <th>
+      Description
+      </th>
+
+      </tr>
+
+      <tr>
+
+      <td>
+      insert
+      </td>
+
+      <td>
+      Add chalk marks to artifacts
+      </td>
+
+      </tr>
+
+      <tr>
+
+      <td>
+      docgen
+      </td>
+
+      <td>
+      Generate technical documentation
+      </td>
+
+      </tr>
+
+      </tbody>
+      </table>
+      <div>
+
+      </div>
+
+      </div>
+    """.unindent()
+
+    check rope.toHtml() == expected

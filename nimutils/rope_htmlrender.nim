@@ -5,7 +5,7 @@ const tagsToConvert = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "td", "th",
 import unicode, rope_base, strutils
 
 proc element(name, contents: string): string =
-  result = "\n<" & name & ">\n" & contents & "</" & name & ">\n"
+  result = "\n<" & name & ">\n" & contents & "\n</" & name & ">\n"
 
 proc nobreak(name, contents: string): string =
   result = "<" & name & ">" & contents  & "</" & name & ">"
@@ -48,46 +48,48 @@ proc toHtml*(r: Rope, indent = 0): string =
     result = r.toColor.toHtml()
 
   of RopeTable:
-    var title, thead, tbody, tfoot, caption : string
+    var title, caption, thead, tbody, tfoot: string
 
+    if r.title != nil:
+      title = r.title.toHtml()
+    if r.caption != nil:
+      caption = r.caption.toHtml()
     if r.thead != nil:
       thead = element("thead", r.thead.toHtml())
     if r.tbody != nil:
       tbody = element("tbody", r.tbody.toHtml())
     if r.tfoot != nil:
       tfoot = element("tfoot", r.tfoot.toHtml())
-    if r.title != nil:
-      title = r.title.toHtml()
-    if r.caption != nil:
-      caption = r.caption.toHtml()
 
     if title != "" and caption != "":
       title = element("h2", title)
     elif title != "":
       caption = element("caption", title)
       title   = ""
-    else:
-      caption = element("caption", caption)
+    elif caption != "":
+      let i = caption.find('<')
+      if not caption.continuesWith("<caption>", i):
+        caption = element("caption", caption)
 
-    result = element("table", thead & tbody & tfoot & caption)
+    result = nobreak("table", caption & thead & tbody & tfoot)
 
   of RopeTableRows:
-    var rows: seq[string]
+    result = ""
     if r.cells.len() != 0:
       for item in r.cells:
-        rows.add(item.toHtml())
-      result = rows.join("\n")
+        result.add(item.toHtml())
 
   of RopeTableRow:
-    var cells: seq[string]
+    var cells = ""
     if r.cells.len() != 0:
       for item in r.cells:
         var cell = item.toHtml()
-        if cell.startswith("<td>") or cell.startswith("<th>"):
+        let i = cell.find('<')
+        if cell.continuesWith("<td>", i) or cell.continuesWith("<th>", i):
           cells.add(cell)
         else:
           cells.add(element("td", cell))
-      result = cells.join("\n")
+      result = element("tr", cells)
 
   for item in r.siblings:
     result &= item.toHtml()
