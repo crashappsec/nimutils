@@ -41,7 +41,7 @@
 ## `subprocess` interface, though we will, in the not-too-distant
 ## future add a more polished interface to this module that would be
 ## appropriate for server setups, etc.
-import os, posix
+import std/[os, posix]
 
 {.pragma: sb, cdecl, importc, nodecl.}
 

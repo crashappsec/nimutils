@@ -4,10 +4,11 @@
   Implements functions to handle the AWS Signature v4 request signing
   http://docs.aws.amazon.com/general/latest/gr/sigv4_signing.html
  ]#
-import times, algorithm, tables, sha, re
-import strutils except toLower
-import unicode except strip
-from uri import parseUri
+import std/[times, algorithm, tables, re]
+import std/strutils except toLower
+import std/unicode except strip
+from std/uri import parseUri
+import "."/sha
 
 
 type

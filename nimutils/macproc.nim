@@ -2,7 +2,7 @@ when not defined(macosx):
   static:
     error "macproc.nim only loads on macos"
 
-import os, posix
+import std/[os, posix]
 
 {.compile: joinPath(splitPath(currentSourcePath()).head, "c/macproc.c").}
 

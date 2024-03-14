@@ -2,5 +2,5 @@
 ## multiplex the Dict interface statically, depending on whether or
 ## not threads are used.
 when compileOption("threads"):
-  import crownhash
+  import "."/crownhash
   export crownhash

@@ -4,7 +4,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022 - 2023, Crash Override, Inc.
 
-import tables, strutils, unicode
+import std/[tables, strutils, unicode]
 
 type
   HtmlNodeType* = enum

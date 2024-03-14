@@ -2,9 +2,8 @@
   Simple example of using a nim S3Client to put an object into an S3 bucket
 ]#
 
-import os, tables, times, math, asyncdispatch, httpclient
-import streams
-import ../s3client
+import std/[os, tables, times, math, asyncdispatch, httpclient, streams]
+import ".."/s3client
 
 if not existsEnv("AWS_ACCESS_ID") or not existsEnv("AWS_ACCESS_SECRET"):
   quit("No credentials found in environment.")

@@ -7,8 +7,8 @@
 # Everything else on my original wishlist is here now though.
 
 
-import tables, options, std/terminal, rope_base, rope_construct, rope_styles,
-       unicodeid, unicode, misc
+import std/[tables, options, terminal, unicode]
+import "."/[rope_base, rope_construct, rope_styles, unicodeid, misc]
 
 type
   RenderBoxKind* = enum RbText, RbBoxes

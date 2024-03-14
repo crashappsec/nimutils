@@ -1,8 +1,8 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import os, file, posix, misc, subproc
-
+import std/[os, posix]
+import "."/[file, misc, subproc]
 
 proc flock*(fd: cint, flags: cint): cint {.discardable, importc,
                                            header: "<sys/file.h>".}

@@ -1,4 +1,5 @@
-import switchboard, posix, random, os, file
+import std/[posix, os]
+import "."/[switchboard, random, file]
 
 {.warning[UnusedImport]: off.}
 {.compile: joinPath(splitPath(currentSourcePath()).head, "c/subproc.c").}

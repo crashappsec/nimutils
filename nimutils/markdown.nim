@@ -5,7 +5,7 @@
 
 
 
-import random
+import "."/random
 
 {.emit: """#include "md4c.h" """.}
 
