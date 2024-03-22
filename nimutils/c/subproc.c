@@ -403,21 +403,18 @@ setup_subscriptions(subprocess_t *ctx, bool pty)
 static void
 subproc_do_exec(subprocess_t *ctx)
 {
-    int error;
     if (ctx->envp) {
-        error = execve(ctx->cmd, ctx->argv, ctx->envp);
+        execve(ctx->cmd, ctx->argv, ctx->envp);
     }
     else {
-        error = execv(ctx->cmd, ctx->argv);
+        execv(ctx->cmd, ctx->argv);
     }
-    if (error == -1) {
-        fprintf(stderr, "%s: %s\n",ctx->cmd, strerror(errno));
-        exit(1);
-    }
-
-    // If we get past the exec, kill the subproc, which will
-    // tear down the switchboard.
-    abort();
+    // If we get past the exec, kill the subproc with non-zero exit code,
+    // which will tear down the switchboard and print to stderr the
+    // errono description. For example for nonexisting command will be:
+    // foo: No such file or directory
+    fprintf(stderr, "%s: %s\n",ctx->cmd, strerror(errno));
+    exit(1);
 }
 
 party_t *
