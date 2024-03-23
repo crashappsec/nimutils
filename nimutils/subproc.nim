@@ -1,7 +1,6 @@
 import switchboard, posix, random, os, file
 
 {.warning[UnusedImport]: off.}
-{.compile: joinPath(splitPath(currentSourcePath()).head, "c/subproc.c").}
 {.pragma: sproc, cdecl, importc, nodecl.}
 
 type
