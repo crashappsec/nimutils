@@ -61,7 +61,11 @@ proc getTargetArch*(): string =
   setupTargetArch()
   return targetArch
 
-template applyCommonLinkOptions*(staticLink = true, quiet = true) =
+template applyCommonLinkOptions*(staticLink = true,
+                                 quiet = true,
+                                 extra_include: seq[string] = @[]) =
+  var all_includes = extra_include
+
   ## Applies the link options necessary for projects using nimutils.
   ## Meant to be called from your config.nims file.
   switch("d", "ssl")
@@ -69,8 +73,13 @@ template applyCommonLinkOptions*(staticLink = true, quiet = true) =
   switch("gc", "refc")
   switch("path", ".")
   switch("d", "useOpenSSL3")
-  switch("cincludes", getEnv("HOME").joinPath("/.local/c0/include"))
-  switch("cincludes", "../libcon4m/include")
+  var local = getenv("EXTRA_INCLUDE")
+
+  if local != "":
+    all_includes.add(local.split(":"))
+
+  for item in all_includes:
+    switch("cincludes", item)
 
   setupTargetArch(quiet)
 

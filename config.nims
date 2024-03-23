@@ -28,5 +28,5 @@ var
   libs     = ["pcre", "ssl", "crypto", "gumbo", "con4m", "unibreak", "utf8proc",
               "ffi"]
 
-applyCommonLinkOptions()
+applyCommonLinkOptions(extra_include = @[getEnv("HOME").joinPath("/.local/c0/include")])
 staticLinkLibraries(libs, libDir, muslBase = localDir)
