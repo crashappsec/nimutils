@@ -69,8 +69,8 @@ proc table*[T: string|Rich](cells: seq[seq[T]],
       if len(row) > ncols:
         ncols = len(row)
 
-    t = con4m_grid(cint(len(cells)), cint(ncols), table_style, cell_style,
-                   heading_style, cint(header_rows), cint(header_cols),
+    t = con4m_grid(cint(len(cells)), cint(ncols), table_style, heading_style,
+                   cell_style, cint(header_rows), cint(header_cols),
                    cint(st))
 
     for inrow in cells:
