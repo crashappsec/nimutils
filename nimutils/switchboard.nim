@@ -45,9 +45,6 @@ import os, posix
 
 {.pragma: sb, cdecl, importc, nodecl.}
 
-static:
-  {.compile: joinPath(splitPath(currentSourcePath()).head, "c/switchboard.c").}
-
 type
   SwitchBoard* {.importc: "switchboard_t", header: "switchboard.h" .} = object
   Party* {.importc: "party_t", header: "switchboard.h" .} = object

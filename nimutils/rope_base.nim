@@ -76,14 +76,14 @@ type
     inverse*:                Option[bool]
     strikethrough*:          Option[bool]
     italic*:                 Option[bool]
-    underlineStyle*:         Option[UnderlineStyle]
-    bulletChar*:             Option[Rune]
     useTopBorder*:           Option[bool]
     useBottomBorder*:        Option[bool]
     useLeftBorder*:          Option[bool]
     useRightBorder*:         Option[bool]
     useVerticalSeparator*:   Option[bool]
     useHorizontalSeparator*: Option[bool]
+    bulletChar*:             Option[Rune]
+    underlineStyle*:         Option[UnderlineStyle]
     boxStyle*:               Option[BoxStyle]
     alignStyle*:             Option[AlignStyle]
 
@@ -331,7 +331,11 @@ proc search*(r: Rope,
   ## - If the `first` field is true, then the search will stop when the
   ##   first result is found (so only 0 or 1 results will be returned).
 
+  if r == nil:
+    return
   for item in r.ropeWalk():
+    if item == nil:
+      continue
     if item.tag != "" and len(tags) != 0 and item.tag in tags:
       result.add(item)
     elif item.class != "" and len(classes) != 0 and item.class in classes:

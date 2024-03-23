@@ -55,16 +55,17 @@ proc get*[T](fa: FlexArray[T], ix: int): Option[T] =
 proc `[]`*[T](fa: FlexArray[T], ix: int): T =
   var code: cint
   let p = flexarray_get(fa.arr, uint64(ix), addr code)
+
   if code == 0:
     return cast[T](p)
   else:
     raise newException(ValueError, "Array index out of bounds")
 
-
 proc `[]=`*[T](fa: FlexArray[T], ix: int, item: T) =
   when T is ref:
     GC_ref(item)
-  discard flexarray_set(fa.arr, uint64(ix), cast[pointer](item))
+  if not flexarray_set(fa.arr, uint64(ix), cast[pointer](item)):
+    raise newException(ValueError, "Array index out of bounds")
 
 proc put*[T](fa: FlexArray[T], ix: int, item: T): bool {.discardable.} =
   when T is ref:
@@ -72,9 +73,6 @@ proc put*[T](fa: FlexArray[T], ix: int, item: T): bool {.discardable.} =
   return flexarray_set(fa.arr, uint64(ix), cast[pointer](item))
 
 proc newArrayFromSeq*[T](s: seq[T]): FlexArray[T] =
-  var
-    err: cint
-
   result = FlexArray[T]()
   result.arr = flexarray_new(uint64(s.len()))
 
