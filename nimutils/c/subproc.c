@@ -414,6 +414,10 @@ subproc_do_exec(subprocess_t *ctx)
     // errono description. For example for nonexisting command will be:
     // foo: No such file or directory
     fprintf(stderr, "%s: %s\n",ctx->cmd, strerror(errno));
+    // TODO switch back to abort() once better event handling is implemented
+    // in switchboard to correctly detect exit code as otherwise waitpid()
+    // detects program has exited however not all signal handlers have executed
+    // hence exit code is unknown yet
     exit(1);
 }
 
