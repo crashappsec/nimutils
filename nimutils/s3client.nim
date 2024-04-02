@@ -42,7 +42,7 @@ proc newS3Client*(creds: AwsCredentials, region: string = defaultRegion,
   if mhost.len > 0:
     if mhost.find("http") == -1:
       echo "host should be a valid URI assuming http://"
-      mhost = "http://"&host
+      mhost = "http://" & host
   else:
     mhost = awsURI
   endpoint = parseUri(mhost)
