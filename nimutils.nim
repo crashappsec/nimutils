@@ -16,13 +16,13 @@ import nimutils/[box, random, unicodeid, pubsub, sinks, auth, misc, texttable],
        nimutils/[sha, aes, prp, hexdump, markdown, htmlparse, net, colortable],
        nimutils/[rope_base, rope_styles, rope_construct, rope_prerender],
        nimutils/[rope_ansirender, rope_htmlrender, rope_textrender],
-       nimutils/[switchboard, subproc, int128_t, dict, list, c4str]
+       nimutils/[switchboard, subproc, int128_t, dict, list, libwrap, grid]
 export box, random, unicodeid, pubsub, sinks, auth, misc, random, texttable,
        file, filetable, encodings, advisory_lock, progress, sha,
        aes, prp, hexdump, markdown, htmlparse, net, colortable, rope_base,
        rope_styles, rope_construct, rope_prerender, rope_ansirender,
        rope_htmlrender, rope_textrender, switchboard, subproc, int128_t,
-       dict, list, c4str
+       dict, list, c4str, libwrap, grid
 
 when defined(macosx):
   import nimutils/macproc
@@ -40,6 +40,7 @@ when defined(macosx):
 when isMainModule:
   import tables, streams, algorithm, strutils
   useCrashTheme()
+  install_default_styles()
 
   when defined(macosx):
     proc psSorter(x, y: ProcessInfo): int =
@@ -312,6 +313,7 @@ when isMainModule:
                               500: "boz"}.toDict()
       y: Dict[int, string] = newDict[int, string]()
 
+    echo "assigns"
     y[500]  = "boz"
     y[1000] = "zork"
     y[17]   = "foo"
@@ -321,7 +323,7 @@ when isMainModule:
     echo x[17]
     x[17] = "blah"
     y[17] = "blah"
-    echo x[17]
+    echo x[17], " == 'blah'"
     for i in 1..1000:
       x[17] = $i
       y[17] = x[17]
@@ -329,19 +331,21 @@ when isMainModule:
         x.del(17)
         y.del(17)
 
-    echo x.keys()
-    echo x.values()
-    echo x.items()
+    echo "X's Keys: ", x.keys()
+    echo "X's Values: ", x.values()
+    echo "X's Items: ", x.items()
 
-    echo y.keys()
-    echo y.values()
-    echo y.items()
+    echo "Y's Keys: ", y.keys()
+    echo "Y's Values: ", y.values()
+    echo "Y's Items: ", y.items()
+
     var d2: Dict[string, int] = newDict[string, int]()
     var seqstr = ["ay", "bee", "cee", "dee", "e", "eff", "gee", "h", "i", "j"]
 
     for i, item in seqstr:
       d2[item] = i
 
+    echo "And now d2..."
     echo d2.keys()
     echo d2.values()
     echo d2.items()
@@ -360,6 +364,18 @@ when isMainModule:
     echo d2
     echo d3
 
+  proc treeTest() =
+    var
+      t: Tree = new_tree(c4str("Root"))
+      n1 = t.add_node(c4str("Level 1, Child 1"))
+      n2 = t.add_node(c4str("Level 1, Child 2"))
+      n3 = t.add_node(c4str("Level 1, Child 3"))
+      n4 = n1.add_node(c4str("Level 2 under child 1"))
+      n6 = n4.add_node(c4str("Level 3"))
+      g  = grid_tree(t)
+
+    rich_print(toRich(g))
+
   proc instantTableTests() =
     print(h2("Instant table tests"))
     var mess1 = @["a.out.dSYM", "encodings.nim", "managedtmp.nim",
@@ -377,10 +393,11 @@ when isMainModule:
                   "texttable.nim", "either.nim", "macproc.nim", "pubsub.nim",
                   "sigv4.nim", "unicodeid.nim"]
     mess1.sort()
-    let tbl = instantTable(mess1, h2("Auto-arranged into columns")).
-                           noBorders().tpad(2)
+    let tbl = horizontal_flow(mess1, "Auto-arranged into columns",
+                           maxcols = 6,
+                           borders = false)
 
-    print(tbl)
+    rich_print(toRich(tbl))
 
     var mess2 = @[@["1, 1", "Column 2", "Column 3", "Column 4"],
                   @["Row 2", "has some medium length strings",
@@ -390,30 +407,31 @@ when isMainModule:
 
     let
       wi = [(12, true), (40, false), (0, false), (12, true)]
-      t2 = quickTable(mess2, title = h2("Table with horizontal header"),
-                      caption = h2("Table with horizontal header")).
-             tpad(1).typicalBorders().colWidths(wi)
-    print(t2)
+      t2 = table(mess2, title = "Table with horizontal header",
+                      caption = "Table with horizontal header")
+
+    rich_print(toRich(t2))
 
     let t3 = quickTable(mess2, verticalHeaders = true,
-                       title = h2("Table with vertical header"),
-                       caption = h2("Table with vertical header"))
+                      title = h2("Table with vertical header"),
+                      caption = h2("Table with vertical header"))
     print(t3.typicalBorders())
 
     let t4 = quickTable(mess2, noheaders = true,
-                          title = "Table w/o header",
-                          caption = "Table w/o header").
-             bpad(1).boldBorders().allBorders()
+                         title = "Table w/o header",
+                         caption = "Table w/o header").
+            bpad(1).boldBorders().allBorders()
     print(t4)
     let t5 = t4.highlightMatches(@["medium", "the"])
     print(t5)
 
     let t6 = atom("This has one string that's pretty long, ")  +
-             atom("but the rest are short. But this one is ") +
-             atom("really long. I mean, really long, long ") +
-             atom("enough to drive the other column into oblivion.")
+            atom("but the rest are short. But this one is ") +
+            atom("really long. I mean, really long, long ") +
+            atom("enough to drive the other column into oblivion.")
 
     print(callout(t6.highlightMatches(@["one", "other"])))
+
 
   proc calloutTest() =
     let
@@ -468,7 +486,7 @@ Oh look, here comes a table!
   #  macProcTest()
   info(em("This is a test message."))
   error(italic(underline(("So is this."))))
-  nestedTableTest()
+  #nestedTableTest()
   basic_subproc_tests()
   instantTableTests()
   calloutTest()
@@ -483,10 +501,25 @@ Oh look, here comes a table!
   print(pre(repr(goodie)))
   print(goodie)
 
-  print h1("Heading 1")
-  print h2("Heading 2")
-  print h3("Heading 3")
-  print h4("Heading 4")
-  print h5("Heading 5")
-  print h6("Heading 6")
+
+  var c1 = cell("Heading 1", "h1")
+  var c2 = cell("Heading 2", "h2")
+  var c3 = cell("Heading 3", "h3")
+  var c4 = cell("Heading 4", "h4")
+  var c5 = cell("Heading 5", "h5")
+  var c6 = cell("Heading 6", "h6")
+  var g = grid_new(td_tag = "")
+
+  rich_print(toRich(flow(@[c1, c2, c3, c4, c5, c6])))
+
+  var f = horizontal_flow(@["hello", "this", "is", "a", "test", "of", "the",
+                         "emergency", "broadcast", "system.", "Do", "not",
+                         "adjust", "your", "dial,", "for", "it", "is",
+                         "only", "a", "test."], title = "Hello, table!",
+                       caption = "Yup, it's a caption.", borders = false)
+
+  rich_print(toRich(f))
+
+  treeTest()
+
   print(defaultBg(fgColor("Goodbye!!", "jazzberry")))

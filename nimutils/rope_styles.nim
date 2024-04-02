@@ -60,17 +60,6 @@ let
                                 bottomT:    Rune(0x2534),
                                 leftT:      Rune(0x251c),
                                 rightT:     Rune(0x2524))
-  BoxStyleBoldDash* =  BoxStyle(horizontal: Rune(0x2505),
-                                vertical:   Rune(0x2507),
-                                upperLeft:  Rune(0x250f),
-                                upperRight: Rune(0x2513),
-                                lowerLeft:  Rune(0x2517),
-                                lowerRight: Rune(0x251b),
-                                cross:      Rune(0x254b),
-                                topT:       Rune(0x2533),
-                                bottomT:    Rune(0x253b),
-                                leftT:      Rune(0x2523),
-                                rightT:     Rune(0x252b))
   BoxStyleBoldDash2* = BoxStyle(horizontal: Rune(0x2509),
                                 vertical:   Rune(0x250b),
                                 upperLeft:  Rune(0x250f),
@@ -977,7 +966,7 @@ proc boldDashBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ##
   ## Recursive by default.
 
-  return r.ropeStyle(newStyle(boxStyle = BoxStyleBoldDash), recurse, true)
+  return r.ropeStyle(newStyle(boxStyle = BoxStyleBoldDash2), recurse, true)
 
 proc altBoldDashBorders*(r: Rope, recurse = true): Rope {.discardable.} =
   ## Overrides any settings for table borders; any nested table

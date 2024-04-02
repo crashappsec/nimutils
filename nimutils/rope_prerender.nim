@@ -876,6 +876,8 @@ proc preRender(state: var FmtState, r: Rope): seq[RenderBox] =
       let tmp = state.preRender(r.contained)
       for item in tmp:
         item.contents.wrapTextPlane(@[StyleNoColor], @[StyleColorPop])
+      if state.curPlane == nil:
+        return
       if state.curPlane.lines.len() > 1 or
         (state.curPlane.lines.len() != 0 and
          len(state.curPlane.lines[0]) != 0):
