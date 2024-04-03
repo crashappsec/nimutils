@@ -186,7 +186,7 @@ proc `$`*(r: Rope, width = 0, ensureNl = false, showLinks = false,
   ## formatting set. To do that, use the style API.
   return r.render(width, showLinks, style, ensureNl, noColor)
 
-proc print*(r: Rope, file = stdout, width = 0, ensureNl = true,
+proc old_print*(r: Rope, file = stdout, width = 0, ensureNl = true,
             showLinks = false, noColor = false, style = defaultStyle) =
   ## `width` sets the output width to render into. If it's zero or
   ## less, then it's interpreted as an offset from the current
@@ -209,7 +209,7 @@ proc print*(r: Rope, file = stdout, width = 0, ensureNl = true,
   unbufferIo()
   file.write(r.render(width, showLinks, style, ensureNl, noColor))
 
-proc print*(s: string, file = stdout, forceMd = false, forceHtml = false,
+proc old_print*(s: string, file = stdout, forceMd = false, forceHtml = false,
             width = 0, ensureNl = true, showLinks = false, detect = true,
             noColor = false, pre = true, style = defaultStyle) =
   unbufferIo()

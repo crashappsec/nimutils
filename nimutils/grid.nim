@@ -45,18 +45,22 @@ proc horizontal_flow*[T: string|Rich](cells: openarray[T], title: string = "",
 
     return flow(flow_items)
 
-proc table*[T: string|Rich](cells: seq[seq[T]],
-                            title = "",
-                            caption = "",
-                            table_style = "table",
-                            cell_style = "td",
-                            heading_style = "th",
-                            header_rows = 1,
-                            header_cols = 0,
-                            borders = true,
-                            stripe = true): Grid =
+proc table*[T: string|Rich|Grid](cells: seq[seq[T]],
+                                 title         = "",
+                                 caption       = "",
+                                 table_style   = "table",
+                                 cell_style    = "td",
+                                 heading_style = "th",
+                                 header_rows   = 1,
+                                 header_cols   = 0,
+                                 borders       = true,
+                                 stripe        = true): Grid =
+    when T is Rich or T is Grid:
+      var row: seq[T]
+    else:
+      var row: seq[Rich]
+
     var
-      row:   seq[Rich]
       t:     Grid
       flow:  Grid
       ncols  = 1
@@ -80,11 +84,15 @@ proc table*[T: string|Rich](cells: seq[seq[T]],
           row.add(cast[Rich](c4str(item)))
       else:
         row = inrow
-      var xrow: XList[Rich] = toXList[Rich](row)
+
+      when T is string:
+        var xrow: XList[Rich] = toXList(row)
+      else:
+        var xrow: XList[T] = toXList(row)
       add_row(t, xrow)
 
     if title == "" and caption == "":
-      return t.grid_to_str(terminalWidth())
+      return t
 
     var flow_items: seq[Grid]
 

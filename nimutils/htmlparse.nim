@@ -4,7 +4,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022 - 2023, Crash Override, Inc.
 
-import tables, strutils, unicode
+import tables, strutils, unicode, grid, libwrap, markdown
 
 type
   HtmlNodeType* = enum
@@ -177,3 +177,202 @@ make_gumbo(char *html, void *userdata)
   gumbo_destroy_output(res);
 }
 """}
+proc htmlToFlowOneNode(n: HtmlNode, l: var seq[Grid], s: var Rich)
+
+
+proc extractOneRow(n: HtmlNode): seq[Grid] =
+  var r: Rich = c4str("")
+
+  for item in n.children:
+    if item.kind notin [HtmlElement, HtmlTemplate]:
+      continue
+
+    item.htmlToFlowOneNode(result, r)
+
+proc htmlToFlowOneNode(n: HtmlNode, l: var seq[Grid], s: var Rich) =
+  var stashed_contents: seq[Grid]
+
+  case n.kind
+  of HtmlDocument:
+    for item in n.children:
+      item.htmlToFlowOneNode(l, s)
+
+    return
+  of HtmlText, HtmlCData:
+    if s.rich_len() == 0:
+      s = c4str(n.contents)
+    else:
+      s = string_concat(s, c4str(n.contents))
+    return
+
+  of HtmlElement, HtmlTemplate:
+    if n.contents.startswith('<') and n.contents[^1] == '>':
+      n.contents = n.contents[1 ..< ^1]
+
+    # handle the contents below, it's the bulk of this function
+    # And don't need extra nesting.
+  else:
+    return
+
+  case n.contents
+  of "br":
+    if s.rich_len() != 0:
+      l.add(cell(s, "p"))
+      s = c4str("")
+
+  of "a":
+    let url = if "href" in n.attrs: n.attrs["href"] else: "https://unknown"
+    for item in n.children:
+      n.htmlToFlowOneNode(l, s)
+
+    let rich_url: Rich = c4Str("(" & url & ")")
+
+    s = string_concat(s, rich_url)
+  of "ol":
+    if s.rich_len() != 0:
+      l.add(cell(s, "p"))
+      s = c4str("")
+
+    stashed_contents = l
+    l                = @[]
+    for item in n.children:
+      item.htmlToFlowOneNode(l, s)
+
+
+    if l.len() != 0:
+      l = stashed_contents & @[ol(l)]
+    else:
+      l = stashed_contents
+
+  of "ul":
+    if s.rich_len() != 0:
+      l.add(cell(s, "p"))
+      s = c4str("")
+
+    stashed_contents = l
+    l                = @[]
+    for item in n.children:
+      item.htmlToFlowOneNode(l, s)
+
+
+    if l.len() != 0:
+      l = stashed_contents & @[ol(l)]
+    else:
+      l = stashed_contents
+
+  of "h1", "h2", "h3", "h4", "h5", "h6", "td", "th":
+    if s.rich_len() != 0:
+      l.add(cell(s, "p"))
+      s = c4str("")
+
+    var list_len = l.len()
+
+    for item in n.children:
+      item.htmlToFlowOneNode(l, s)
+      if l.len() > list_len:
+        list_len = l.len()
+        l[^1] = cell(l[^1], n.contents)
+
+  of "em", "i", "b", "bold", "strong", "u", "caption", "text", "plain",
+       "underline", "strikethrough", "strikethru", "italic":
+    # Ideally children produce only strings.
+    var
+      stash  = s
+      rstyle = lookup_cell_style(cstring(n.contents))
+      sstyle = if rstyle != nil:
+                 get_string_style(rstyle)
+               else:
+                 0
+
+    s = c4str("")
+
+    for item in n.children:
+      item.htmlToFlowOneNode(l, s)
+      if rstyle != nil and s.rich_len() != 0:
+        s.apply_style(sstyle)
+
+      if s.rich_len() != 0:
+        if stash.rich_len() != 0:
+          stash = string_concat(stash, s)
+        else:
+          stash = s
+
+    s = stash
+
+  of "html", "body", "head", "blockquote", "div", "code", "p", "q":
+    if s.rich_len() != 0:
+      l.add(cell(s, "p"))
+      s = c4str("")
+
+    stashed_contents = l
+    l                = @[]
+
+    for item in n.children:
+      item.htmlToFlowOneNode(l, s)
+
+    if l.len() != 0:
+      l = stashed_contents & @[flow(l)]
+    else:
+      l = stashed_contents
+
+  of "table":
+    if s.rich_len() != 0:
+      l.add(cell(s, "p"))
+      s = c4str("")
+
+    var
+      cells:   seq[seq[Grid]]
+      title:   string
+      caption: string
+      rows   = 0
+      hrows  = 0
+
+    for item in n.children:
+      if item.kind == HtmlWhiteSpace or item.contents == "colgroup":
+        # We'll hit colgroup some other time.
+        continue
+      case item.contents
+      of "caption":
+        item.htmlToFlowOneNode(l, s)
+        caption = $(to_cstring(s))
+        s = c4str("")
+      of "title":
+        item.htmlToFlowOneNode(l, s)
+        title = $(to_cstring(s))
+        s = c4str("")
+      of "thead":
+        for sub in n.children:
+          if item.contents == "tr":
+            rows  += 1
+            hrows += 1
+            cells &= sub.extract_one_row()
+      of "tfoot", "tbody":
+        for sub in n.children:
+          if item.contents == "tr":
+            rows  += 1
+            cells &= sub.extract_one_row()
+      else:
+        discard
+
+    l.add(table(cells, title, caption, header_rows = hrows))
+  else:
+    discard # TODO
+
+proc htmlToFlow*(n: HtmlNode): Grid =
+  var
+    flow_items:   seq[Grid] = @[]
+    unboxed_text: Rich = c4str("")
+
+  htmlToFlowOneNode(n, flow_items, unboxed_text)
+
+  return flow(flow_items)
+
+proc htmlToFlow*(s: string, markdown = true): Grid =
+  let html = if markdown:
+               markdownToHtml(s)
+             else:
+               s
+
+  let tree = parseDocument(html).children[1]
+
+  result = tree.htmlToFlow()
