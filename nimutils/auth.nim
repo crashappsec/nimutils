@@ -7,8 +7,8 @@
 ## * basic auth
 ## * JWT
 
-import options, sugar, tables, std/[base64, httpclient, times]
-import jwt
+import std/[options, sugar, tables, base64, httpclient, times]
+import "."/jwt
 
 type
   AuthParams *      = OrderedTableRef[string, string]

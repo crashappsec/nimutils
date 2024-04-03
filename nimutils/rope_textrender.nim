@@ -1,4 +1,5 @@
-import rope_base, rope_prerender, rope_construct, unicode
+import std/unicode
+import "."/[rope_base, rope_prerender, rope_construct]
 
 proc toUtf8*(r: Rope, width = high(int)): string =
   ## Convert a rope to UTF8 with no styling other than line wrap, if a

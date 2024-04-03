@@ -55,11 +55,7 @@
 ## * so beware!                                                       *
 ## ********************************************************************
 
-import std/typetraits
-import std/hashes
-import strutils
-import tables
-import json
+import std/[typetraits, hashes, strutils, tables, json]
 
 type
     MixedKind* = enum

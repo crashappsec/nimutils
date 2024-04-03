@@ -1,10 +1,9 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import  unicode, markdown, htmlparse, tables, parseutils, colortable, rope_base,
-        macros
-
-from strutils import startswith, replace
+import std/[unicode, tables, parseutils, macros]
+from std/strutils import startswith, replace
+import "."/[markdown, htmlparse, colortable, rope_base]
 
 var breakingStyles*: Table[string, bool] = {
     "container"  : true,

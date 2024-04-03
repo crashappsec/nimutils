@@ -1,4 +1,5 @@
-import random, openssl, options
+import std/[openssl, options]
+import "."/random
 
 const badNonceError =  "GCM nonces should be exactly 12 bytes. If " &
                        "you want more, consider SHA256-hashing it, and " &

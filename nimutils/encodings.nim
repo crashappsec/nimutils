@@ -1,7 +1,8 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import misc, tables, random, macros
+import std/[tables, macros]
+import "."/[misc, random]
 
 const goodB32Map    = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
                        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K',

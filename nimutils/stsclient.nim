@@ -1,5 +1,5 @@
-import httpclient, strutils, tables, times, uri, std/[json]
-import awsclient
+import std/[httpclient, strutils, tables, times, uri, json]
+import "."/awsclient
 export awsclient
 
 const

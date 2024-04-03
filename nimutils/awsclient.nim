@@ -13,10 +13,9 @@
     * a request proc which takes an AwsClient and the request params to handle Sigv4 signing and async dispatch
  ]#
 
-import times, tables, unicode, uri, std/envvars
-import strutils except toLower
-import httpclient
-import sigv4, net
+import std/[times, tables, unicode, uri, envvars, httpclient]
+import std/strutils except toLower
+import "."/[sigv4, net]
 
 export sigv4.AwsCredentials, sigv4.AwsScope
 
