@@ -5,8 +5,9 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022
 
-import streams, unicode, strutils, std/terminal, misc
-import unicodedb/properties, unicodedb/widths
+import std/[streams, unicode, strutils, terminal]
+import pkg/[unicodedb/properties, unicodedb/widths]
+import "."/misc
 
 const magicRune* = Rune(0x200b)
 

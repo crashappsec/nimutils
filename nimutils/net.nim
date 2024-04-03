@@ -1,6 +1,5 @@
-import std/[asyncfutures, net, httpclient, uri, math, os, streams, strutils]
-import openssl
-import ./managedtmp
+import std/[asyncfutures, net, httpclient, uri, math, os, streams, strutils, openssl]
+import "."/managedtmp
 
 proc getRootCAStoreContent(): string =
   const

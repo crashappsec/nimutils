@@ -1,6 +1,6 @@
 # Taken from:HTML color list as found at:
 # https://en.wikipedia.org/wiki/Web_colors
-import tables, os, parseUtils
+import std/[tables, os, parseutils]
 
 ## This array contains all names we recognize for full 24-bit color.
 ## APIs that accept color names will also accept #abc123 style hex

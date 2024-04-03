@@ -13,12 +13,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2022
 
-import streams
-import tables
-import strutils
-import strformat
-import std/sysrand
-import algorithm
+import std/[streams, tables, strutils, strformat, sysrand, algorithm]
 
 const
   fullFileName = "2of12full.txt"
@@ -221,11 +216,7 @@ when isMainModule:
 
 
   let outstr = fmt"""
-import std/sysrand
-import strutils
-import strformat
-import algorithm
-import options
+import std/[sysrand, strutils, strformat, algorithm, options]
 
 template secureRand*[T](): T =
   ## Returns a uniformly distributed random value of any _sized_ type.

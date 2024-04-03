@@ -4,7 +4,7 @@
 ## only way I could make Nim happy was if I changed them to `unsigned
 ## int`, which is okay on all the machines I care about anyway.
 
-import strutils, os
+import std/[strutils, os]
 
 static:
   {.compile: joinPath(splitPath(currentSourcePath()).head, "c/hex.c").}

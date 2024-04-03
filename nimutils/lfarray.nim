@@ -1,4 +1,4 @@
-import options
+import std/options
 
 {.pragma: hatc, cdecl, importc.}
 

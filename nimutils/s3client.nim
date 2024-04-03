@@ -4,9 +4,9 @@
   A simple object API for performing (limited) S3 operations
  ]#
 
-import strutils except toLower
-import times, unicode, tables, httpclient, xmlparser, xmltree, uri
-import awsclient
+import std/[times, unicode, tables, httpclient, xmlparser, xmltree, uri]
+import std/strutils except toLower
+import "."/awsclient
 export awsclient
 
 const

@@ -1,9 +1,9 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import streams, tables, options, os, strutils, std/[net, uri, httpclient],
-       s3client, pubsub, misc, random, encodings, std/tempfiles,
-       parseutils, file, std/asyncfutures, net
+import std/[streams, tables, options, os, strutils, net, uri, httpclient,
+            tempfiles, parseutils, asyncfutures]
+import "."/[s3client, pubsub, misc, random, encodings, file, net]
 
 const defaultLogSearchPath = @["/var/log/", "~/.log/", "."]
 

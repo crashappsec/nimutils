@@ -2,7 +2,8 @@ const tagsToConvert = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "td", "th",
                        "em", "italic", "i", "u", "inverse", "underline",
                        "strong", "code", "caption", "pre"]
 
-import unicode, rope_base, strutils
+import std/[unicode, strutils]
+import "."/rope_base
 
 proc element(name, contents: string): string =
   result = "\n<" & name & ">\n" & contents & "</" & name & ">\n"

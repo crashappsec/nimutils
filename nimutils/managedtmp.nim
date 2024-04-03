@@ -1,7 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import std/tempfiles, streams, sugar, os
+import std/[tempfiles, streams, sugar, os]
 
 type OnExitTmpFileCallback = (seq[string], seq[string], seq[string]) -> void
 

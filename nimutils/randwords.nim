@@ -1,7 +1,8 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import strutils, algorithm, misc, options, random
+import std/[strutils, algorithm, options]
+import "."/[misc, random]
 
 const binDict = ["aardvark", "abaci", "aback", "abacus", "abaft", "abalone",
     "abandon", "abandoned", "abandonment", "abase", "abasement", "abash",

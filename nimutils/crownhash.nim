@@ -57,7 +57,7 @@
 ## from Nim, and currently ignore otherwise.
 
 
-import sugar, os, macros, options
+import std/[sugar, os, macros, options]
 
 {.pragma: hatc, cdecl, importc.}
 

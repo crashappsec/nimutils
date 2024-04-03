@@ -2,7 +2,7 @@
 ## For now it extracts json paylods from JWT tokens as well
 ## has utility methods for checking if JWT token has expired
 
-import strutils, std/[base64, json, times]
+import std/[strutils, base64, json, times]
 
 type
   JwtHeader* = ref object

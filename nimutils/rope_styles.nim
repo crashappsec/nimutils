@@ -2,7 +2,8 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import unicode, tables, rope_base, rope_construct, options, strutils
+import std/[unicode, tables, options, strutils]
+import "."/[rope_base, rope_construct]
 
 let
   BoxStylePlain* =     BoxStyle(horizontal: Rune(0x2500),

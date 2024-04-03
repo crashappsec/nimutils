@@ -1,14 +1,11 @@
 ## Unit tests.
 
-import unittest
+import std/[unittest, tables, json, os]
 import nimutils
-import nimutils/box
-import nimutils/unicodeid
+import nimutils/[box, unicodeid]
 import nimutils/randwords # large code size, not imported by default.
-import nimutils/either    # Not working well, not import by default.
-import tables
-import json
-import os
+import nimutils/either    # Not working well, not imported by default.
+
 
 proc removeSpaces(s: string): string =
   for c in s:

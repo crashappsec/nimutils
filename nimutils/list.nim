@@ -1,3 +1,3 @@
 when compileOption("threads"):
-  import lfarray
+  import "."/lfarray
   export lfarray

@@ -39,7 +39,7 @@
 ## and 'decrypt', we use reversed (horizontally) and mirrored names...
 ## `brb` seems like a good function name for decryption.
 
-import aes, sha, random
+import "."/[aes, sha, random]
 
 
 type PrpCtx = object

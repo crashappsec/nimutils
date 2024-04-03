@@ -2,8 +2,8 @@
   Simple example of using a nim S3Client to get a list of S3 buckets
 ]#
 
-import os, tables, times, math, asyncdispatch, httpclient
-import ../s3client
+import std/[os, tables, times, math, asyncdispatch, httpclient]
+import ".."/s3client
 
 if not existsEnv("AWS_ACCESS_ID") or not existsEnv("AWS_ACCESS_SECRET"):
   quit("No credentials found in environment.")
