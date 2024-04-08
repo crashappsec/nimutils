@@ -62,10 +62,16 @@ print_err(object_t obj)
   print(obj, kw("stream", ka(get_stderr())));
 }
 
-buffer_t *
-marshal_type_environment()
+void
+marshal_type_environment(stream_t *stream, dict_t *memos, int *ptr)
 {
-  return con4m_marshal_to_buf(global_type_env);
+  con4m_sub_marshal(global_type_env, stream, memos, ptr);
+}
+
+void
+unmarshal_type_environment(stream_t *stream, dict_t *memos)
+{
+  global_type_env = con4m_sub_unmarshal(stream, memos);
 }
 
 
@@ -79,9 +85,10 @@ type
     key*: pointer
     value*: pointer
   RawBuffer* {.header: "con4m.h", importc: "buffer_t".} = object
-    data*:   cstring
-    flags*:  cint
-    length*: cint
+    data*:      cstring
+    flags*:     cint
+    byte_len*:  cint
+    alloc_len*: cint
   RawGrid* {.header: "con4m.h", importc: "grid_t".} = object
   Buffer* = ptr RawBuffer
   Grid* = ptr RawGrid
@@ -259,6 +266,18 @@ proc list_get*[T](l: List[T], i: int, r: ptr bool):
 proc list_set*[T](l: List[T], i: int, val: T):
              bool {.hatc, importc: "flexarray_set", discardable .}
 
+proc flexarray_view*[T](l: List[T]): pointer{.hatc.}
+proc flexarray_view_len*(p: pointer): uint {.hatc.}
+proc flexarray_view_next*(p: pointer, a: ptr int): pointer {.hatc.}
+
+proc items*[T](l: List[T]): seq[T] =
+  let
+    view = flexarray_view(l)
+    l    = flexarray_view_len(view)
+
+  for i in 0 ..< l:
+    result.add(cast[T](flexarray_view_next(view, nil)))
+
 proc `[]`*[T](l: List[T], ix: int): T =
   return list_get(l, ix, cast [ptr bool](nil))
 
@@ -377,8 +396,6 @@ proc nim_item_type*[T](l: List[T]): typedesc =
   return T
 
 proc get_con4m_type*[T](x: T): TypeSpec =
-  static:
-    echo "Call get con4m type with: " & $(T)
   when T is int:
     return get_builtin_type(C4_INT)
   elif T is uint:
@@ -422,22 +439,22 @@ proc internal_ul[T](l: List[T], s1, s2: cstring, r: Rune):
 
 proc ol*[T: Grid | Rich](l: seq[T], bullet_style = "bullet",
                          item_style = "li"): Grid =
-    var list = new_list[Grid](l)
+    var list = new_list[T](l)
 
     for i, item in l:
         list_set(list, i, item)
 
-    return internal_ol[Grid](list, cstring(bullet_style),
+    return internal_ol[T](list, cstring(bullet_style),
                        cstring(item_style))
 
 proc ul*[T: Grid | Rich](l: seq[T], bullet_style = "bullet",
                          item_style = "li", bullet = Rune(0x2022)): Grid =
-    var list = new_list[Grid](l.len())
+    var list = new_list[T](l)
 
     for i, item in l:
         list_set(list, i, item)
 
-    return internal_ul[Grid](list, cstring(bullet_style),
+    return internal_ul[T](list, cstring(bullet_style),
                        cstring(item_style), bullet)
 
 proc toXList*[T](l: openarray[T]): XList[T] =
@@ -827,7 +844,7 @@ proc items*[T, V](d: Dict[T, V], sort = false): seq[(T, V)] =
     elif V is SomeRef:
       item.value = cast[V](uncast.value)
     else:
-      item.value = unboxStackObj[V](cast[StackBox[V]](uncast.value))
+      item.value = cast[V](uncast.value)
 
     result.add(item)
 
@@ -1068,12 +1085,12 @@ proc file_instream*(fname: Rich, outtype: int): CStream {.hatc.}
 proc file_outstream*(fname: Rich, can_create, append: cint): CStream {.hatc.}
 proc file_iostream*(fname: Rich, can_create: cint): CStream {.hatc.}
 
-proc con4m_marshal*(o: C4Obj, s: CStream){.hatc.}
-proc con4m_unmarshal*(s: CStream): C4Obj {.hatc.}
-proc con4m_sub_marshal*(o: C4Obj, s: CStream, memos: Dict[int, pointer],
+proc con4m_marshal*[T](o: T, s: CStream){.hatc.}
+proc con4m_unmarshal*[T](s: CStream): T {.hatc.}
+proc con4m_sub_marshal*[T](o: T, s: CStream, memos: Dict[int, pointer],
                         mid: ptr int) {.hatc.}
-proc con4m_sub_unmarshal*(s: CStream, memos: Dict[int, pointer]):
-                        C4Obj {.hatc.}
+proc con4m_sub_unmarshal*[T](s: CStream, memos: Dict[int, pointer]): T {.hatc.}
+
 proc marshal_cstring*(str: cstring, stream: CStream) {.hatc.}
 proc unmarshal_cstring*(s: CStream): cstring {.hatc.}
 proc marshal_i64*(i: int, s: CStream) {.hatc.}
@@ -1092,7 +1109,8 @@ proc marshal_i8*(i: int8, s: CStream) {.hatc.}
 proc marshal_u8*(i: uint8, s: CStream) {.hatc.}
 proc unmarshal_i8*(s: CStream): int8 {.hatc.}
 proc unmarshal_u8*(s: CStream): uint8 {.hatc.}
-
+proc marshal_bool*(b: bool, s: CStream) {.hatc.}
+proc unmarshal_bool*(s: CStream): bool {.hatc.}
 proc con4m_tuple*(t: TypeSpec): CTuple {.importc, cdecl.}
 
 proc tuple_set*(x: CTuple, n: int, p: pointer) {.hatc.}
@@ -1107,7 +1125,7 @@ template `[]`*(x: CTuple, ix: int): pointer =
 proc con4m_mixed*(t: TypeSpec): Mixed {.importc, cdecl.}
 
 proc con4m_print(p: Rich | Grid | TypeSpec, n: pointer = nil) {.hatc, importc: "_print".}
-proc print_err*(p: Rich | Grid | TypeSpec) {.importc, cdecl.}
+proc print_err*(p: pointer) {.importc, cdecl.}
 proc box_i64*(n: int): ptr int {.hatc.}
 proc box_u64*(n: int): ptr uint {.hatc.}
 proc box_i32*(n: cint): ptr cint {.hatc.}
@@ -1229,10 +1247,55 @@ proc getNumFormals*(t: TypeSpec): int =
   assert t.get_type_kind() == BT_FUNC
   return t.num_params() - 1
 
-proc marshal_type_environment*(): Buffer {.hatc.}
+proc marshal_type_environment*(s: CStream, d: Dict[int, pointer],
+                               p: ptr int) {.importc, cdecl.}
+proc unmarshal_type_environment*(s: CStream, d: Dict[int, pointer]) {.importc, cdecl.}
 
+proc con4m_can_cast*(tfrom, tto: TypeSpec):
+                   bool {.hatc, importc: "con4m_can_coerce".}
 proc con4m_cast*(o: pointer, tfrom, tto: TypeSpec):
               pointer {.hatc, importc: "con4m_coerce".}
+
+proc call_cast*(v: pointer, tfrom, tto: TypeSpec, err: var string): pointer =
+  if not con4m_can_cast(tfrom, tto):
+    err = "CannotCast"
+    return nil
+
+  return con4m_cast(v, tfrom, tto)
+
+proc instantiate_container*(t: TypeSpec, v: seq[pointer]): pointer =
+  case cast[LibTid](t.base_type_id())
+  of C4_LIST:
+    var l: List[pointer] = cast[List[pointer]](
+      con4m_flexarray[pointer](t, v.len()))
+    for i, item in v:
+      l.list_set(i, item)
+
+    result = cast[pointer](l)
+
+  of C4_TUPLE:
+    var tup: CTuple = con4m_tuple(t)
+
+    for i, item in v:
+      tup.tuple_set(i, item)
+
+    result = cast[pointer](tup)
+
+  of C4_DICT:
+    var dict = con4m_new[Dict[pointer, pointer]](t)
+    var i = 0
+
+    while i < v.len():
+      dict[v[i]] = v[i+1]
+      i += 2
+
+    result = cast[pointer](dict)
+
+  else:
+    raise newException(ValueError,
+                       "Type not a currently instantiable container type.")
+
+
 
 proc con4m_len*(o: pointer): int {.hatc.}
 proc con4m_add*(o1, o2: pointer): pointer {.hatc.}
@@ -1246,12 +1309,15 @@ proc con4m_slice_get*(o1: pointer, s, f: int): pointer {.hatc.}
 proc con4m_slice_set*(o1: pointer, s, f: int, n: pointer) {.hatc.}
 proc con4m_copy*(o1: pointer): pointer {.hatc, importc: "con4m_copy_object".}
 
-proc toRichXList*(l: seq[string]): XList[Rich] =
+proc toRichXList*(l: seq[string] | seq[pointer]): XList[Rich] =
   result = new_xlist[Rich]()
 
   for item in l:
     result.add(r(item))
 
-proc toSeqStr*(l: XList[Rich]): seq[string] =
+proc toSeqStr*(l: XList[Rich] | seq[Rich]): seq[string] =
   for item in l:
     result.add(item.toNimStr())
+
+proc alloc_marshal_memos*(): Dict[int, pointer] {.hatc.}
+proc alloc_unmarshal_memos*(): Dict[int, pointer] {.hatc.}
