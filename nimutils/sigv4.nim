@@ -32,7 +32,7 @@ const
 
 # Some convenience operators, for fun and aesthetics
 proc `$`(s: AwsScope): string =
-  return s.date[0..7]&"/"&s.region&"/"&s.service
+  return s.date[0..7] & "/" & s.region & "/" & s.service
 
 proc `!$`(s: string): string =
   return sha256Hex(s)
@@ -154,8 +154,8 @@ proc create_signature*(key: string, sts: string): string =
 proc create_signing_key*(secret: string, scope: AwsScope,
     termination: string = term): string =
   # (a ?$ b) => $hmac_sha256(a,b)
-  return ("AWS4"&secret) ?$ scope.date[0..7] ?$ scope.region ?$ scope.service ?$ termination
-  # ? cleaner than $hmac_sha256($hmac_sha256($hmac_sha256($hmac_sha256("AWS4"&secret, date[0..7]),region),service),termination) ?
+  return ("AWS4" & secret) ?$ scope.date[0..7] ?$ scope.region ?$ scope.service ?$ termination
+  # ? cleaner than $hmac_sha256($hmac_sha256($hmac_sha256($hmac_sha256("AWS4" & secret, date[0..7]),region),service),termination) ?
 
 proc create_authorization_header*(id: string, scope: AwsScope,
     signed_head: string, sig: string, opts: (string, string) = (alg,

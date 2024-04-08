@@ -29,8 +29,10 @@ proc newS3Client*(creds: AwsCredentials, region: string = defaultRegion,
     host: string = awsURI, timeoutMilliseconds = 1000): S3Client =
   let
     # TODO - use some kind of template and compile-time variable to put the correct kernel used to build the sdk in the UA?
-    httpclient = newHttpClient("nimaws-sdk/0.3.3; "&defUserAgent.replace(" ",
-        "-").toLower&"; darwin/16.7.0", timeout = timeoutMilliseconds)
+    httpclient = newHttpClient(
+      "nimaws-sdk/0.3.3; " & defUserAgent.replace(" ", "-").toLower() & "; darwin/16.7.0",
+      timeout = timeoutMilliseconds,
+    )
     scope = AwsScope(date: getAmzDateString(), region: region, service: "s3")
 
   var
@@ -40,7 +42,7 @@ proc newS3Client*(creds: AwsCredentials, region: string = defaultRegion,
   if mhost.len > 0:
     if mhost.find("http") == -1:
       echo "host should be a valid URI assuming http://"
-      mhost = "http://"&host
+      mhost = "http://" & host
   else:
     mhost = awsURI
   endpoint = parseUri(mhost)
