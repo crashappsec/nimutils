@@ -108,6 +108,16 @@ proc `==`*(box1, box2: Box) : bool {.noSideEffect.} =
     of MkSeq:
       return box1.c.s == box2.c.s
 
+proc add*(self, other: Box) =
+  if self.kind != MkSeq:
+    raise newException(ValueError, "Can only add to sequences")
+  self.c.s.add(other)
+
+proc `&=`*(self, other: Box) =
+  if self.kind != MkSeq or other.kind != MkSeq:
+    raise newException(ValueError, "Can only add sequences together")
+  self.c.s &= other.c.s
+
 proc unpack*[T](box: Box): T =
     ## This recursively unpacks anything sitting in a Box, including
     ## custom code via the `Packable` interface.
