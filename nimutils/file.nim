@@ -262,7 +262,12 @@ proc findAllExePaths*(cmdName:    string,
     allPaths   = @[tup.head] & allPaths
 
   for item in allPaths:
-    let path = resolvePath(item)
+    let path =
+      try:
+        resolvePath(item)
+      except:
+        # most likely running in limited env and cant resolve "~"
+        continue
     if me == targetName and path == mydir: continue # Don't ever find ourself.
     let potential = joinPath(path, targetName)
     if potential.isExecutable():
