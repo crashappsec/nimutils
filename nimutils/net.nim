@@ -8,7 +8,7 @@ proc getRootCAStoreContent(): string =
     # p.s. kind of odd its to salesforce vs one of mozilla-owned domains :shrug:
     caURL   = "https://ccadb.my.salesforce-sites.com/mozilla/IncludedRootsPEMTxt?TrustBitsInclude=Websites"
     cache   = "mozilla-root-store-" & CompileDate # cache certs by day
-    curlCmd = "curl -fsSL --retry 5 " & caURL
+    curlCmd = "curl -fsSL --retry 5 '" & caURL & "'"
     (contents, curlExitCode) = gorgeEx(curlCmd, cache=cache)
   if curlExitCode != 0:
     raise newException(
