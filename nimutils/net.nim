@@ -109,10 +109,21 @@ proc timeoutGuard(client: HttpClient | AsyncHttpClient, url: Uri | string) =
              else:                     Port(80)
     else:
       port = Port(uri.port.parseInt)
-    let socket = newSocket()
-    # this throws the same TimeoutError http request throws
-    socket.connect(hostname, port, timeout = client.timeout)
-    socket.close()
+    try:
+      let socket = newSocket()
+      # this throws the same TimeoutError http request throws
+      socket.connect(hostname, port, timeout = client.timeout)
+      socket.close()
+    except OSError:
+      # in some cases when the hostname is non-routable IP, OS raises
+      # its own error via errno which for example can be EINVAL:
+      # https://linux.die.net/man/3/connect
+      # > The address_len argument is not a valid length for the address
+      # > family; or invalid address family in the sockaddr structure.
+      # however as the the errno description can be confusing "Invalid argument"
+      # this makes it clear its an OS error, not a nim bug where an invalid
+      # argument is passed to a function.
+      raise newException(OSError, "Could not connect due to OS raising: " & getCurrentExceptionMsg())
 
 template withRetry(retries: int, firstRetryDelayMs: int, c: untyped) =
   # retry code block with exponential backoff
