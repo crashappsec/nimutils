@@ -35,7 +35,7 @@ proc obtainLockFile*(fname: string, writeLock = false, timeout: int64 = 5000,
                        ", Got error = " & $(strerror(errno)))
   var
     endtime: uint64 = if timeout < 0:
-                      0xffffffffffffffff
+                      high(uint64)
                     else:
                       unixTimeInMs() + uint64(timeout)
     sleepdur = 16
