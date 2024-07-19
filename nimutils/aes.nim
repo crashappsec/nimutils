@@ -159,10 +159,10 @@ proc get_keystream(ctx: pointer, outbuf: pointer, buflen: cint):
 proc run_ctr_mode(ctx, outbuf, inbuf: pointer, buflen: cint):
                        cint {.cdecl,importc.}
 
-proc `=destroy`*(ctx: AesCtx) =
+proc `=destroy`*(ctx: var AesCtx) =
     EVP_CIPHER_CTX_free(ctx.aesCtx)
 
-proc `=destroy`*(ctx: GcmCtx) =
+proc `=destroy`*(ctx: var GcmCtx) =
     EVP_CIPHER_CTX_free(ctx.aesCtx)
 
 template getCipher(mode: string, key: string): EVP_CIPHER =

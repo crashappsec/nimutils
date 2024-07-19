@@ -26,13 +26,13 @@ type
   Sha512Digest* = array[64, uint8]
   Sha3Digest*   = array[64, uint8]
 
-proc `=destroy`*(ctx: Sha256ctx) =
+proc `=destroy`*(ctx: var Sha256ctx) =
   EVP_MD_CTX_free(ctx.evpCtx)
 
-proc `=destroy`*(ctx: Sha512ctx) =
+proc `=destroy`*(ctx: var Sha512ctx) =
   EVP_MD_CTX_free(ctx.evpCtx)
 
-proc `=destroy`*(ctx: Sha3ctx) =
+proc `=destroy`*(ctx: var Sha3ctx) =
   EVP_MD_CTX_free(ctx.evpCtx)
 
 proc initSha256*(ctx: var Sha256CTX) =

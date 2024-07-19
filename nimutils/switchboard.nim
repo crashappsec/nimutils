@@ -326,18 +326,18 @@ proc setExtraData*(ctx: var Party, extra: RootRef) =
   if extra != RootRef(nil):
     GC_ref(extra)
 
-proc `=destroy`*(ctx: Switchboard) =
+proc `=destroy`*(ctx: var Switchboard) =
   var copy = ctx
   copy.clearExtraData()
   copy.sb_destroy(false)
 
-proc `=destroy`*(ctx: Party) =
+proc `=destroy`*(ctx: var Party) =
   var copy = ctx
   copy.clearExtraData()
 
 proc sb_result_destroy(res: ptr SBCaptures) {.sb.}
 
-proc `=destroy`*(res: SBCaptures) =
+proc `=destroy`*(res: var SBCaptures) =
   sb_result_destroy(addr res)
 
 proc sb_result_get_capture(res: var SBCaptures, tag: cstring,
