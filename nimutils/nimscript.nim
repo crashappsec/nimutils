@@ -70,6 +70,10 @@ template applyCommonLinkOptions*(staticLink = true, quiet = true) =
   switch("path", ".")
   switch("d", "useOpenSSL3")
   switch("cincludes", getEnv("HOME").joinPath("/.local/c0/include"))
+  # Disable some errors for Clang 15+ and GCC 14+.
+  switch("passC", "-Wno-int-conversion")
+  switch("passC", "-Wno-implicit-function-declaration")
+  switch("passC", "-Wno-incompatible-pointer-types")
 
   setupTargetArch(quiet)
 
