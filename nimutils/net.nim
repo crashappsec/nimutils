@@ -160,10 +160,10 @@ proc safeRequest*(client: HttpClient,
                                   body = body,
                                   headers = headers,
                                   multipart = multipart)
-    if only2xx and not result.code().is2xx():
-      raise newException(ValueError, $url & " failed with " & result.status & " " & response.body())
-    if raiseWhenAbove > 0 and result.code().int >= raiseWhenAbove:
-      raise newException(ValueError, $url & " failed with " & result.status & " " & response.body())
+    if only2xx and not response.code().is2xx():
+      raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
+    if raiseWhenAbove > 0 and response.code().int >= raiseWhenAbove:
+      raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
     return response
 
 # https://github.com/nim-lang/Nim/blob/a45f43da3407dbbf8ecd15ce8ecb361af677add7/lib/pure/httpclient.nim#L380-L386
