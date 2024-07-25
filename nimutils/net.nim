@@ -141,6 +141,17 @@ template withRetry(retries: int, firstRetryDelayMs: int, c: untyped) =
       attempts += 1
   raise newException(ValueError, "retried code block didnt return. this should never happen")
 
+proc check*(response: Response,
+            url: Uri | string,
+            only2xx: bool = false,
+            raiseWhenAbove: int = 0,
+           ): Response =
+  if only2xx and not response.code().is2xx():
+    raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
+  if raiseWhenAbove > 0 and response.code().int >= raiseWhenAbove:
+    raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
+  return response
+
 proc safeRequest*(client: HttpClient,
                   url: Uri | string,
                   httpMethod: HttpMethod | string = HttpGet,
@@ -160,11 +171,9 @@ proc safeRequest*(client: HttpClient,
                                   body = body,
                                   headers = headers,
                                   multipart = multipart)
-    if only2xx and not response.code().is2xx():
-      raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
-    if raiseWhenAbove > 0 and response.code().int >= raiseWhenAbove:
-      raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
-    return response
+    return response.check(url            = url,
+                          only2xx        = only2xx,
+                          raiseWhenAbove = raiseWhenAbove)
 
 # https://github.com/nim-lang/Nim/blob/a45f43da3407dbbf8ecd15ce8ecb361af677add7/lib/pure/httpclient.nim#L380-L386
 # similar to stdlib but defaults to bundled CAs
