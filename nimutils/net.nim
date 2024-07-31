@@ -177,22 +177,23 @@ proc safeRequest*(client: HttpClient,
 
 # https://github.com/nim-lang/Nim/blob/a45f43da3407dbbf8ecd15ce8ecb361af677add7/lib/pure/httpclient.nim#L380-L386
 # similar to stdlib but defaults to bundled CAs
-proc getSSLContext(caFile: string = ""): SslContext =
+proc getSSLContext(caFile: string = "", verifyMode = CVerifyPeer): SslContext =
   if caFile != "":
     # note when caFile is provided there is no try..except
-    # otherwise we would silently fail to bundled CA root store
+    # otherwise we would silently fallback to bundled CA root store
     # if caFile is invalid/does not exist
-    return newContext(verifyMode = CVerifyPeer, caFile = caFile)
+    return newContext(verifyMode = verifyMode, caFile = caFile)
   else:
     try:
-      return newContext(verifyMode = CVerifyPeer)
+      return newContext(verifyMode = verifyMode)
     except:
-      return newContext(verifyMode = CVerifyPeer, caFile = getCAStorePath())
+      return newContext(verifyMode = verifyMode, caFile = getCAStorePath())
 
 proc createHttpClient*(uri: Uri = parseUri(""),
                        maxRedirects: int = 3,
                        timeout: int = 1000, # in ms - 1 second
                        pinnedCert: string = "",
+                       verifyMode = CVerifyPeer,
                        disallowHttp: bool = false,
                        userAgent: string = defUserAgent,
                        ): HttpClient =
@@ -207,7 +208,7 @@ proc createHttpClient*(uri: Uri = parseUri(""),
     # always pass ssl context to client
     # as otherwise if http server returns redirect to https
     # nim segfaults vs throwing exception
-    context = getSSLContext(caFile = pinnedCert)
+    context = getSSLContext(caFile = pinnedCert, verifyMode = verifyMode)
     client  = newHttpClient(sslContext   = context,
                             userAgent    = userAgent,
                             timeout      = timeout,
@@ -227,6 +228,7 @@ proc safeRequest*(url: Uri | string,
                   firstRetryDelayMs: int = 0,
                   timeout: int = 1000,
                   pinnedCert: string = "",
+                  verifyMode = CVerifyPeer,
                   maxRedirects: int = 3,
                   disallowHttp: bool = false,
                   only2xx: bool = false,
@@ -240,6 +242,7 @@ proc safeRequest*(url: Uri | string,
                                 maxRedirects  = maxRedirects,
                                 timeout       = timeout,
                                 pinnedCert    = pinnedCert,
+                                verifyMode    = verifyMode,
                                 disallowHttp  = disallowHttp)
   try:
     return client.safeRequest(url               = uri,
