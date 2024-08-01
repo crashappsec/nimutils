@@ -369,10 +369,8 @@ proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
                            httpMethod        = HttpPost,
                            body              = msg,
                            retries           = 2,
-                           firstRetryDelayMs = 100)
-
-  if not response.code.is2xx():
-    raise newException(ValueError, response.status & ": " & response.body())
+                           firstRetryDelayMs = 100,
+                           only2xx           = true)
 
   cfg.iolog(t, "Post " & response.status)
 
@@ -394,7 +392,8 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
                                httpMethod        = HttpPut,
                                retries           = 2,
                                firstRetryDelayMs = 100,
-                               maxRedirects      = 0)
+                               maxRedirects      = 0,
+                               raiseWhenAbove    = 500)
 
   if signResponse.code notin [Http302, Http307]:
     raise newException(ValueError, "Presign requires 302/307 redirect but received: " & signResponse.status)
@@ -415,10 +414,8 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
                            httpMethod        = HttpPut,
                            body              = msg,
                            retries           = 2,
-                           firstRetryDelayMs = 100)
-
-  if not response.code.is2xx():
-    raise newException(ValueError, response.status & ": " & response.body())
+                           firstRetryDelayMs = 100,
+                           only2xx           = true)
 
   cfg.iolog(t, "Presign " & response.status)
 

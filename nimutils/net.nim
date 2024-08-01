@@ -1,4 +1,4 @@
-import std/[asyncfutures, net, httpclient, uri, math, os, streams, strutils, openssl]
+import std/[net, httpclient, uri, math, os, streams, strutils, openssl]
 import "."/managedtmp
 
 proc getRootCAStoreContent(): string =
@@ -86,7 +86,7 @@ proc getMyIpV4Addr*(): string =
   var s  = get_external_ipv4_address()
   result = $(s)
 
-proc timeoutGuard(client: HttpClient | AsyncHttpClient, url: Uri | string) =
+proc timeoutGuard(client: HttpClient, url: Uri | string) =
   # https://github.com/nim-lang/Nim/issues/6792
   # https://github.com/nim-lang/Nim/issues/14807
   # std/httpclient request() does not honor timeout param for
@@ -141,19 +141,16 @@ template withRetry(retries: int, firstRetryDelayMs: int, c: untyped) =
       attempts += 1
   raise newException(ValueError, "retried code block didnt return. this should never happen")
 
-proc safeRequest*(client: AsyncHttpClient,
-                  url: Uri | string,
-                  httpMethod: HttpMethod | string = HttpGet,
-                  body = "",
-                  headers: HttpHeaders = nil,
-                  multipart: MultipartData = nil,
-                  retries: int = 0,
-                  firstRetryDelayMs: int = 0,
-                  ): Future[AsyncResponse] =
-  timeoutGuard(client, url)
-  withRetry(retries, firstRetryDelayMs):
-    return client.request(url = url, httpMethod = httpMethod, body = body,
-                          headers = headers, multipart = multipart)
+proc check*(response: Response,
+            url: Uri | string,
+            only2xx: bool = false,
+            raiseWhenAbove: int = 0,
+           ): Response =
+  if only2xx and not response.code().is2xx():
+    raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
+  if raiseWhenAbove > 0 and response.code().int >= raiseWhenAbove:
+    raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
+  return response
 
 proc safeRequest*(client: HttpClient,
                   url: Uri | string,
@@ -163,11 +160,20 @@ proc safeRequest*(client: HttpClient,
                   multipart: MultipartData = nil,
                   retries: int = 0,
                   firstRetryDelayMs: int = 0,
+                  only2xx: bool = false,
+                  raiseWhenAbove: int = 0,
                   ): Response =
   timeoutGuard(client, url)
   withRetry(retries, firstRetryDelayMs):
-    return client.request(url = url, httpMethod = httpMethod, body = body,
-                          headers = headers, multipart = multipart)
+    # all vars are accessed from outer scope
+    let response = client.request(url = url,
+                                  httpMethod = httpMethod,
+                                  body = body,
+                                  headers = headers,
+                                  multipart = multipart)
+    return response.check(url            = url,
+                          only2xx        = only2xx,
+                          raiseWhenAbove = raiseWhenAbove)
 
 # https://github.com/nim-lang/Nim/blob/a45f43da3407dbbf8ecd15ce8ecb361af677add7/lib/pure/httpclient.nim#L380-L386
 # similar to stdlib but defaults to bundled CAs
@@ -223,6 +229,8 @@ proc safeRequest*(url: Uri | string,
                   pinnedCert: string = "",
                   maxRedirects: int = 3,
                   disallowHttp: bool = false,
+                  only2xx: bool = false,
+                  raiseWhenAbove: int = 0,
                   ): Response =
   let uri = when url is string:
     parseUri(url)
@@ -240,6 +248,8 @@ proc safeRequest*(url: Uri | string,
                               headers           = headers,
                               multipart         = multipart,
                               retries           = retries,
-                              firstRetryDelayMs = firstRetryDelayMs)
+                              firstRetryDelayMs = firstRetryDelayMs,
+                              only2xx           = only2xx,
+                              raiseWhenAbove    = raiseWhenAbove)
   finally:
     client.close()
