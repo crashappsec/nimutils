@@ -45,8 +45,6 @@ proc getCallerIdentity*(self: var StsClient): StsCallerIdentity =
     ("Content-Type", "application/x-www-form-urlencoded"),
     ("Accept", "application/json"),
   ]))
-  if res.code != Http200:
-    raise newException(ValueError, res.status)
   let
     jsonResponse = parseJson(res.body())
     identity     = jsonResponse["GetCallerIdentityResponse"]["GetCallerIdentityResult"]
