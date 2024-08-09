@@ -159,4 +159,10 @@ proc request*(client: var AwsClient, params: Table, headers: HttpHeaders = newHt
         client.httpClient.headers.table, client.scope)
     client.httpClient.headers.add("Authorization", auth)
 
-  return client.httpClient.safeRequest(url, action, payload, headers=headers)
+  return client.httpClient.safeRequest(
+    url,
+    action,
+    payload,
+    headers=headers,
+    only2xx=true,
+  )

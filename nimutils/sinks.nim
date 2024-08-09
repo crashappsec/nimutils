@@ -299,10 +299,7 @@ proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
       newPath  = joinPath(state.objPath, newTail)
       response = client.put_object(state.bucket, newPath, msg)
 
-  if not response.code.is2xx():
-    raise newException(ValueError, response.status & ": " & response.body())
-  else:
-    cfg.iolog(t, "Post to: " & newPath & "; response = " & response.status)
+  cfg.iolog(t, "Post to: " & newPath & "; response = " & response.status)
 
 proc httpHeaders(cfg: SinkConfig): HttpHeaders =
   var
