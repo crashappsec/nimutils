@@ -159,11 +159,13 @@ proc safeRequest*(client: HttpClient,
                   headers: HttpHeaders = nil,
                   multipart: MultipartData = nil,
                   retries: int = 0,
+                  connectRetries: int = 0,
                   firstRetryDelayMs: int = 0,
                   only2xx: bool = false,
                   raiseWhenAbove: int = 0,
                   ): Response =
-  timeoutGuard(client, url)
+  withRetry(connectRetries, firstRetryDelayMs):
+    timeoutGuard(client, url)
   withRetry(retries, firstRetryDelayMs):
     # all vars are accessed from outer scope
     let response = client.request(url = url,
@@ -225,6 +227,7 @@ proc safeRequest*(url: Uri | string,
                   headers: HttpHeaders = nil,
                   multipart: MultipartData = nil,
                   retries: int = 0,
+                  connectRetries: int = 0,
                   firstRetryDelayMs: int = 0,
                   timeout: int = 1000,
                   pinnedCert: string = "",
@@ -251,6 +254,7 @@ proc safeRequest*(url: Uri | string,
                               headers           = headers,
                               multipart         = multipart,
                               retries           = retries,
+                              connectRetries    = connectRetries,
                               firstRetryDelayMs = firstRetryDelayMs,
                               only2xx           = only2xx,
                               raiseWhenAbove    = raiseWhenAbove)
