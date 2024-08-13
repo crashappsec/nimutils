@@ -131,6 +131,7 @@ template withRetry(retries: int, firstRetryDelayMs: int, c: untyped) =
   while attempts <= retries:
     try:
       c
+      break
     except:
       if attempts == retries:
         # reraise last exception to bubble error up
@@ -139,7 +140,6 @@ template withRetry(retries: int, firstRetryDelayMs: int, c: untyped) =
       if delayMs > 0:
         sleep(delayMs)
       attempts += 1
-  raise newException(ValueError, "retried code block didnt return. this should never happen")
 
 proc check*(response: Response,
             url: Uri | string,
