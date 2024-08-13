@@ -164,5 +164,6 @@ proc request*(client: var AwsClient, params: Table, headers: HttpHeaders = newHt
     action,
     payload,
     headers=headers,
+    retries=2,
     only2xx=true,
   )
