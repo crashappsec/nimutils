@@ -130,7 +130,7 @@ proc request*(client: var AwsClient, params: Table, headers: HttpHeaders = newHt
       url = ("https://$1.$2.amazonaws.com/$3" % [params["bucket"],
           client.scope.service, path])
     else:
-      url = ("https://$1.amazonaws.com/$2" % [client.scope.service, path])
+      url = ("https://$1.$2.amazonaws.com/$3" % [client.scope.service, client.scope.region, path])
   else:
     var
       bucket = if params.hasKey("bucket"): params["bucket"] else: ""
