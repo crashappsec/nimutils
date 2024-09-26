@@ -170,8 +170,11 @@ function ensure_musl {
   export CXX=${MUSL_GCC}
 }
 
-function install_kernel_headers {
+function ensure_kernel_headers {
     if [[ ${OS} = "macosx" ]] ; then
+      return
+    fi
+    if [ -d ${MUSL_DIR}/include ]; then
       return
     fi
     colorln CYAN Installing kernel headers needed for musl install
@@ -183,7 +186,7 @@ function ensure_openssl {
 
   if ! copy_from_package libssl.a libcrypto.a ; then
       ensure_musl
-      install_kernel_headers
+      ensure_kernel_headers
 
       get_src openssl https://github.com/openssl/openssl.git
       colorln CYAN Building openssl
@@ -304,6 +307,7 @@ function remove_src {
 }
 
 ensure_musl
+ensure_kernel_headers
 ensure_openssl
 ensure_pcre
 ensure_gumbo
