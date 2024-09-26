@@ -92,15 +92,20 @@ template applyCommonLinkOptions*(staticLink = true, quiet = true) =
     echo "Platform not supported."
     quit(1)
 
-template staticLinkLibraries*(libNames: openarray[string], libDir: string,
-                              useMusl = true, muslBase = libDir) =
+template staticLinkLibraries*(libNames: openarray[string],
+                              libDir: string,
+                              useMusl = true,
+                              muslBase = libDir) =
   ## Automates statically linking all appropriate libraries.
   ## Meant to be called from your config.nims file.
   when defined(linux):
     if useMusl:
-      let muslPath = muslBase.joinPath("musl/bin/musl-gcc")
-      switch("gcc.exe", muslPath)
+      let
+        muslPath    = muslBase.joinPath("musl/bin/musl-gcc")
+        muslInclude = muslBase.joinPath("musl/include")
+      switch("gcc.exe",       muslPath)
       switch("gcc.linkerexe", muslPath)
+      switch("cincludes",     muslInclude)
 
   for item in libNames:
     let libFile = "lib" & item & ".a"
