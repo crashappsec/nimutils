@@ -28,4 +28,4 @@ var
   libs     = ["pcre", "ssl", "crypto", "gumbo", "hatrack", "ffi"]
 
 applyCommonLinkOptions()
-staticLinkLibraries(libs, libDir, muslBase = localDir)
+staticLinkLibraries(libs, libDir, libBase = localDir)

@@ -95,17 +95,16 @@ template applyCommonLinkOptions*(staticLink = true, quiet = true) =
 template staticLinkLibraries*(libNames: openarray[string],
                               libDir: string,
                               useMusl = true,
-                              muslBase = libDir) =
+                              libBase = libDir) =
   ## Automates statically linking all appropriate libraries.
   ## Meant to be called from your config.nims file.
   when defined(linux):
+    let libInclude = libBase.joinPath("musl/include")
+    switch("cincludes",       libInclude)
     if useMusl:
-      let
-        muslPath    = muslBase.joinPath("musl/bin/musl-gcc")
-        muslInclude = muslBase.joinPath("musl/include")
+      let muslPath = libBase.joinPath("musl/bin/musl-gcc")
       switch("gcc.exe",       muslPath)
       switch("gcc.linkerexe", muslPath)
-      switch("cincludes",     muslInclude)
 
   for item in libNames:
     let libFile = "lib" & item & ".a"
