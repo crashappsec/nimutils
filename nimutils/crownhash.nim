@@ -141,7 +141,6 @@ proc hatrack_dict_values_nosort*(ctx: ptr RawDict, n: ptr uint64):
 proc hatrack_dict_items_nosort*(ctx: ptr RawDict, n: ptr uint64):
                               pointer {.hatc.}
 proc hatrack_dict_set_free_handler*(ctx: ptr RawDict, cb: pointer) {.hatc.}
-proc register_thread() {.cdecl, importc: "mmm_register_thread" .}
 
 proc decrefDictItems[T, V](dict: RawDict, p: ptr RawItem) =
   when T is SomeString:
@@ -194,10 +193,6 @@ proc decrefNilRef(d: RawDict, p: ptr RawItem) =
 
 proc decrefNilObj(d: RawDict, p: ptr RawItem) =
   ejectStackBox(cast[StackBox[seq[int]]](p[].value))
-
-once:
-  # Auto-register the main thread.
-  registerThread()
 
 proc initDict*[T, V](dict: var Dict[T, V]) =
   assert dict == nil
