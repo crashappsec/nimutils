@@ -5,6 +5,8 @@ on:
     branches:
       - dev
       - main
+    branches-ignore:
+      - libn00b*
   pull_request:
   workflow_dispatch:
 

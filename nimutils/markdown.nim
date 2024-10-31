@@ -7,7 +7,7 @@
 
 import "."/random
 
-{.emit: """#include "md4c.h" """.}
+{.emit: """#include "md4nim.h" """.}
 
 type
   # We don't actually use this type, just pulls in the header concisely.
