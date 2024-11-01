@@ -41,45 +41,42 @@
 ## `subprocess` interface, though we will, in the not-too-distant
 ## future add a more polished interface to this module that would be
 ## appropriate for server setups, etc.
-import std/[os, posix]
+import std/[posix]
 
-{.pragma: sb, cdecl, importc, nodecl.}
-
-static:
-  {.compile: joinPath(splitPath(currentSourcePath()).head, "c/switchboard.c").}
+{.pragma: sproc, cdecl, importc, nodecl.}
 
 type
-  SwitchBoard* {.importc: "switchboard_t", header: "switchboard.h" .} = object
-  Party* {.importc: "party_t", header: "switchboard.h" .} = object
+  SwitchBoard* {.importc: "n00b_switchboard_t", header: "n00b.h" } = object
+  Party* {.importc: "n00b_party_t", header: "n00b.h" } = object
   SBCallback* =
     proc (i0: var RootRef, i1: var RootRef, i2: cstring, i3: int) {. cdecl,
                                                                     gcsafe .}
   AcceptCallback* =
     proc (i0: var SwitchBoard, fd: cint, addressp: pointer,
           addrlenp: pointer) {. cdecl, gcsafe .}
-  SBCaptures* {. importc: "sb_result_t", header: "switchboard.h" .} = object
+  SBCaptures* {. importc: "n00b_capture_result_t", header: "n00b.h" } = object
   SbFdPerms* = enum sbRead = 0, sbWrite = 1, sbAll = 2
 
-proc sb_init*(ctx: var SwitchBoard, heap_elems: csize_t) {.sb.}
+proc n00b_sb_init*(ctx: var SwitchBoard, heap_elems: csize_t) {.sproc.}
  ## Low-level interface. Use initSwitchboard().
 
-proc sb_init_party_fd(ctx: var Switchboard, party: var Party, fd: cint,
+proc n00b_sb_init_party_fd(ctx: var Switchboard, party: var Party, fd: cint,
                       perms: SbFdPerms, stopWhenClosed: bool,
-                      closeOnDestroy: bool, closeWhenDone: bool) {.sb.}
+                      closeOnDestroy: bool, closeWhenDone: bool) {.sproc.}
 
 proc initPartyCallback*(ctx: var Switchboard, party: var Party,
                         callback: SBCallback) {.cdecl,
-                       importc: "sb_init_party_callback", nodecl .}
+                       importc: "n00b_sb_init_party_callback", nodecl .}
   ## This sets up a callback to receive incremental data that
   ## has been read from any file descriptor, except listening sockets.
   ##
   ## Any state information can be passed to this callback via the
-  ## as-yet-unwrapped `sb_set_extra()` and retrieved by the similarly
+  ## as-yet-unwrapped `n00b_sb_set_extra()` and retrieved by the similarly
   ## unwrapped `sb_get_party_extra()`.
 
-proc sb_init_party_listener(ctx: var Switchboard, party: var Party,
+proc n00b_sb_init_party_listener(ctx: var Switchboard, party: var Party,
                             sockfd: int, callback: AcceptCallback,
-                            stopWhenClosed: bool, closeOnDestroy: bool) {.sb.}
+                            stopWhenClosed: bool, closeOnDestroy: bool) {.sproc.}
 
 proc initPartyListener*(ctx: var Switchboard, party: var Party,
                         sockfd: int, callback: AcceptCallback,
@@ -87,15 +84,15 @@ proc initPartyListener*(ctx: var Switchboard, party: var Party,
   ## This sets up monitoring of a socket that is listening for connections.
   ## The provided callback will be called whenever there is a listening
   ## socket waiting to be read.
-  ctx.sb_init_party_listener(party, sockfd, callback, stopWhenClosed,
+  ctx.n00b_sb_init_party_listener(party, sockfd, callback, stopWhenClosed,
                              closeOnDestroy)
 
-proc sb_init_party_input_buf(ctx: var Switchboard, party: var Party,
+proc n00b_sb_init_party_input_buf(ctx: var Switchboard, party: var Party,
                              input: cstring, l: csize_t, dup: bool,
-                             free: bool, close_fd_when_done: bool) {.sb.}
+                             free: bool, close_fd_when_done: bool) {.sproc.}
 
-proc sb_init_party_output_buf(ctx: var Switchboard, party: var Party,
-                              tag: cstring, l: csize_t) {.sb.}
+proc n00b_sb_init_party_output_buf(ctx: var Switchboard, party: var Party,
+                              tag: cstring, l: csize_t) {.sproc.}
 
 proc initPartyCapture*(ctx: var Switchboard, party: var Party,
                        prealloc = 4096, tag: static[string]) =
@@ -105,7 +102,7 @@ proc initPartyCapture*(ctx: var Switchboard, party: var Party,
   ## The underlying api assumes that it never has to free the passed
   ## tag and that it will always exit, so in this variant, the tag
   ## must point to static memory.
-  ctx.sb_init_party_output_buf(party, tag, csize_t(prealloc))
+  ctx.n00b_sb_init_party_output_buf(party, tag, csize_t(prealloc))
 
 proc unsafeInitPartyCapture*(ctx: var Switchboard, party: var Party,
                              prealloc = 4096, tag: string) =
@@ -118,10 +115,10 @@ proc unsafeInitPartyCapture*(ctx: var Switchboard, party: var Party,
   ##
   ## We may refactor the underlying implementation to address this,
   ## but don't count on it!
-  ctx.sb_init_party_output_buf(party, tag, csize_t(prealloc))
+  ctx.n00b_sb_init_party_output_buf(party, tag, csize_t(prealloc))
 
-proc sb_monitor_pid(ctx: var Switchboard, pid: Pid, stdin: ptr Party,
-                    stdout: ptr Party, stderr: ptr Party, shutdown: bool) {.sb.}
+proc n00b_sb_monitor_pid(ctx: var Switchboard, pid: Pid, stdin: ptr Party,
+                    stdout: ptr Party, stderr: ptr Party, shutdown: bool) {.sproc.}
 
 proc monitorProcess*(ctx: var Switchboard, pid: Pid, stdin: ref Party = nil,
                      stdout: ref Party = nil, stderr: ref Party = nil,
@@ -142,7 +139,7 @@ proc monitorProcess*(ctx: var Switchboard, pid: Pid, stdin: ref Party = nil,
   ## writes are completed, then the switchboard will exit (possibly
   ## with active file descriptors).  A few reads from other file
   ## descriptors could get services while waiting for the shutdown.
-  ctx.sb_monitor_pid(pid, cast[ptr Party](stdin), cast[ptr Party](stdout),
+  ctx.n00b_sb_monitor_pid(pid, cast[ptr Party](stdin), cast[ptr Party](stdout),
                      cast[ptr Party](stderr), shutdown)
 
 proc initPartyStrInput*(ctx: var Switchboard, party: var Party,
@@ -163,12 +160,12 @@ proc initPartyStrInput*(ctx: var Switchboard, party: var Party,
   ## and any file descriptors this is scheduled to write to will be
   ## closed automatically once the write is completed. This allows you
   ## to close the stdin of a subprocess after the string gets written.
-  ctx.sb_init_party_input_buf(party, cstring(input), csize_t(input.len()),
+  ctx.n00b_sb_init_party_input_buf(party, cstring(input), csize_t(input.len()),
                               true, true, close_fd_when_done)
 
-proc sb_party_input_buf_new_string(party: var Party, input: cstring,
+proc n00b_sb_party_input_buf_new_string(party: var Party, input: cstring,
                                    l: csize_t, dup: bool,
-                                   free: bool, closeFd: bool) {.sb.}
+                                   free: bool, closeFd: bool) {.sproc.}
 
 proc setString*(party: var Party, input: string, closeAfter: bool = false) =
   ## If a party is a string input buffer, this will update the string
@@ -178,7 +175,7 @@ proc setString*(party: var Party, input: string, closeAfter: bool = false) =
   ##
   ## If `closeAfter` is true, then once this string is written, any
   ## subscriber will be closed.
-  party.sb_party_input_buf_new_string(cstring(input), csize_t(input.len()),
+  party.n00b_sb_party_input_buf_new_string(cstring(input), csize_t(input.len()),
                                       true, true, closeAfter)
 proc initPartyFd*(ctx: var SwitchBoard, party: var Party, fd: int,
                   perms: SbFdPerms, stopWhenClosed = false,
@@ -195,51 +192,51 @@ proc initPartyFd*(ctx: var SwitchBoard, party: var Party, fd: int,
   ##
   ## If `closeOnDestroy` is true, we will call close() on the fd for
   ## you whenever the switchboard is torn down.
-  sb_init_party_fd(ctx, party, cint(fd), perms, stopWhenClosed,
+  n00b_sb_init_party_fd(ctx, party, cint(fd), perms, stopWhenClosed,
                    closeOnDestroy, closeWhenDone)
 
-proc sb_destroy(ctx: var Switchboard, free: bool) {.sb.}
+proc n00b_sb_destroy(ctx: var Switchboard, free: bool) {.sproc.}
 
 template initSwitchboard*(ctx: var SwitchBoard, heap_elems: int = 16) =
-  sb_init(ctx, csize_t(heap_elems))
+  n00b_sb_init(ctx, csize_t(heap_elems))
   ## Initialize a switchboard object.
 
 proc route*(ctx: var Switchboard, src: var Party, dst: var Party): bool
-    {.cdecl, importc: "sb_route", nodecl, discardable.}
+    {.cdecl, importc: "n00b_sb_route", nodecl, discardable.}
   ## Route messages from the `src` object to the `dst` object.
   ## Basically, the `dst` party subscribes to messages from the `src`.
   ## These subscriptions shouldn't be removed, but can be paused and
   ## resumed (pausing and never resuming is tantamount to removing).
 
 proc pauseRoute*(ctx: var Switchboard, src: var Party, dst: var Party): bool
-    {.cdecl, importc: "sb_pause_route", nodecl, discardable.}
+    {.cdecl, importc: "n00b_sb_pause_route", nodecl, discardable.}
   ## Akin to removing a route subscription, except that you can easily
   ## re-subscribe if you wish by calling `resumeRoute`
 
 proc resumeRoute*(ctx: var Switchboard, src: var Party, dst: var Party): bool
-    {.cdecl, importc: "sb_resume_route", nodecl, discardable.}
+    {.cdecl, importc: "n00b_sb_resume_route", nodecl, discardable.}
   ## Restarts a previous route / subscription that has been paused.
 
 proc routeIsActive*(ctx: var Switchboard, src: var Party, dst: var Party): bool
-    {.cdecl, importc: "sb_route_is_active", nodecl, discardable.}
+    {.cdecl, importc: "n00b_sb_route_is_active", nodecl, discardable.}
   ## Returns true if the subscription is active, meaning it exists,
   ## neither side is closed, and the subscription is not paused.
 
 proc routeIsPaused*(ctx: var Switchboard, src: var Party, dst: var Party): bool
-    {.cdecl, importc: "sb_route_is_paused", nodecl, discardable.}
+    {.cdecl, importc: "n00b_sb_route_is_paused", nodecl, discardable.}
   ## Returns true if the subscription is active but paused, meaning a
   ## subscribed happened, but it was paused. If either side is closed,
   ## this will return `false`, even if it had previously been paused.
 
 proc routeIsSubscribed*(ctx: var Switchboard, src: var Party,
                         dst: var Party): bool
-    {.cdecl, importc: "sb_route_is_subscribed", nodecl, discardable.}
+    {.cdecl, importc: "n00b_sb_route_is_subscribed", nodecl, discardable.}
   ## Returns true if the subscription is active, meaning a subscribed
   ## happened, and neither side is closed. However, it may be either
   ## paused or unpaused.
 
 proc setTimeout*(ctx: var Switchboard, value: var Timeval)
-    {.cdecl, importc: "sb_set_io_timeout", nodecl.}
+    {.cdecl, importc: "n00b_sb_set_io_timeout", nodecl.}
   ## Sets the amount of time that one polling loop blocks waiting for
   ## I/O. If you're definitely going to wait forever until the
   ## switchboard ends, then this can be unlimited (see
@@ -250,23 +247,23 @@ proc setTimeout*(ctx: var Switchboard, value: var Timeval)
   ## unnecessarily drive up CPU.
 
 proc clearTimeout*(ctx: var Switchboard)
-    {.cdecl, importc: "sb_clear_io_timeout", nodecl.}
+    {.cdecl, importc: "n00b_sb_clear_io_timeout", nodecl.}
   ## Removes any polling timeout; if there's no IO on the switchboard,
   ## polling will hang until there is.
 
 proc operateSwitchboard*(ctx: var Switchboard, toCompletion: bool): bool
-    {.cdecl, importc: "sb_operate_switchboard", nodecl, discardable.}
+    {.cdecl, importc: "n00b_sb_operate_switchboard", nodecl, discardable.}
   ## Low-level interface; use run() instead.
 
-proc sb_set_extra(ctx: var Switchboard, extra: RootRef) {.sb.}
-proc sb_set_party_extra(ctx: var Party, extra: RootRef) {.sb.}
+proc n00b_sb_set_extra(ctx: var Switchboard, extra: RootRef) {.sproc.}
+proc n00b_sb_set_party_extra(ctx: var Party, extra: RootRef) {.sproc.}
 
 proc getExtraData*(ctx: var Switchboard): RootRef
-    {.cdecl, importc: "sb_get_extra", nodecl.}
+    {.cdecl, importc: "n00b_sb_get_extra", nodecl.}
   ## Retrieves any extra data stored, specific to a switchboard.
 
 proc getExtraData*(ctx: var Party): RootRef
-    {.cdecl, importc: "sb_get_party_extra", nodecl.}
+    {.cdecl, importc: "n00b_sb_get_party_extra", nodecl.}
   ## Retrieves any extra data stored for the party.
 
 proc clearExtraData*(ctx: var Switchboard) =
@@ -274,7 +271,7 @@ proc clearExtraData*(ctx: var Switchboard) =
   let x = ctx.getExtraData()
 
   if x != nil:
-    ctx.sb_set_extra(RootRef(nil))
+    ctx.n00b_sb_set_extra(RootRef(nil))
     GC_unref(x)
 
 proc clearExtraData*(ctx: var Party) =
@@ -282,7 +279,7 @@ proc clearExtraData*(ctx: var Party) =
   let x = ctx.getExtraData()
 
   if x != nil:
-    ctx.sb_set_party_extra(RootRef(nil))
+    ctx.n00b_sb_set_party_extra(RootRef(nil))
     GC_unref(x)
 
 proc setExtraData*(ctx: var Switchboard, extra: RootRef) =
@@ -300,7 +297,7 @@ proc setExtraData*(ctx: var Switchboard, extra: RootRef) =
   if x != nil:
     GC_unref(x)
 
-  ctx.sb_set_extra(extra)
+  ctx.n00b_sb_set_extra(extra)
 
   if extra != RootRef(nil):
     GC_ref(extra)
@@ -321,7 +318,7 @@ proc setExtraData*(ctx: var Party, extra: RootRef) =
   if x != nil:
     GC_unref(x)
 
-  ctx.sb_set_party_extra(extra)
+  ctx.n00b_sb_set_party_extra(extra)
 
   if extra != RootRef(nil):
     GC_ref(extra)
@@ -329,23 +326,23 @@ proc setExtraData*(ctx: var Party, extra: RootRef) =
 proc `=destroy`*(ctx: var Switchboard) =
   var copy = ctx
   copy.clearExtraData()
-  copy.sb_destroy(false)
+  copy.n00b_sb_destroy(false)
 
 proc `=destroy`*(ctx: var Party) =
   var copy = ctx
   copy.clearExtraData()
 
-proc sb_result_destroy(res: ptr SBCaptures) {.sb.}
+proc n00b_sb_result_destroy(res: ptr SBCaptures) {.sproc.}
 
 proc `=destroy`*(res: var SBCaptures) =
-  sb_result_destroy(addr res)
+  n00b_sb_result_destroy(addr res)
 
-proc sb_result_get_capture(res: var SBCaptures, tag: cstring,
-                           borrow: bool): cstring {.sb.}
+proc n00b_sb_result_get_capture(res: var SBCaptures, tag: cstring,
+                           borrow: bool): cstring {.sproc.}
 
 proc getCapture*(res: var SBCaptures, tag: string): string =
   ## Returns a specific process capture by tag.
-  return $(res.sb_result_get_capture(cstring(tag), true))
+  return $(res.n00b_sb_result_get_capture(cstring(tag), true))
 
 proc run*(ctx: var Switchboard, toCompletion = true): bool {.discardable.} =
   ## Runs the switchboard IO polling cycle. By default, this will keep
@@ -366,7 +363,3 @@ proc run*(ctx: var Switchboard, toCompletion = true): bool {.discardable.} =
     return true
   else:
     return false
-
-# Not yet wrapped:
-## extern void sb_monitor_pid(switchboard_t *, pid_t, party_t *, party_t *,
-## 			   party_t *, bool);

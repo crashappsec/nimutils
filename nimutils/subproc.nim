@@ -1,8 +1,6 @@
-import std/[posix, os]
-import "."/[switchboard, random, file]
+import std/[posix]
+import "."/[random, file]
 
-{.warning[UnusedImport]: off.}
-{.compile: joinPath(splitPath(currentSourcePath()).head, "c/subproc.c").}
 {.pragma: sproc, cdecl, importc, nodecl.}
 
 type
@@ -54,32 +52,26 @@ type
     SPIoNone = 0, SpIoStdin = 1, SpIoStdout = 2,
     SpIoInOut = 3, SpIoStderr = 4, SpIoInErr = 5,
     SpIoOutErr = 6, SpIoAll = 7
-  SPResultObj* {. importc: "sb_result_t", header: "switchboard.h" .} = object
-  SPResult* = ptr SPResultObj
-  SubProcess*  {.importc: "subprocess_t", header: "switchboard.h" .} = object
+  SubProcess*  {.importc: "n00b_subproc_t", header: "n00b.h" } = object
 
-proc tcgetattr*(fd: cint, info: var Termcap): cint {. cdecl, importc,
-                                 header: "<termios.h>", discardable.}
-proc tcsetattr*(fd: cint, opt: TcsaConst, info: var Termcap):
-              cint {. cdecl, importc, header: "<termios.h>", discardable.}
-proc termcap_get*(termcap: var Termcap) {.sproc.}
-proc termcap_set*(termcap: var Termcap) {.sproc.}
-proc subproc_init(ctx: var SubProcess, cmd: cstring, args: cStringArray,
-                  proxyStdinClose: bool)
-    {.sproc.}
-proc subproc_set_envp(ctx: var SubProcess, args: cStringArray)
-    {.sproc.}
-proc subproc_pass_to_stdin(ctx: var SubProcess, s: cstring, l: csize_t,
-                           close_fd: bool): bool {.sproc.}
-proc subproc_get_capture(ctx: var SubProcess, tag: cstring, ln: ptr csize_t):
-                        cstring {.sproc.}
-proc subproc_get_exit(ctx: var SubProcess, wait: bool): cint {.sproc.}
-proc subproc_get_errno(ctx: var SubProcess, wait: bool): cint {.sproc.}
-proc subproc_get_signal(ctx: var SubProcess, wait: bool): cint {.sproc.}
+proc tcgetattr*(fd: cint, info: var Termcap): cint
+               {. cdecl, importc, header: "<termios.h>", discardable.}
+proc tcsetattr*(fd: cint, opt: TcsaConst, info: var Termcap): cint
+               {. cdecl, importc, header: "<termios.h>", discardable.}
+
+proc n00b_termcap_get*(termcap: var Termcap) {.sproc.}
+proc n00b_termcap_set*(termcap: var Termcap) {.sproc.}
+proc n00b_subproc_init(ctx: var SubProcess, cmd: cstring, args: cStringArray, proxyStdinClose: bool) {.sproc.}
+proc n00b_subproc_set_envp(ctx: var SubProcess, args: cStringArray) {.sproc.}
+proc n00b_subproc_pass_to_stdin(ctx: var SubProcess, s: cstring, l: csize_t, close_fd: bool): bool {.sproc.}
+proc n00b_subproc_get_capture(ctx: var SubProcess, tag: cstring, ln: ptr csize_t): cstring {.sproc.}
+proc n00b_subproc_get_exit(ctx: var SubProcess, wait: bool): cint {.sproc.}
+proc n00b_subproc_get_errno(ctx: var SubProcess, wait: bool): cint {.sproc.}
+proc n00b_subproc_get_signal(ctx: var SubProcess, wait: bool): cint {.sproc.}
 
 # Functions we can call directly w/o a nim proxy.
-proc setParentTermcap*(ctx: var SubProcess, tc: var Termcap) {.cdecl,
-                          importc: "subproc_set_parent_termcap", nodecl.}
+proc setParentTermcap*(ctx: var SubProcess, tc: var Termcap)
+                      {.cdecl, importc: "n00b_subproc_set_parent_termcap", nodecl.}
   ## Set the parent's termcap at the time of a fork, for when subprocesses
   ## are using a pseudo-terminal (pty). Generally the default should be
   ## good.
@@ -90,8 +82,8 @@ proc setParentTermcap*(ctx: var SubProcess, tc: var Termcap) {.cdecl,
   ##
   ## This must be called before spawning a process.
 
-proc setChildTermcap*(ctx: var SubProcess, tc: var Termcap) {.cdecl,
-                          importc: "subproc_set_parent_termcap", nodecl.}
+proc setChildTermcap*(ctx: var SubProcess, tc: var Termcap)
+                     {.cdecl, importc: "n00b_subproc_set_parent_termcap", nodecl.}
   ## Set the child's termcap at the time of a fork, for when subprocesses
   ## are using a pseudo-terminal (pty).
   ##
@@ -100,7 +92,7 @@ proc setChildTermcap*(ctx: var SubProcess, tc: var Termcap) {.cdecl,
   ## a process.
 
 proc setPassthroughRaw*(ctx: var SubProcess, which: SPIoKind, combine: bool)
-    {.cdecl, importc: "subproc_set_passthrough", nodecl.}
+    {.cdecl, importc: "n00b_subproc_set_passthrough", nodecl.}
   ## Low-level wrapper used by `setPassthrough()`
 
 template setPassthrough*(ctx: var SubProcess, which = SPIoAll, merge = false) =
@@ -112,7 +104,7 @@ template setPassthrough*(ctx: var SubProcess, which = SPIoAll, merge = false) =
   ctx.setPassthroughRaw(which, merge)
 
 proc setCaptureRaw*(ctx: var SubProcess, which: SPIoKind, combine: bool)
-    {.cdecl, importc: "subproc_set_capture", nodecl.}
+    {.cdecl, importc: "n00b_subproc_set_capture", nodecl.}
   ## The low-level interface used by `setCapture`
 
 template setCapture*(ctx: var SubProcess, which = SPIoOutErr, merge = false) =
@@ -133,15 +125,14 @@ template setCapture*(ctx: var SubProcess, which = SPIoOutErr, merge = false) =
   ## Currently, this must be called before spawning a process.
   ctx.setCaptureRaw(which, merge)
 
-proc rawMode*(termcap: var Termcap) {.cdecl, importc: "termcap_set_raw_mode",
-                                      nodecl.}
+proc rawMode*(termcap: var Termcap) {.cdecl, importc: "n00b_termcap_set_raw_mode", nodecl.}
   ## This configures a `Termcap` data structure for `raw` mode, which
   ## loosely is non-echoing and unbuffered. There's not quite a firm
   ## standard for what raw mode is; but it's a collection of settings,
   ## most of which no longer matter in modern terminals.
 
 proc setTimeout*(ctx: var SubProcess, value: var Timeval)
-    {.cdecl, importc: "subproc_set_timeout", nodecl.}
+    {.cdecl, importc: "n00b_subproc_set_timeout", nodecl.}
   ## This sets how long the process should wait when doing a single
   ## poll of file-descriptors to be ready with data to read. If you
   ## don't set this, there will be no timeout, and it's possible for
@@ -160,10 +151,10 @@ proc setTimeout*(ctx: var SubProcess, value: var Timeval)
   ## subprocess switchboard will exit.
 
 proc clearTimeout*(ctx: var SubProcess)
-    {.cdecl, importc: "subproc_clear_timeout", nodecl.}
+    {.cdecl, importc: "n00b_subproc_clear_timeout", nodecl.}
   ## Remove any set timeout.
 
-proc usePty*(ctx: var SubProcess) {.cdecl, importc: "subproc_use_pty", nodecl.}
+proc usePty*(ctx: var SubProcess) {.cdecl, importc: "n00b_subproc_use_pty", nodecl.}
   ## When this is set on a SubProcess object before the process is
   ## spawned, it will cause the process to start using a
   ## pseudo-terminal (pty), which, from the point of view of the
@@ -173,24 +164,24 @@ proc usePty*(ctx: var SubProcess) {.cdecl, importc: "subproc_use_pty", nodecl.}
   ## connected to a terminal, such as `more()` or `less()`.
 
 proc getPtyFd*(ctx: var SubProcess): cint
-    {.cdecl, importc: "subproc_get_pty_fd", nodecl.}
+    {.cdecl, importc: "n00b_subproc_get_pty_fd", nodecl.}
   ## When using a PTY, this call returns the file descriptor associated
   ## with the child process's terminal.
 
-proc start*(ctx: var SubProcess) {.cdecl, importc: "subproc_start", nodecl.}
+proc start*(ctx: var SubProcess) {.cdecl, importc: "n00b_subproc_start", nodecl.}
   ## This starts the sub-process, forking it off. It does NOT poll for
   ## input-output. For many apps, you don't need this function;
   ## instead, use `run()`.
   ##
   ## Use this only when you're going to do your own IO polling loop.
 
-proc poll*(ctx: var SubProcess): bool {.cdecl, importc: "subproc_poll", nodecl.}
+proc poll*(ctx: var SubProcess): bool {.cdecl, importc: "n00b_subproc_poll", nodecl.}
   ## If you're running your own IO polling loop, this runs the loop
   ## one time. You must have previously called `start()`.
   ##
   ## This returns `true` when called after the process has exited.
 
-proc run*(ctx: var SubProcess)  {.cdecl, importc: "subproc_run", nodecl.}
+proc run*(ctx: var SubProcess)  {.cdecl, importc: "n00b_subproc_run", nodecl.}
   ## This launches a subprocess, and polls it for IO until the process
   ## ends, and has no waiting data left to read.
   ##
@@ -201,7 +192,7 @@ proc run*(ctx: var SubProcess)  {.cdecl, importc: "subproc_run", nodecl.}
   ## `setIoCallback()`) or manually poll by instead using `start()` and
   ## then calling `poll()` in your own loop.
 
-proc close*(ctx: var SubProcess) {.cdecl, importc: "subproc_close", nodecl.}
+proc close*(ctx: var SubProcess) {.cdecl, importc: "n00b_subproc_close", nodecl.}
   ## Closes down a subprocess; do not call any querying function after
   ## this, as the memory will be freed.
 
@@ -209,26 +200,26 @@ proc `=destroy`*(ctx: var SubProcess) =
     ctx.close()
 
 proc getPid*(ctx: var SubProcess): Pid
-    {.cdecl, importc: "subproc_get_pid", nodecl.}
+    {.cdecl, importc: "n00b_subproc_get_pid", nodecl.}
   ## Returns the process ID associated with the subprocess. This may
   ## be called at any point after the process spawns.
 
 proc setExtra*(ctx: var SubProcess, p: pointer)
-    {.cdecl, importc: "subproc_set_extra", nodecl.}
+    {.cdecl, importc: "n00b_subproc_set_extra", nodecl.}
   ## This can be used to make arbitrary information available to your
   ## I/O callbacks that is specific to the SubProcess instance.
 
 proc getExtra*(ctx: var SubProcess): pointer
-    {.cdecl, importc: "subproc_get_extra", nodecl.}
+    {.cdecl, importc: "n00b_subproc_get_extra", nodecl.}
   ## This can be used to retrieve any information set via `setExtra()`.
 
 proc pausePassthrough*(ctx: var SubProcess, which: SpIoKind)
-    {.cdecl, importc: "subproc_pause_passthrough", nodecl.}
+    {.cdecl, importc: "n00b_subproc_pause_passthrough", nodecl.}
   ## Stops passthrough data from being passed (though pending writes
   ## may still succeed).
 
 proc resumePassthrough*(ctx: var SubProcess, which: SpIoKind)
-    {.cdecl, importc: "subproc_resume_passthrough", nodecl.}
+    {.cdecl, importc: "n00b_subproc_resume_passthrough", nodecl.}
   ## Resumes passthrough after being paused.  For data that didn't get
   ## passed during the pause, it will not be seen after the pause
   ## either.
@@ -237,17 +228,17 @@ proc resumePassthrough*(ctx: var SubProcess, which: SpIoKind)
   ## subprocess, for instance.
 
 proc pauseCapture*(ctx: var SubProcess, which: SpIoKind)
-    {.cdecl, importc: "subproc_pause_capture", nodecl.}
+    {.cdecl, importc: "n00b_subproc_pause_capture", nodecl.}
   ## Stops capture of a stream.  If it's resumed, data published
   ## during the pause will NOT be added to the capture.
 
 proc resumeCapture*(ctx: var SubProcess, which: SpIoKind)
-    {.cdecl, importc: "subproc_resume_capture", nodecl.}
+    {.cdecl, importc: "n00b_subproc_resume_capture", nodecl.}
   ## Resumes capturing a stream that's been paused.
 
 proc setIoCallback*(ctx: var SubProcess, which: SpIoKind,
                            callback: SubProcCallback): bool
-    {.cdecl, importc: "subproc_set_io_callback", nodecl, discardable.}
+    {.cdecl, importc: "n00b_subproc_set_io_callback", nodecl, discardable.}
   ## Sets up a callback for receiving IO as it is read or written from
   ## the terminal. The `which` parameter indicates which streams you
   ## wish to subscribe to. You may call this multiple times, for
@@ -255,13 +246,13 @@ proc setIoCallback*(ctx: var SubProcess, which: SpIoKind,
   ## function, or would like two different functions to receive data.
 
 proc setStartupCallback*(ctx: var SubProcess, callback: SpStartupCallback) {.
-      cdecl, importc: "subproc_set_startup_callback", nodecl .}
+      cdecl, importc: "n00b_subproc_set_startup_callback", nodecl .}
   ## This allows you to set a callback in the parent process that will
   ## run once, after the underlying fork occurs, but before any IO is
   ## processed.
 
 proc rawFdWrite*(fd: cint, buf: pointer, l: csize_t)
-    {.cdecl, importc: "write_data", nodecl.}
+    {.cdecl, importc: "n00b_sb_write_data", nodecl.}
   ## An operation that writes from memory to a raw file descriptor.
 
 template binaryCstringToString*(s: cstring, l: int): string =
@@ -278,14 +269,14 @@ proc initSubProcess*(ctx: var SubProcess, cmd: string,
   ## run the sub-process. Instead, you can first configure it, and
   ## then call `run()` when ready.
   var cargs = allocCstringArray(args)
-  subproc_init(ctx, cstring(cmd), cargs, proxyStdinClose)
+  n00b_subproc_init(ctx, cstring(cmd), cargs, proxyStdinClose)
 
 proc setEnv*(ctx: var SubProcess, env: openarray[string]) =
   ## Explicitly set the environment the subprocess should inherit. If
   ## not called before the process is launched, the parent's
   ## environment will be inherited.
   var envp = allocCstringArray(env)
-  ctx.subproc_set_envp(envp)
+  ctx.n00b_subproc_set_envp(envp)
 
 proc pipeToStdin*(ctx: var SubProcess, s: string, close_fd: bool): bool =
   ## This allows you to pass input to the subprocess through its
@@ -297,7 +288,7 @@ proc pipeToStdin*(ctx: var SubProcess, s: string, close_fd: bool): bool =
   ## remains open. However, if you pass `true` to the parameter `close_fd`,
   ## then the child's stdin will get closed automatically once the
   ## write completes.
-  return ctx.subproc_pass_to_stdin(cstring(s), csize_t(s.len()), close_fd)
+  return ctx.n00b_subproc_pass_to_stdin(cstring(s), csize_t(s.len()), close_fd)
 
 proc getTaggedValue*(ctx: var SubProcess, tag: cstring): string =
   ## Lower-level interface to retrieving captured streams. Use
@@ -306,7 +297,7 @@ proc getTaggedValue*(ctx: var SubProcess, tag: cstring): string =
     outlen: csize_t
     s:      cstring
 
-  s = subproc_get_capture(ctx, tag, addr outlen)
+  s = n00b_subproc_get_capture(ctx, tag, addr outlen)
   if outlen == 0:
     result = ""
   else:
@@ -332,17 +323,17 @@ proc getStderr*(ctx: var SubProcess): string =
 
 proc getExitCode*(ctx: var SubProcess, waitForExit = true): int =
   ## Returns the exit code of the process.
-  return int(subproc_get_exit(ctx, waitForExit))
+  return int(n00b_subproc_get_exit(ctx, waitForExit))
 
 proc getErrno*(ctx: var SubProcess, waitForExit = true): int =
   ## If the child died and we received an error, this will contain
   ## the value of `errno`.
-  return int(subproc_get_errno(ctx, waitForExit))
+  return int(n00b_subproc_get_errno(ctx, waitForExit))
 
 proc getSignal*(ctx: var SubProcess, waitForExit = true): int =
   ## If the process died as the result of being passed a signal,
   ## this will contain the signal number.
-  return int(subproc_get_signal(ctx, waitForExit))
+  return int(n00b_subproc_get_signal(ctx, waitForExit))
 
 type ExecOutput* = ref object
     stdin*:    string
@@ -397,6 +388,7 @@ proc runCommand*(exe:  string,
   ##                  file descriptors are closed, and doesn't wait for the
   ##                  subprocess to finish. In this case, process exit status
   ##                  will not be reliable.
+  echo("RUNNING ", exe, " ", $args)
   var
     subproc: SubProcess
     timeout: Timeval
