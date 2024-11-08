@@ -152,18 +152,18 @@ proc check*(response: Response,
     raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
   return response
 
-proc safeRequest*(client: HttpClient,
-                  url: Uri | string,
-                  httpMethod: HttpMethod | string = HttpGet,
-                  body = "",
-                  headers: HttpHeaders = nil,
-                  multipart: MultipartData = nil,
-                  retries: int = 0,
-                  connectRetries: int = 0,
-                  firstRetryDelayMs: int = 0,
-                  only2xx: bool = false,
-                  raiseWhenAbove: int = 0,
-                  ): Response =
+proc safeRequest(client: HttpClient,
+                 url: Uri | string,
+                 httpMethod: HttpMethod | string = HttpGet,
+                 body = "",
+                 headers: HttpHeaders = nil,
+                 multipart: MultipartData = nil,
+                 retries: int = 0,
+                 connectRetries: int = 0,
+                 firstRetryDelayMs: int = 0,
+                 only2xx: bool = false,
+                 raiseWhenAbove: int = 0,
+                 ): Response =
   withRetry(connectRetries, firstRetryDelayMs):
     timeoutGuard(client, url)
   withRetry(retries, firstRetryDelayMs):
@@ -191,14 +191,14 @@ proc getSSLContext(caFile: string = "", verifyMode = CVerifyPeer): SslContext =
     except:
       return newContext(verifyMode = verifyMode, caFile = getCAStorePath())
 
-proc createHttpClient*(uri: Uri = parseUri(""),
+proc createHttpContext(uri: Uri = parseUri(""),
                        maxRedirects: int = 3,
                        timeout: int = 1000, # in ms - 1 second
                        pinnedCert: string = "",
                        verifyMode = CVerifyPeer,
                        disallowHttp: bool = false,
                        userAgent: string = defUserAgent,
-                       ): HttpClient =
+                       ): (SslContext, HttpClient) =
   if uri.scheme == "http":
     if disallowHttp:
       raise newException(ValueError, "http:// URLs not allowed (only https).")
@@ -219,7 +219,7 @@ proc createHttpClient*(uri: Uri = parseUri(""),
   if client == nil:
     raise newException(ValueError, "Invalid HTTP configuration")
 
-  return client
+  return (context, client)
 
 proc safeRequest*(url: Uri | string,
                   httpMethod: HttpMethod | string = HttpGet,
@@ -236,17 +236,21 @@ proc safeRequest*(url: Uri | string,
                   disallowHttp: bool = false,
                   only2xx: bool = false,
                   raiseWhenAbove: int = 0,
+                  userAgent: string = defUserAgent,
                   ): Response =
   let uri = when url is string:
     parseUri(url)
   else:
     url
-  let client = createHttpClient(uri           = uri,
-                                maxRedirects  = maxRedirects,
-                                timeout       = timeout,
-                                pinnedCert    = pinnedCert,
-                                verifyMode    = verifyMode,
-                                disallowHttp  = disallowHttp)
+  let (context, client) = createHttpContext(
+    uri           = uri,
+    maxRedirects  = maxRedirects,
+    timeout       = timeout,
+    pinnedCert    = pinnedCert,
+    verifyMode    = verifyMode,
+    disallowHttp  = disallowHttp,
+    userAgent     = userAgent,
+  )
   try:
     return client.safeRequest(url               = uri,
                               httpMethod        = httpMethod,
@@ -259,4 +263,5 @@ proc safeRequest*(url: Uri | string,
                               only2xx           = only2xx,
                               raiseWhenAbove    = raiseWhenAbove)
   finally:
+    context.destroyContext()
     client.close()

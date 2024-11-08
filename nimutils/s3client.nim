@@ -27,13 +27,7 @@ type
 
 proc newS3Client*(creds: AwsCredentials, region: string = defaultRegion,
     host: string = awsURI, timeoutMilliseconds = 1000): S3Client =
-  let
-    # TODO - use some kind of template and compile-time variable to put the correct kernel used to build the sdk in the UA?
-    httpclient = newHttpClient(
-      "nimaws-sdk/0.3.3; " & defUserAgent.replace(" ", "-").toLower() & "; darwin/16.7.0",
-      timeout = timeoutMilliseconds,
-    )
-    scope = AwsScope(date: getAmzDateString(), region: region, service: "s3")
+  let scope = AwsScope(date: getAmzDateString(), region: region, service: "s3")
 
   var
     endpoint: Uri
@@ -48,9 +42,16 @@ proc newS3Client*(creds: AwsCredentials, region: string = defaultRegion,
   endpoint = parseUri(mhost)
 
 
-  return S3Client(httpClient: httpclient, credentials: creds, scope: scope,
-      endpoint: endpoint, isAWS: endpoint.hostname == "amazonaws.com", key: "",
-      key_expires: getTime())
+  return S3Client(
+    userAgent: "nimaws-sdk/0.3.3; " & defUserAgent.replace(" ", "-").toLower() & "; darwin/16.7.0",
+    timeout: timeoutMilliseconds,
+    credentials: creds,
+    scope: scope,
+    endpoint: endpoint,
+    isAWS: endpoint.hostname == "amazonaws.com",
+    key: "",
+    key_expires: getTime(),
+  )
 
 proc get_object*(self: var S3Client, bucket, key: string): Response =
   var
@@ -68,7 +69,7 @@ proc get_object*(self: var S3Client, bucket, key: string): Response =
 ##  path has to be absoloute path in the form /path/to/file
 ##  payload is binary string
 proc put_object*(self: var S3Client, bucket, path: string,
-    payload: string): Response {.gcsafe.} =
+    payload: string): Response =
   let params = {
       "action": "PUT",
       "bucket": bucket,
@@ -79,7 +80,7 @@ proc put_object*(self: var S3Client, bucket, path: string,
   return self.request(params)
 
 proc list_objects*(self: var S3Client, bucket: string): seq[
-    Bobject] {.gcsafe.} =
+    Bobject] =
   let
     params = {
       "bucket": bucket
@@ -91,7 +92,7 @@ proc list_objects*(self: var S3Client, bucket: string): seq[
       result.add(Bobject(key: c[0].innerText, modified: c[1].innerText, etag: c[
           2].innerText, size: parseInt(c[3].innerText)))
 
-proc list_buckets*(self: var S3Client): seq[Bucket] {.gcsafe.} =
+proc list_buckets*(self: var S3Client): seq[Bucket] =
   let
     params = {
       "action": "GET"
