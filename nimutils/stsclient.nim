@@ -12,13 +12,7 @@ proc newStsClient*(creds: AwsCredentials,
                    region: string = defaultRegion,
                    host: string = awsURI,
                    timeoutMilliseconds = 1000): StsClient =
-  let
-    # TODO - use some kind of template and compile-time variable to put the correct kernel used to build the sdk in the UA?
-    httpclient = newHttpClient(
-      "nimaws-sdk/0.3.3; " & defUserAgent.replace(" ", "-").toLower() & "; darwin/16.7.0",
-      timeout = timeoutMilliseconds,
-    )
-    scope = AwsScope(date: getAmzDateString(), region: region, service: "sts")
+  let scope = AwsScope(date: getAmzDateString(), region: region, service: "sts")
 
   var
     endpoint: Uri
@@ -32,9 +26,16 @@ proc newStsClient*(creds: AwsCredentials,
     mhost = awsURI
   endpoint = parseUri(mhost)
 
-  return StsClient(httpClient: httpclient, credentials: creds, scope: scope,
-                   endpoint: endpoint, isAWS: endpoint.hostname == "amazonaws.com",
-                   key: "", key_expires: getTime())
+  return StsClient(
+    userAgent: "nimaws-sdk/0.3.3; " & defUserAgent.replace(" ", "-").toLower() & "; darwin/16.7.0",
+    timeout: timeoutMilliseconds,
+    credentials: creds,
+    scope: scope,
+    endpoint: endpoint,
+    isAWS: endpoint.hostname == "amazonaws.com",
+    key: "",
+    key_expires: getTime(),
+  )
 
 proc getCallerIdentity*(self: var StsClient): StsCallerIdentity =
   let params = {

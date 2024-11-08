@@ -29,7 +29,8 @@ type
     payload: string
 
   AwsClient* {.inheritable.} = object
-    httpClient*: HttpClient
+    userAgent*: string
+    timeout*: int
     credentials*: AwsCredentials
     scope*: AwsScope
     endpoint*: Uri
@@ -94,15 +95,15 @@ proc getAmzDateString*(): string =
 
 proc newAwsClient*(creds: AwsCredentials, region,
     service: string): AwsClient =
-  let
-    # TODO - use some kind of template and compile-time variable to put the correct kernel used to build the sdk in the UA?
-    httpclient = createHttpClient(
-      userAgent = "nimaws-sdk/0.3.3; " & defUserAgent.replace(" ", "-").toLower() & "; darwin/16.7.0",
-    )
-    scope = AwsScope(date: getAmzDateString(), region: region, service: service)
+  let scope = AwsScope(date: getAmzDateString(), region: region, service: service)
 
-  return AwsClient(httpClient: httpclient, credentials: creds, scope: scope,
-      key: "", key_expires: getTime())
+  return AwsClient(
+    userAgent: "nimaws-sdk/0.3.3; " & defUserAgent.replace(" ", "-").toLower() & "; darwin/16.7.0",
+    credentials: creds,
+    scope: scope,
+    key: "",
+    key_expires: getTime(),
+  )
 
 proc request*(client: var AwsClient, params: Table, headers: HttpHeaders = newHttpHeaders()): Response =
   var
@@ -148,18 +149,16 @@ proc request*(client: var AwsClient, params: Table, headers: HttpHeaders = newHt
   # Add signing key caching so we can skip a step
   # utilizing some operator overloading on the create_aws_authorization proc.
   # if passed a key and not headers, just return the authorization string; otherwise, create the key and add to the headers
-  client.httpClient.headers.clear()
   if client.key_expires <= getTime():
     client.scope.date = getAmzDateString()
-    client.key = create_aws_authorization(client.credentials, req,
-        client.httpClient.headers.table, client.scope)
+    client.key = create_aws_authorization(client.credentials, req, headers.table, client.scope)
     client.key_expires = getTime() + initTimeInterval(minutes = 5)
   else:
     let auth = create_aws_authorization(client.credentials.id, client.key, req,
-        client.httpClient.headers.table, client.scope)
-    client.httpClient.headers.add("Authorization", auth)
+        headers.table, client.scope)
+    headers.add("Authorization", auth)
 
-  return client.httpClient.safeRequest(
+  return safeRequest(
     url,
     action,
     payload,
@@ -167,4 +166,6 @@ proc request*(client: var AwsClient, params: Table, headers: HttpHeaders = newHt
     retries=2,
     connectRetries=2,
     only2xx=true,
+    userAgent=client.userAgent,
+    timeout=client.timeout,
   )
