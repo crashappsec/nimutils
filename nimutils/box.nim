@@ -87,6 +87,17 @@ proc arrItemType*[T](a: openarray[T]): auto =
     return default(T)
 proc arrItemType*(a: BoxAtom): BoxAtom = a
 
+proc `len`*(box: Box): int {.noSideEffect.} =
+  case box.kind:
+  of MkStr:
+    return len(box.s)
+  of MkTable:
+    return len(box.t.t)
+  of MkSeq:
+    return len(box.c.s)
+  else:
+    raise newException(ValueError, "cannot compute box length")
+
 proc `==`*(box1, box2: Box) : bool {.noSideEffect.} =
   # The noSideEffect works around a bug in nim2.0
   if box1.kind != box2.kind:
