@@ -149,20 +149,23 @@ proc request*(client: var AwsClient, params: Table, headers: HttpHeaders = newHt
   # Add signing key caching so we can skip a step
   # utilizing some operator overloading on the create_aws_authorization proc.
   # if passed a key and not headers, just return the authorization string; otherwise, create the key and add to the headers
+  var authHeaders = newHttpHeaders()
   if client.key_expires <= getTime():
     client.scope.date = getAmzDateString()
-    client.key = create_aws_authorization(client.credentials, req, headers.table, client.scope)
+    client.key = create_aws_authorization(client.credentials, req, authHeaders.table, client.scope)
     client.key_expires = getTime() + initTimeInterval(minutes = 5)
   else:
-    let auth = create_aws_authorization(client.credentials.id, client.key, req,
-        headers.table, client.scope)
-    headers.add("Authorization", auth)
+    let auth = create_aws_authorization(client.credentials.id, client.key, req, authHeaders.table, client.scope)
+    authHeaders.add("Authorization", auth)
+
+  for k, v in headers.pairs():
+    authHeaders.add(k, v)
 
   return safeRequest(
     url,
     action,
     payload,
-    headers=headers,
+    headers=authHeaders,
     retries=2,
     connectRetries=2,
     only2xx=true,
