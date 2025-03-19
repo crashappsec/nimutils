@@ -77,6 +77,8 @@ template applyCommonLinkOptions*(staticLink = true, quiet = true) =
 
   # n00b
   switch("passC", "-DHATRACK_PER_INSTANCE_AUX")
+  switch("passC", "-DN00B_DEBUG")
+  switch("passC", "-DN00B_DEV")
 
   setupTargetArch(quiet)
 
