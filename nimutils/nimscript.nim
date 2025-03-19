@@ -75,6 +75,9 @@ template applyCommonLinkOptions*(staticLink = true, quiet = true) =
   switch("passC", "-Wno-error=implicit-function-declaration")
   switch("passC", "-Wno-error=incompatible-pointer-types")
 
+  # n00b
+  switch("passC", "-DHATRACK_PER_INSTANCE_AUX")
+
   setupTargetArch(quiet)
 
   when defined(macosx):
