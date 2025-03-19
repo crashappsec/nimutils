@@ -1,5 +1,4 @@
-#define HATRACK_PER_INSTANCE_AUX
-#include <n00b.h>
+#include "n00b.h"
 
 // John's stuff.
 typedef void (*CB_TYPE)(const char *, unsigned int, void*);
