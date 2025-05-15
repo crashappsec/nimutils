@@ -467,7 +467,8 @@ proc runCmdGetEverything*(exe:  string,
                           closeStdin  = true,
                           passthrough = false,
                           timeoutUsec = 1000000,
-                          ensureExit  = true): ExecOutput =
+                          ensureExit  = true,
+                          capture     = SpIoOutErr): ExecOutput =
   ## A wrapper for `runCommand` that captures all output from the
   ## process.  This is similar to Nim's `execCmdEx` but allows for
   ## optional passthrough, timeouts, and sending an input string to
@@ -477,7 +478,7 @@ proc runCmdGetEverything*(exe:  string,
                     pty         = if passthrough: isStdinTTY else: false,
                     passthrough = if passthrough: SpIoAll else: SpIoNone,
                     timeoutUSec = timeoutUsec,
-                    capture     = SpIoOutErr,
+                    capture     = capture,
                     waitForExit = ensureExit)
 
 proc runPager*(s: string) =
