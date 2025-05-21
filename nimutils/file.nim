@@ -66,7 +66,6 @@ when hostOs == "macosx":
         return name
       if len(item) > 3:
         result &= item[3 .. ^1]
-    echo "getMyAppPath() = ", result
 else:
   proc getMyAppPath*(): string {.exportc.} =
     ## Returns the proper location of the running executable on disk,
@@ -287,31 +286,25 @@ proc findExePath*(cmdName:    string,
   if len(options) != 0:
     return options[0]
 
-{.emit: """
-#include <unistd.h>
-#include <stdio.h>
+let PATH_MAX {.importc, header: "<stdio.h>".}: int
 
-static int
-get_path_max()
-{
-  return PATH_MAX;
-}
-
-static void
-do_read_link(const char *filename, char *buf) {
-  readlink(filename, buf, PATH_MAX);
-}
-""".}
-
-proc do_read_link(s: cstring, p: pointer): void {.cdecl,importc,nodecl.}
-proc get_path_max*(): cint {.cdecl,importc,nodecl.}
-
-proc readLink*(s: string): string =
+proc expandLink*(s: string): string =
   ## A wrapper for the posix `readlink` call that also resolves any
   ## relative paths in the result.
-  var v = newStringOfCap(int(get_path_max()));
-  do_read_link(cstring(s), addr s[0])
-  result = resolvePath(v)
+  var path = s
+  while true:
+    let buf = cast[cstring](alloc0(PATH_MAX))
+    try:
+      let n = readlink(cstring(path), buf, PATH_MAX)
+      if n < 0:
+        raiseOSError(osLastError())
+      result = resolvePath(joinPath(path.parentDir(), $buf))
+      path = result
+      let finfo = getFileInfo(result, followSymLink = false).kind
+      if finfo != pcLinkToFile:
+        return
+    finally:
+      dealloc(buf)
 
 proc getAllFileNames*(dir: string,
                       recurse         = true,
@@ -347,7 +340,10 @@ proc getAllFileNames*(dir: string,
       if yieldFileLinks:
         return @[dir]
       elif followFileLinks:
-        return @[readlink(dir)]
+        try:
+          return @[expandLink(dir)]
+        except OSError:
+          return @[]
       else:
         return @[]
     else:
@@ -380,17 +376,10 @@ proc getAllFileNames*(dir: string,
         if yieldFileLinks:
           result.add(fullPath)
         elif followFileLinks:
-          var
-            newPath = fullPath
-            i       = 40
-          while i != 0:
-            newPath = readlink(newPath)
-            let finfo = getFileInfo(newPath, followSymLink = false).kind
-            if finfo != pcLinkToFile:
-              break
-            i -= 0
-          if i != 0:
-            result.add(newPath)
+          try:
+            result.add(fullPath.expandLink())
+          except OSError:
+            discard
     elif S_ISREG(statbuf.st_mode):
       result.add(fullPath)
     elif S_ISDIR(statbuf.st_mode):
