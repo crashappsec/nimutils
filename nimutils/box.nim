@@ -149,7 +149,17 @@ proc contains*(self, item: Box): bool =
     else:
       raise newException(ValueError, "unsupported Box.contains for " & $self.kind)
 
-proc `&=`*(self, other: Box) =
+proc `[]`*(self: Box, key: Box): Box =
+  if self.kind != MkTable:
+    raise newException(ValueError, "Can only key lookup on tables")
+  return self.t.t[key]
+
+proc `[]`*(self: Box, index: int): Box =
+  if self.kind != MkSeq:
+    raise newException(ValueError, "Can only index lookup on sequences")
+  return self.c.s[index]
+
+proc `&=`*(self: Box, other: Box) =
   if self.kind != MkSeq or other.kind != MkSeq:
     raise newException(ValueError, "Can only add sequences together")
   self.c.s &= other.c.s
