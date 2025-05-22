@@ -124,6 +124,31 @@ proc add*(self, other: Box) =
     raise newException(ValueError, "Can only add to sequences")
   self.c.s.add(other)
 
+iterator items*(self: Box): Box =
+  case self.kind:
+    of MkSeq:
+      for i in self.c.s:
+        yield i
+    else:
+      raise newException(ValueError, "unsupported Box.items for " & $self.kind)
+
+iterator pairs*(self: Box): tuple[key: Box, value: Box] =
+  case self.kind:
+    of MkTable:
+      for k, v in self.t.t.pairs():
+        yield (k, v)
+    else:
+      raise newException(ValueError, "unsupported Box.pairs for " & $self.kind)
+
+proc contains*(self, item: Box): bool =
+  case self.kind:
+    of MkTable:
+      return item in self.t.t
+    of MkSeq:
+      return item in self.c.s
+    else:
+      raise newException(ValueError, "unsupported Box.contains for " & $self.kind)
+
 proc `&=`*(self, other: Box) =
   if self.kind != MkSeq or other.kind != MkSeq:
     raise newException(ValueError, "Can only add sequences together")
