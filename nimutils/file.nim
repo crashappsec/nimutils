@@ -1,7 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import std/[os, posix, strutils, posix_utils]
+import std/[os, posix, strutils, posix_utils, sets, sequtils]
 
 when hostOs == "macosx":
   {.emit: """
@@ -298,98 +298,120 @@ proc expandLink*(s: string): string =
       let n = readlink(cstring(path), buf, PATH_MAX)
       if n < 0:
         raiseOSError(osLastError())
-      result = resolvePath(joinPath(path.parentDir(), $buf))
-      path = result
-      let finfo = getFileInfo(result, followSymLink = false).kind
-      if finfo != pcLinkToFile:
-        return
+      let read = $buf
+      path = resolvePath(
+        if read.isAbsolute():
+          read
+        else:
+          joinPath(path.parentDir(), read)
+      )
+      let finfo = getFileInfo(path, followSymLink = false)
+      case finfo.kind
+      of pcLinkToFile, pcLinkToDir:
+        continue # keep resolving nested symlinks
+      else:
+        return path
     finally:
       dealloc(buf)
+  raise newException(OSError, s & ": could not expand symlink to valid file or dir")
 
-proc getAllFileNames*(dir: string,
+proc getNames(fullPath:         string,
+              recurse         = true,
+              yieldFileLinks  = false,
+              followFileLinks = false,
+              yieldDirs       = false,
+              followDirLinks  = false,
+              ): (HashSet[string], HashSet[string]) =
+  var
+    statbuf: Stat
+    subdirs = initHashSet[string]()
+    names   = initHashSet[string]()
+  if lstat(cstring(fullPath), statbuf) < 0:
+    return (subdirs, names)
+  elif S_ISLNK(statbuf.st_mode):
+    if dirExists(fullpath):
+      if yieldDirs:
+        names.incl(fullPath)
+      if recurse and followDirLinks:
+        try:
+          subdirs.incl(fullPath.expandLink())
+        except OSError:
+          discard
+    else:
+      if yieldFileLinks:
+        names.incl(fullPath)
+      if followFileLinks:
+        try:
+          names.incl(fullPath.expandLink())
+        except OSError:
+          discard
+  elif S_ISREG(statbuf.st_mode):
+    names.incl(fullPath)
+  elif S_ISDIR(statbuf.st_mode):
+    if recurse:
+      subdirs.incl(fullpath)
+    if yieldDirs:
+      names.incl(fullpath)
+  else:
+    discard # Skip sockets, fifos, ...
+  return (subdirs, names)
+
+proc getAllFileNames*(path: string,
                       recurse         = true,
                       yieldFileLinks  = false,
                       followFileLinks = false,
                       yieldDirs       = false,
-                      followDirLinks  = false): seq[string] =
+                      followDirLinks  = false,
+                      ): seq[string] =
   ## This is a slightly more sane API for scanning for file names than the
   ## one provided in the nim standard API, primarily in that it is a single
   ## consistent API whether you scan recursively or not.
-  var kind: PathComponent
-
   if yieldFileLinks and followFileLinks:
     raise newException(ValueError, "Do not specify yieldFileLinks and " &
       "followFileLinks in one call.")
 
-  let resolved = resolvePath(dir)
-
+  let resolved = resolvePath(path)
   if resolved.startswith("/proc") or resolved.startswith("/dev"):
     return @[]
 
-  try:
-    let info = getFileInfo(dir, followSymLink = false)
+  var
+    seen             = initHashSet[string]()
+    (subdirs, names) = getNames(
+      path,
+      recurse         = recurse,
+      yieldFileLinks  = yieldFileLinks,
+      followFileLinks = followFileLinks,
+      yieldDirs       = yieldDirs,
+      followDirLinks  = followDirLinks,
+    )
 
-    kind = info.kind
-  except:
-    return @[]
-
-  case kind
-    of pcFile:
-      return @[dir]
-    of pcLinkToFile:
-      if yieldFileLinks:
-        return @[dir]
-      elif followFileLinks:
-        try:
-          return @[expandLink(dir)]
-        except OSError:
-          return @[]
-      else:
-        return @[]
-    else:
-      discard
-
-  var dirent = opendir(dir)
-  var subdirList: seq[string]
-
-  if dirent == nil:
-    return
-
-  while true:
-    var oneentry = readdir(dirent)
-    if oneentry == nil:
-      break
-    var filename = $cast[cstring](addr oneentry.d_name)
-    if filename in [".", ".."]:
+  while len(subdirs) > 0:
+    let dir    = subdirs.pop()
+    var dirent = opendir(cstring(dir))
+    if dirent == nil:
       continue
-    let fullpath = joinPath(dir, filename)
-    var statbuf: Stat
-    if lstat(cstring(fullPath), statbuf) < 0:
-      continue
-    elif S_ISLNK(statbuf.st_mode):
-      if dirExists(fullpath):
-        if recurse and followDirLinks:
-          subdirList.add(fullPath)
-        if yieldDirs:
-          result.add(fullPath)
-      else:
-        if yieldFileLinks:
-          result.add(fullPath)
-        elif followFileLinks:
-          try:
-            result.add(fullPath.expandLink())
-          except OSError:
-            discard
-    elif S_ISREG(statbuf.st_mode):
-      result.add(fullPath)
-    elif S_ISDIR(statbuf.st_mode):
-      if recurse:
-        subdirList.add(fullpath)
-        if yieldDirs:
-          result.add(fullpath)
-    else:
-      continue # Skip sockets, fifos, ...
+    seen.incl(dir)
+    try:
+      while true:
+        var oneentry = readdir(dirent)
+        if oneentry == nil:
+          break
+        var filename = $cast[cstring](addr oneentry.d_name)
+        if filename in [".", ".."]:
+          continue
+        let
+          fullpath = joinPath(dir, filename)
+          (recursiveSubdirs, recursiveNames) = getNames(
+            fullpath,
+            recurse         = recurse,
+            yieldFileLinks  = yieldFileLinks,
+            followFileLinks = followFileLinks,
+            yieldDirs       = yieldDirs,
+            followDirLinks  = followDirLinks,
+          )
+        subdirs = subdirs + recursiveSubdirs - seen
+        names = names + recursiveNames
+    finally:
+      discard closedir(dirent)
 
-  discard closedir(dirent)
-  for item in subdirList:
-    result &= item.getAllFileNames()
+  return names.items().toSeq()
