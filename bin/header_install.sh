@@ -53,7 +53,7 @@ function copy_news {
                 echo $(color GREEN "Updating file:" ) $3
                 echo $(color GREEN full location: $DST_FILE)
             fi
-            cp $SRC_FILE $DST_FILE
+            cp -r $SRC_FILE $DST_FILE
         fi
     fi
 }
@@ -61,14 +61,19 @@ function copy_news {
 function push_ext_files {
     # $1 is the src dir
     # $2 is the dst dir
-    # $3 is the extension
-    pushd $1 >/dev/null
+    # rest are find params
+    pushd $1 > /dev/null
+    src=$1
+    shift
+    dst=$1
+    shift
 
-    for item in `ls *.$3`; do
-        copy_news $1 $2 $item
+    for item in $(find "$@"); do
+        copy_news $src $dst $item
     done
 
-    popd >/dev/null
+    popd > /dev/null
 }
 
-push_ext_files ${SRC_DIR} ${DST_DIR} h
+push_ext_files ${SRC_DIR} ${DST_DIR} -maxdepth 1 -name '*.h'
+push_ext_files ${SRC_DIR} ${DST_DIR} -maxdepth 1 -type d
