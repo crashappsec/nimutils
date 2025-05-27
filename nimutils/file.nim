@@ -1,7 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import std/[os, posix, strutils, posix_utils, sets, sequtils]
+import std/[os, posix, strutils, posix_utils, sets, sequtils, algorithm]
 
 when hostOs == "macosx":
   {.emit: """
@@ -414,4 +414,4 @@ proc getAllFileNames*(path: string,
     finally:
       discard closedir(dirent)
 
-  return names.items().toSeq()
+  return names.items().toSeq().sorted()
