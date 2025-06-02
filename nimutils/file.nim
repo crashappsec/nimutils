@@ -475,9 +475,15 @@ iterator getAllFileNames*(path:             string,
     if name.fsRef in seenDirs:
       continue
 
-    case name.linkOrInfo.kind
+    let kind = name.linkOrInfo.kind
+    case kind
     of pcFile, pcLinkToFile:
-      case fileLinks
+      case (
+        if kind == pcFile:
+          files
+        else:
+          fileLinks
+      )
       of Yield:
         yield name.asLink()
       of Follow:
@@ -488,7 +494,12 @@ iterator getAllFileNames*(path:             string,
     of pcDir, pcLinkToDir:
       seenDirs.incl(name.fsRef)
 
-      case dirLinks
+      case (
+        if kind == pcDir:
+          dirs
+        else:
+          dirLinks
+      )
       of Yield:
         yield name.asLink()
       of Follow:
@@ -497,7 +508,7 @@ iterator getAllFileNames*(path:             string,
         discard
 
       let recurseDir =
-        if name.linkOrInfo.kind == pcDir:
+        if kind == pcDir:
           recurse
         else:
           # only recurse symlink folders when symlinks are followed
