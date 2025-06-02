@@ -367,11 +367,13 @@ proc linkOrInfo*(p: PathInfo): PathRef =
   return p.info
 
 proc asLink(p: PathInfo): PathInfo =
-  return PathInfo(
-    linkInfo: p.linkInfo,
-    dstInfo:  p.dstInfo,
-    info:     p.linkInfo,
-  )
+  if p.isSymlink():
+    return PathInfo(
+      linkInfo: p.linkInfo,
+      dstInfo:  p.dstInfo,
+      info:     p.linkInfo,
+    )
+  return p
 
 proc maybeGetPathInfo(fullPath:         string,
                       ignore: openArray[string] = [],
