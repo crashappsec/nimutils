@@ -1,7 +1,7 @@
 ## :Author: John Viega (john@crashoverride.com)
 ## :Copyright: 2023, Crash Override, Inc.
 
-import std/[os, posix, strutils, posix_utils, sets, options]
+import std/[os, posix, strutils, posix_utils, sets, options, re]
 
 when hostOs == "macosx":
   {.emit: """
@@ -326,6 +326,31 @@ proc startsWithAnyOf(s: string, ignoreStartsWith: openArray[string]): bool =
       return true
   return false
 
+proc containsAnyOf(s: string, ignoreContains: openArray[string]): bool =
+  for i in ignoreContains:
+    if i in s:
+      return true
+  return false
+
+proc matchesRegexAnyOf(s: string, regexes: openArray[Regex]): bool =
+  for i, item in regexes:
+    if s.match(item):
+      return true
+  return false
+
+proc shouldIgnore(s: string,
+                  ignore:           openArray[string] = [],
+                  ignoreContains:   openArray[string] = [],
+                  ignoreStartsWith: openArray[string] = [],
+                  ignoreRegex:      openArray[Regex]  = [],
+                 ): bool =
+  return (
+    s in ignore or
+    s.containsAnyOf(ignoreContains) or
+    s.startsWithAnyOf(ignoreStartsWith) or
+    s.matchesRegexAnyOf(ignoreRegex)
+  )
+
 proc popLeft[T](s: var OrderedSet[T]): T =
   for i in s:
     s.excl(i)
@@ -376,7 +401,10 @@ proc asLink(p: PathInfo): PathInfo =
   return p
 
 proc maybeGetPathInfo(fullPath:         string,
+                      ignore:           openArray[string] = [],
+                      ignoreContains:   openArray[string] = [],
                       ignoreStartsWith: openArray[string] = [],
+                      ignoreRegex:      openArray[Regex]  = [],
                       ): Option[PathInfo] =
   var stats: Stat
   if lstat(cstring(fullPath), stats) >= 0:
@@ -384,7 +412,12 @@ proc maybeGetPathInfo(fullPath:         string,
       try:
         var linkstats: Stat
         let (expanded, srcKind, dstKind) = fullPath.expandLink()
-        if not expanded.startsWithAnyOf(ignoreStartsWith):
+        if not expanded.shouldIgnore(
+          ignore           = ignore,
+          ignoreContains   = ignoreContains,
+          ignoreStartsWith = ignoreStartsWith,
+          ignoreRegex      = ignoreRegex,
+        ):
           if lstat(cstring(expanded), linkStats) >= 0:
             let
               dst = PathRef(
@@ -411,7 +444,12 @@ proc maybeGetPathInfo(fullPath:         string,
       except:
         discard
     elif S_ISREG(stats.st_mode):
-      if not fullPath.startsWithAnyOf(ignoreStartsWith):
+      if not fullpath.shouldIgnore(
+        ignore           = ignore,
+        ignoreContains   = ignoreContains,
+        ignoreStartsWith = ignoreStartsWith,
+        ignoreRegex      = ignoreRegex,
+      ):
         let dst = PathRef(
           name: fullPath,
           kind: pcFile,
@@ -425,7 +463,12 @@ proc maybeGetPathInfo(fullPath:         string,
           info:    dst,
         ))
     elif S_ISDIR(stats.st_mode):
-      if not fullPath.startsWithAnyOf(ignoreStartsWith):
+      if not fullpath.shouldIgnore(
+        ignore           = ignore,
+        ignoreContains   = ignoreContains,
+        ignoreStartsWith = ignoreStartsWith,
+        ignoreRegex      = ignoreRegex,
+      ):
         let dst = PathRef(
           name: fullPath,
           kind: pcDir,
@@ -453,13 +496,16 @@ let systemIgnoreStartsWithPaths* = @[
   # "/sys/module",
 ]
 
-iterator getAllFileNames*(path:              string,
-                          recurse          = true,
-                          files            = Yield,
-                          fileLinks        = Follow,
-                          dirs             = Ignore,
-                          dirLinks         = Ignore,
-                          ignoreStartsWith = systemIgnoreStartsWithPaths,
+iterator getAllFileNames*(path:             string,
+                          recurse                             = true,
+                          files                               = Yield,
+                          fileLinks                           = Follow,
+                          dirs                                = Ignore,
+                          dirLinks                            = Ignore,
+                          ignore:           openArray[string] = [],
+                          ignoreContains:   openArray[string] = [],
+                          ignoreStartsWith: openArray[string] = systemIgnoreStartsWithPaths,
+                          ignoreRegex:      openArray[Regex]  = [],
                           ): PathInfo =
   ## This is a slightly more sane API for scanning for file names than the
   ## one provided in the nim standard API, primarily in that it is a single
@@ -472,7 +518,10 @@ iterator getAllFileNames*(path:              string,
   while len(toLook) > 0:
     let nameOpt = maybeGetPathInfo(
       toLook.popLeft(),
+      ignore           = ignore,
+      ignoreContains   = ignoreContains,
       ignoreStartsWith = ignoreStartsWith,
+      ignoreRegex      = ignoreRegex,
     )
     if nameOpt.isNone():
       continue
