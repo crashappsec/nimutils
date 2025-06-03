@@ -320,8 +320,8 @@ proc expandLink(s: string): tuple[
       dealloc(buf)
   raise newException(OSError, s & ": could not expand symlink to valid file or dir")
 
-proc startsWithAnyOf(s: string, ignore: openArray[string]): bool =
-  for i in ignore:
+proc startsWithAnyOf(s: string, ignoreStartsWith: openArray[string]): bool =
+  for i in ignoreStartsWith:
     if s.startsWith(i):
       return true
   return false
@@ -376,7 +376,7 @@ proc asLink(p: PathInfo): PathInfo =
   return p
 
 proc maybeGetPathInfo(fullPath:         string,
-                      ignore: openArray[string] = [],
+                      ignoreStartsWith: openArray[string] = [],
                       ): Option[PathInfo] =
   var stats: Stat
   if lstat(cstring(fullPath), stats) >= 0:
@@ -384,7 +384,7 @@ proc maybeGetPathInfo(fullPath:         string,
       try:
         var linkstats: Stat
         let (expanded, srcKind, dstKind) = fullPath.expandLink()
-        if not expanded.startsWithAnyOf(ignore):
+        if not expanded.startsWithAnyOf(ignoreStartsWith):
           if lstat(cstring(expanded), linkStats) >= 0:
             let
               dst = PathRef(
@@ -411,7 +411,7 @@ proc maybeGetPathInfo(fullPath:         string,
       except:
         discard
     elif S_ISREG(stats.st_mode):
-      if not fullPath.startsWithAnyOf(ignore):
+      if not fullPath.startsWithAnyOf(ignoreStartsWith):
         let dst = PathRef(
           name: fullPath,
           kind: pcFile,
@@ -425,7 +425,7 @@ proc maybeGetPathInfo(fullPath:         string,
           info:    dst,
         ))
     elif S_ISDIR(stats.st_mode):
-      if not fullPath.startsWithAnyOf(ignore):
+      if not fullPath.startsWithAnyOf(ignoreStartsWith):
         let dst = PathRef(
           name: fullPath,
           kind: pcDir,
@@ -442,7 +442,7 @@ proc maybeGetPathInfo(fullPath:         string,
       discard # Skip sockets, fifos, ...
   return none(PathInfo)
 
-let systemIgnorePaths* = @[
+let systemIgnoreStartsWithPaths* = @[
   "/proc/",
   "/dev/",
   "/boot/",
@@ -453,13 +453,13 @@ let systemIgnorePaths* = @[
   # "/sys/module",
 ]
 
-iterator getAllFileNames*(path:             string,
-                          recurse         = true,
-                          files           = Yield,
-                          fileLinks       = Follow,
-                          dirs            = Ignore,
-                          dirLinks        = Ignore,
-                          ignore          = systemIgnorePaths,
+iterator getAllFileNames*(path:              string,
+                          recurse          = true,
+                          files            = Yield,
+                          fileLinks        = Follow,
+                          dirs             = Ignore,
+                          dirLinks         = Ignore,
+                          ignoreStartsWith = systemIgnoreStartsWithPaths,
                           ): PathInfo =
   ## This is a slightly more sane API for scanning for file names than the
   ## one provided in the nim standard API, primarily in that it is a single
@@ -470,7 +470,10 @@ iterator getAllFileNames*(path:             string,
   toLook.incl(path)
 
   while len(toLook) > 0:
-    let nameOpt = maybeGetPathInfo(toLook.popLeft(), ignore = ignore)
+    let nameOpt = maybeGetPathInfo(
+      toLook.popLeft(),
+      ignoreStartsWith = ignoreStartsWith,
+    )
     if nameOpt.isNone():
       continue
     let name = nameOpt.get()
