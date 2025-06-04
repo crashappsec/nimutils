@@ -570,9 +570,9 @@ iterator getAllFileNames*(path:             string,
 
       if recurseDir:
         var dirent = opendir(cstring(name.name))
+        if dirent == nil:
+          continue
         try:
-          if dirent == nil:
-            continue
           while true:
             var oneentry = readdir(dirent)
             if oneentry == nil:
