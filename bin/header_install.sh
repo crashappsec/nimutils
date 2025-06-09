@@ -68,7 +68,7 @@ function push_ext_files {
     dst=$1
     shift
 
-    for item in $(find "$@"); do
+    for item in $(find . "$@"); do
         copy_news $src $dst $item
     done
 
