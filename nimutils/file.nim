@@ -400,6 +400,94 @@ proc asLink(p: PathInfo): PathInfo =
     )
   return p
 
+proc maybeGetLinkInfo(fullPath:         string,
+                      fsRef:            FsRef,
+                      ignore:           openArray[string] = [],
+                      ignoreContains:   openArray[string] = [],
+                      ignoreStartsWith: openArray[string] = [],
+                      ignoreRegex:      openArray[Regex]  = [],
+                      ): Option[PathInfo] =
+  try:
+    var linkstats: Stat
+    let (expanded, srcKind, dstKind) = fullPath.expandLink()
+    if not expanded.shouldIgnore(
+      ignore           = ignore,
+      ignoreContains   = ignoreContains,
+      ignoreStartsWith = ignoreStartsWith,
+      ignoreRegex      = ignoreRegex,
+    ):
+      if lstat(cstring(expanded), linkStats) >= 0:
+        let
+          dst = PathRef(
+            name: expanded,
+            kind: dstKind,
+            fsRef: (
+              linkstats.st_dev,
+              linkstats.st_ino,
+            ),
+          )
+          src = PathRef(
+            name:  fullPath,
+            kind:  srcKind,
+            fsRef: fsRef,
+          )
+        return some(PathInfo(
+          linkInfo: src,
+          dstInfo:  dst,
+          info:     dst,
+        ))
+  except:
+    discard
+  return none(PathInfo)
+
+proc maybeGetFileInfo(fullPath:         string,
+                      fsRef:            FsRef,
+                      ignore:           openArray[string] = [],
+                      ignoreContains:   openArray[string] = [],
+                      ignoreStartsWith: openArray[string] = [],
+                      ignoreRegex:      openArray[Regex]  = [],
+                      ): Option[PathInfo] =
+  if fullpath.shouldIgnore(
+    ignore           = ignore,
+    ignoreContains   = ignoreContains,
+    ignoreStartsWith = ignoreStartsWith,
+    ignoreRegex      = ignoreRegex,
+  ):
+    return none(PathInfo)
+  let dst = PathRef(
+    name:  fullPath,
+    kind:  pcFile,
+    fsRef: fsRef,
+  )
+  return some(PathInfo(
+    dstInfo: dst,
+    info:    dst,
+  ))
+
+proc maybeGetDirInfo(fullPath:         string,
+                     fsRef:            FsRef,
+                     ignore:           openArray[string] = [],
+                     ignoreContains:   openArray[string] = [],
+                     ignoreStartsWith: openArray[string] = [],
+                     ignoreRegex:      openArray[Regex]  = [],
+                     ): Option[PathInfo] =
+  if fullpath.shouldIgnore(
+    ignore           = ignore,
+    ignoreContains   = ignoreContains,
+    ignoreStartsWith = ignoreStartsWith,
+    ignoreRegex      = ignoreRegex,
+  ):
+    return none(PathInfo)
+  let dst = PathRef(
+    name:  fullPath,
+    kind:  pcDir,
+    fsRef: fsRef,
+  )
+  return some(PathInfo(
+    dstInfo: dst,
+    info:    dst,
+  ))
+
 proc maybeGetPathInfo(fullPath:         string,
                       ignore:           openArray[string] = [],
                       ignoreContains:   openArray[string] = [],
@@ -409,78 +497,32 @@ proc maybeGetPathInfo(fullPath:         string,
   var stats: Stat
   if lstat(cstring(fullPath), stats) >= 0:
     if S_ISLNK(stats.st_mode):
-      try:
-        var linkstats: Stat
-        let (expanded, srcKind, dstKind) = fullPath.expandLink()
-        if not expanded.shouldIgnore(
-          ignore           = ignore,
-          ignoreContains   = ignoreContains,
-          ignoreStartsWith = ignoreStartsWith,
-          ignoreRegex      = ignoreRegex,
-        ):
-          if lstat(cstring(expanded), linkStats) >= 0:
-            let
-              dst = PathRef(
-                name: expanded,
-                kind: dstKind,
-                fsRef: (
-                  linkstats.st_dev,
-                  linkstats.st_ino,
-                ),
-              )
-              src = PathRef(
-                name: fullPath,
-                kind: srcKind,
-                fsRef: (
-                  stats.st_dev,
-                  stats.st_ino,
-                ),
-              )
-            return some(PathInfo(
-              linkInfo: src,
-              dstInfo:  dst,
-              info:     dst,
-            ))
-      except:
-        discard
+      return maybeGetLinkInfo(
+        fullPath,
+        fsRef            = (stats.st_dev, stats.st_ino),
+        ignore           = ignore,
+        ignoreContains   = ignoreContains,
+        ignoreStartsWith = ignoreStartsWith,
+        ignoreRegex      = ignoreRegex,
+      )
     elif S_ISREG(stats.st_mode):
-      if not fullpath.shouldIgnore(
+      return maybeGetFileInfo(
+        fullPath,
+        fsRef            = (stats.st_dev, stats.st_ino),
         ignore           = ignore,
         ignoreContains   = ignoreContains,
         ignoreStartsWith = ignoreStartsWith,
         ignoreRegex      = ignoreRegex,
-      ):
-        let dst = PathRef(
-          name: fullPath,
-          kind: pcFile,
-          fsRef: (
-            stats.st_dev,
-            stats.st_ino,
-          ),
-        )
-        return some(PathInfo(
-          dstInfo: dst,
-          info:    dst,
-        ))
+      )
     elif S_ISDIR(stats.st_mode):
-      if not fullpath.shouldIgnore(
+      return maybeGetDirInfo(
+        fullPath,
+        fsRef            = (stats.st_dev, stats.st_ino),
         ignore           = ignore,
         ignoreContains   = ignoreContains,
         ignoreStartsWith = ignoreStartsWith,
         ignoreRegex      = ignoreRegex,
-      ):
-        let dst = PathRef(
-          name: fullPath,
-          kind: pcDir,
-          fsRef: (
-            stats.st_dev,
-            stats.st_ino,
-          ),
-        )
-        return some(PathInfo(
-          dstInfo: dst,
-          info:    dst,
-        ))
+      )
     else:
       discard # Skip sockets, fifos, ...
   return none(PathInfo)
@@ -495,6 +537,24 @@ let systemIgnoreStartsWithPaths* = @[
   # "/sys/kernel",
   # "/sys/module",
 ]
+
+iterator yieldFile(info:       PathInfo,
+                   files     = Yield,
+                   fileLinks = Follow,
+                   ): PathInfo =
+  let kind = info.linkOrInfo.kind
+  case (
+    if kind == pcFile:
+      files
+    else:
+      fileLinks
+  )
+  of Yield:
+    yield info.asLink()
+  of Follow:
+    yield info
+  else:
+    discard
 
 iterator getAllFileNames*(path:             string,
                           recurse                             = true,
@@ -511,42 +571,44 @@ iterator getAllFileNames*(path:             string,
   ## one provided in the nim standard API, primarily in that it is a single
   ## consistent API whether you scan recursively or not.
   var
-    seenDirs = initHashSet[(Dev, Ino)]()
-    toLook   = initOrderedSet[string]()
-  toLook.incl(path)
-
-  while len(toLook) > 0:
-    let nameOpt = maybeGetPathInfo(
-      toLook.popLeft(),
+    seen    = initHashSet[(Dev, Ino)]()
+    toLook  = initOrderedSet[PathInfo]()
+    rootOpt = maybeGetPathInfo(
+      path,
       ignore           = ignore,
       ignoreContains   = ignoreContains,
       ignoreStartsWith = ignoreStartsWith,
       ignoreRegex      = ignoreRegex,
     )
-    if nameOpt.isNone():
-      continue
-    let name = nameOpt.get()
-    if name.fsRef in seenDirs:
+  if rootOpt.isSome():
+    toLook.incl(rootOpt.get())
+
+  # the idea here is to consume a queue of things to look
+  # which is important to walk:
+  # * original path argument as we dont know what it is yet (file, symlink or dir)
+  # * any recursive dirs
+  # * any symlinks as they need to walk the link chain
+
+  while len(toLook) > 0:
+    let p = toLook.popLeft()
+    if p.fsRef in seen:
       continue
 
-    let kind = name.linkOrInfo.kind
+    let kind = p.linkOrInfo.kind
     case kind
-    of pcFile, pcLinkToFile:
-      case (
-        if kind == pcFile:
-          files
-        else:
-          fileLinks
-      )
-      of Yield:
-        yield name.asLink()
-      of Follow:
-        yield name
-      else:
-        discard
+    of pcFile:
+      # note note adding to seen as we might not know the file device id
+      # when the file was discovered in a recursive folder scan
+      for i in yieldFile(p, files, fileLinks):
+        yield i
+
+    of pcLinkToFile:
+      seen.incl(p.fsRef)
+      for i in yieldFile(p, files, fileLinks):
+        yield i
 
     of pcDir, pcLinkToDir:
-      seenDirs.incl(name.fsRef)
+      seen.incl(p.fsRef)
 
       case (
         if kind == pcDir:
@@ -555,9 +617,9 @@ iterator getAllFileNames*(path:             string,
           dirLinks
       )
       of Yield:
-        yield name.asLink()
+        yield p.asLink()
       of Follow:
-        yield name
+        yield p
       else:
         discard
 
@@ -569,18 +631,60 @@ iterator getAllFileNames*(path:             string,
           recurse and dirLinks == Follow
 
       if recurseDir:
-        var dirent = opendir(cstring(name.name))
+        var dirent = opendir(cstring(p.name))
         if dirent == nil:
           continue
+
         try:
           while true:
             var oneentry = readdir(dirent)
             if oneentry == nil:
               break
-            var filename = $cast[cstring](addr oneentry.d_name)
+            let
+              filename = $cast[cstring](addr oneentry.d_name)
+              fullpath = joinPath(p.name, filename)
             if filename in [".", ".."]:
               continue
-            let fullpath = joinPath(name.name, filename)
-            toLook.incl(fullpath)
+
+            # when walking a directory, in order to avoid lstat overhead
+            # for each found file, as the dirent struct already gives us
+            # the inode type (file, dir, symlink, etc), for regular files
+            # we can directly yield results
+            # however for folders, and symlinks, we fully resolve them which:
+            # * dedups scanning duplicate folders
+            # * follows symlink chain
+            case oneentry.d_type
+            of DT_REG:
+              let fOpt = maybeGetFileInfo(
+                fullPath,
+                fsRef            = (Dev(0), Ino(oneentry.d_ino)),
+                ignore           = ignore,
+                ignoreContains   = ignoreContains,
+                ignoreStartsWith = ignoreStartsWith,
+                ignoreRegex      = ignoreRegex,
+              )
+              if fOpt.isSome():
+                for i in yieldFile(fOpt.get(), files, fileLinks):
+                  yield i
+
+            of DT_DIR, DT_LNK:
+              let dOpt = maybeGetPathInfo(
+                fullPath,
+                ignore           = ignore,
+                ignoreContains   = ignoreContains,
+                ignoreStartsWith = ignoreStartsWith,
+                ignoreRegex      = ignoreRegex,
+              )
+              if dOpt.isSome():
+                toLook.incl(dOpt.get())
+
+            else:
+              discard
+
         finally:
           discard closedir(dirent)
+
+when isMainModule:
+  let p = commandLineParams()[0]
+  for f in getAllFileNames(p):
+    echo(f.name)
