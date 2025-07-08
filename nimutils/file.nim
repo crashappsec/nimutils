@@ -72,11 +72,10 @@ else:
     ## resolving any file system links.
     betterGetAppFileName()
 
-proc tildeExpand(s: string): string {.inline.} =
-  var homedir = getHomeDir()
+var homedir = getHomeDir()
+homedir.removeSuffix({'/'})
 
-  while homedir[^1] == '/':
-    homedir.setLen(len(homedir) - 1)
+proc tildeExpand(s: string): string {.inline.} =
   if s == "":
     return homedir
 
@@ -97,7 +96,9 @@ proc resolvePath*(inpath: string): string =
   # do that for us.
   var cur = inpath
 
-  if inpath == "": return getCurrentDir()
+  if inpath == "":
+    return getCurrentDir()
+
   while cur[^1] == '/':
     if len(cur) == 1:
       return "/"
