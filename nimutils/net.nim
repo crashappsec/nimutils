@@ -132,6 +132,8 @@ template withRetry(retries: int, firstRetryDelayMs: int, c: untyped) =
     try:
       c
       break
+    except SslError:
+      raise
     except:
       if attempts == retries:
         # reraise last exception to bubble error up
@@ -179,13 +181,18 @@ proc safeRequest(client: HttpClient,
 
 # https://github.com/nim-lang/Nim/blob/a45f43da3407dbbf8ecd15ce8ecb361af677add7/lib/pure/httpclient.nim#L380-L386
 # similar to stdlib but defaults to bundled CAs
-proc getSSLContext(caFile: string = "", verifyMode = CVerifyPeer): SslContext =
+proc getSSLContext(caFile:           string = "",
+                   verifyMode               = CVerifyPeer,
+                   preferBundledCerts: bool = false,
+                   ): SslContext =
   if caFile != "":
     # note when caFile is provided there is no try..except
     # otherwise we would silently fallback to bundled CA root store
     # if caFile is invalid/does not exist
     return newContext(verifyMode = verifyMode, caFile = caFile)
   else:
+    if preferBundledCerts:
+      return newContext(verifyMode = verifyMode, caFile = getCAStorePath())
     try:
       return newContext(verifyMode = verifyMode)
     except:
@@ -195,6 +202,7 @@ proc createHttpContext(uri: Uri = parseUri(""),
                        maxRedirects: int = 3,
                        timeout: int = 1000, # in ms - 1 second
                        pinnedCert: string = "",
+                       preferBundledCerts: bool = false,
                        verifyMode = CVerifyPeer,
                        disallowHttp: bool = false,
                        userAgent: string = defUserAgent,
@@ -210,7 +218,9 @@ proc createHttpContext(uri: Uri = parseUri(""),
     # always pass ssl context to client
     # as otherwise if http server returns redirect to https
     # nim segfaults vs throwing exception
-    context = getSSLContext(caFile = pinnedCert, verifyMode = verifyMode)
+    context = getSSLContext(caFile             = pinnedCert,
+                            verifyMode         = verifyMode,
+                            preferBundledCerts = preferBundledCerts)
     client  = newHttpClient(sslContext   = context,
                             userAgent    = userAgent,
                             timeout      = timeout,
@@ -231,6 +241,7 @@ proc safeRequest*(url: Uri | string,
                   firstRetryDelayMs: int = 0,
                   timeout: int = 1000,
                   pinnedCert: string = "",
+                  preferBundledCerts: bool = false,
                   verifyMode = CVerifyPeer,
                   maxRedirects: int = 3,
                   disallowHttp: bool = false,
@@ -243,13 +254,14 @@ proc safeRequest*(url: Uri | string,
   else:
     url
   let (context, client) = createHttpContext(
-    uri           = uri,
-    maxRedirects  = maxRedirects,
-    timeout       = timeout,
-    pinnedCert    = pinnedCert,
-    verifyMode    = verifyMode,
-    disallowHttp  = disallowHttp,
-    userAgent     = userAgent,
+    uri                = uri,
+    maxRedirects       = maxRedirects,
+    timeout            = timeout,
+    pinnedCert         = pinnedCert,
+    verifyMode         = verifyMode,
+    disallowHttp       = disallowHttp,
+    userAgent          = userAgent,
+    preferBundledCerts = preferBundledCerts,
   )
   try:
     return client.safeRequest(url               = uri,
@@ -262,6 +274,32 @@ proc safeRequest*(url: Uri | string,
                               firstRetryDelayMs = firstRetryDelayMs,
                               only2xx           = only2xx,
                               raiseWhenAbove    = raiseWhenAbove)
+
+  except SslError:
+    if pinnedCert != "" or not preferBundledCerts:
+      raise
+    # retry without bundled certs preference which will
+    # attempt to use system root certs
+    return safeRequest(
+      url                = uri,
+      httpMethod         = httpMethod,
+      body               = body,
+      headers            = headers,
+      multipart          = multipart,
+      retries            = retries,
+      connectRetries     = connectRetries,
+      firstRetryDelayMs  = firstRetryDelayMs,
+      timeout            = timeout,
+      pinnedCert         = pinnedCert,
+      preferBundledCerts = false,
+      verifyMode         = verifyMode,
+      maxRedirects       = maxRedirects,
+      disallowHttp       = disallowHttp,
+      only2xx            = only2xx,
+      raiseWhenAbove     = raiseWhenAbove,
+      userAgent          = userAgent,
+    )
+
   finally:
     context.destroyContext()
     client.close()
