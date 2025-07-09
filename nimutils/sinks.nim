@@ -336,38 +336,43 @@ proc httpParams(cfg: SinkConfig): tuple[
   timeout: int,
   disallowHttp: bool,
   pinnedCert: string,
+  preferBundledCerts: bool,
 ] =
   let
     uri          = parseURI(cfg.params["uri"])
     headers      = cfg.httpHeaders()
     disallowHttp = "disallow_http" in cfg.params
   var
-    timeout    = 1000 # in ms - 1 second
-    pinnedCert = ""
+    timeout            = 1000 # in ms - 1 second
+    pinnedCert         = ""
+    preferBundledCerts = false
   if "pinned_cert_file" in cfg.params:
     pinnedCert = cfg.params["pinned_cert_file"]
-  if "timeout" in cfg.params:
+  elif "prefer_bundled_certs" in cfg.params:
+    preferBundledCerts = cfg.params["prefer_bundled_certs"] == "true"
+  elif "timeout" in cfg.params:
     let paramstr = cfg.params["timeout"]
     if parseInt(paramstr, timeout) != len(paramstr):
       raise newException(ValueError, "Timeout must be miliseconds " &
                          "represented as an integer, or 0 for no timeout.")
     elif timeout <= 0:
       timeout = -1
-  return (uri, headers, timeout, disallowHttp, pinnedCert)
+  return (uri, headers, timeout, disallowHttp, pinnedCert, preferBundledCerts)
 
 proc postSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   let
     params   = cfg.httpParams()
-    response = safeRequest(url               = params.uri,
-                           timeout           = params.timeout,
-                           headers           = params.headers,
-                           disallowHttp      = params.disallowHttp,
-                           pinnedCert        = params.pinnedCert,
-                           httpMethod        = HttpPost,
-                           body              = msg,
-                           retries           = 2,
-                           firstRetryDelayMs = 100,
-                           only2xx           = true)
+    response = safeRequest(url                = params.uri,
+                           timeout            = params.timeout,
+                           headers            = params.headers,
+                           disallowHttp       = params.disallowHttp,
+                           pinnedCert         = params.pinnedCert,
+                           preferBundledCerts = params.preferBundledCerts,
+                           httpMethod         = HttpPost,
+                           body               = msg,
+                           retries            = 2,
+                           firstRetryDelayMs  = 100,
+                           only2xx            = true)
 
   cfg.iolog(t, "Post " & response.status)
 
@@ -381,16 +386,17 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
     # and will only send it to the returned signed URL
     # which is why we disallow redirects here via maxRedirects
     # NOTE this assumes that the endpoint immediately returns presigned URL
-    signResponse = safeRequest(url               = params.uri,
-                               timeout           = params.timeout,
-                               headers           = params.headers,
-                               disallowHttp      = params.disallowHttp,
-                               pinnedCert        = params.pinnedCert,
-                               httpMethod        = HttpPut,
-                               retries           = 2,
-                               firstRetryDelayMs = 100,
-                               maxRedirects      = 0,
-                               raiseWhenAbove    = 500)
+    signResponse = safeRequest(url                = params.uri,
+                               timeout            = params.timeout,
+                               headers            = params.headers,
+                               disallowHttp       = params.disallowHttp,
+                               pinnedCert         = params.pinnedCert,
+                               preferBundledCerts = params.preferBundledCerts,
+                               httpMethod         = HttpPut,
+                               retries            = 2,
+                               firstRetryDelayMs  = 100,
+                               maxRedirects       = 0,
+                               raiseWhenAbove     = 500)
 
   if signResponse.code notin [Http302, Http307]:
     raise newException(ValueError, "Presign requires 302/307 redirect but received: " & signResponse.status)
@@ -404,15 +410,16 @@ proc presignSinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable
     raise newException(ValueError, "Presign edirect Location header needs to be absolute URL")
 
   let
-    response = safeRequest(url               = uri,
-                           timeout           = params.timeout,
-                           disallowHttp      = params.disallowHttp,
-                           pinnedCert        = params.pinnedCert,
-                           httpMethod        = HttpPut,
-                           body              = msg,
-                           retries           = 2,
-                           firstRetryDelayMs = 100,
-                           only2xx           = true)
+    response = safeRequest(url                = uri,
+                           timeout            = params.timeout,
+                           disallowHttp       = params.disallowHttp,
+                           pinnedCert         = params.pinnedCert,
+                           preferBundledCerts = params.preferBundledCerts,
+                           httpMethod         = HttpPut,
+                           body               = msg,
+                           retries            = 2,
+                           firstRetryDelayMs  = 100,
+                           only2xx            = true)
 
   cfg.iolog(t, "Presign " & response.status)
 
@@ -475,13 +482,14 @@ proc addPostSink*() =
   var
     record = SinkImplementation()
     keys = {
-      "uri"              : true,
-      "content_type"     : true,
-      "disallow_http"    : false,
-      "headers"          : false,
-      "timeout"          : false,
-      "pinned_cert_file" : false,
-      "auth"             : false,
+      "uri"                  : true,
+      "content_type"         : true,
+      "disallow_http"        : false,
+      "headers"              : false,
+      "timeout"              : false,
+      "pinned_cert_file"     : false,
+      "prefer_bundled_certs" : false,
+      "auth"                 : false,
     }.toTable()
 
   record.outputFunction = postSinkOut
@@ -493,13 +501,14 @@ proc addPresignSink*() =
   var
     record = SinkImplementation()
     keys = {
-      "uri"              : true,
-      "content_type"     : true,
-      "disallow_http"    : false,
-      "headers"          : false,
-      "timeout"          : false,
-      "pinned_cert_file" : false,
-      "auth"             : false,
+      "uri"                  : true,
+      "content_type"         : true,
+      "disallow_http"        : false,
+      "headers"              : false,
+      "timeout"              : false,
+      "pinned_cert_file"     : false,
+      "prefer_bundled_certs" : false,
+      "auth"                 : false,
     }.toTable()
 
   record.outputFunction = presignSinkOut
