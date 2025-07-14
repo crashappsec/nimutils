@@ -55,7 +55,7 @@
 ## * so beware!                                                       *
 ## ********************************************************************
 
-import std/[typetraits, hashes, strutils, tables, json]
+import std/[typetraits, hashes, strutils, tables, json, streams]
 
 type
     MixedKind* = enum
@@ -320,26 +320,39 @@ proc `$`*(x: Box): string =
     of MkObj:
         return "<boxed object>"
 
-proc boxToJson*(b: Box): string =
-    ## Produces a basic string representation of a box, as a JSON object.
-    var addComma: bool = false
+proc boxToJson(s: Stream, b: Box) =
+  var addComma: bool = false
+  case b.kind
+  of MkInt, MkFloat, MkBool:
+    s.write($b)
+  of MkStr:
+    s.write(escapeJson($b))
+  of MkSeq:
+    s.write("[")
+    for item in b.c.s:
+      if addComma:
+        s.write(", ")
+      else:
+        addComma = true
+      s.boxToJson(item)
+    s.write("]")
+  of MkTable:
+    s.write("{ ")
+    for k, val in b.t.t:
+      if addComma:
+        s.write(", ")
+      else:
+        addComma = true
+      s.boxToJson(k)
+      s.write(" : ")
+      s.boxToJson(val)
+    s.write(" }")
+  else:
+    s.write("null")  # Boxed objects not supported
 
-    case b.kind
-    of MkInt, MkFloat, MkBool:
-        return $(b)
-    of MkStr:
-        return escapeJson($(b))
-    of MkSeq:
-        result = "["
-        for item in b.c.s:
-            if addComma: result = result & ", " else: addComma = true
-            result = result & item.boxToJSon()
-        result = result & "]"
-    of MkTable:
-        result = "{ "
-        for k, val in b.t.t:
-            if addComma: result = result & ", " else: addComma = true
-            result = result & boxToJson(k) & " : " & boxToJson(val)
-        result = result & " }"
-    else:
-        return "null" # Boxed objects not supported
+proc boxToJson*(b: Box): string =
+  ## Produces a basic string representation of a box, as a JSON object.
+  let s = newStringStream()
+  s.boxToJson(b)
+  s.setPosition(0)
+  return s.readAll()
