@@ -1,4 +1,4 @@
-import std/[net, httpclient, uri, math, os, streams, strutils, openssl]
+import std/[net, httpclient, uri, math, os, streams, strutils, openssl, posix]
 import "."/[managedtmp, logging]
 
 proc getRootCAStoreContent(): string =
@@ -30,16 +30,27 @@ proc getRootCAStoreContent(): string =
   echo("For more information see " & caWiki)
   contents
 
+# as this is global managed tmp path (cleaned up at end of the process)
+# we need to keep track of the pid which created the tmp file
+# and if another pid wants to use bundled certs, for it to create
+# its own tmp managed file as otherwise cert file can get cleaned up
+# while trying to use it
 var tmpCAStore = ""
+var tmpCaStorePid = getpid()
 proc getCAStorePath(): string =
-  const contents = getRootCAStoreContent()
-  if tmpCAStore != "":
+  let pid = getpid()
+  if tmpCaStorePid == pid and tmpCAStore != "":
     return tmpCAStore
-  let (stream, tmp) = getNewTempFile("cabundle", ".pem")
-  stream.write(contents)
-  stream.close()
-  tmpCAStore = tmp
-  return tmp
+  const contents = getRootCAStoreContent()
+  try:
+    let tmp = writeNewTempFile(contents, "cabundle", ".pem")
+    tmpCAStore = tmp
+    tmpCaStorePid = pid
+    trace("net: pid(" & $pid & ") saved bundled cers to " & tmp)
+    return tmp
+  except:
+    trace("net: pid(" & $pid & ") could not write bundled certs to tmp file: " & getCurrentExceptionMsg())
+    raise
 
 {.emit: """
 #include <stdlib.h>
