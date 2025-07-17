@@ -244,7 +244,7 @@ proc createHttpContext(uri: Uri = parseUri(""),
     return (context, client)
 
   except:
-    trace("net: could not get http client with ssl context: " & getCurrentExceptionMsg())
+    trace("net: pid(" & $getpid() & ") could not get http client with ssl context: " & getCurrentExceptionMsg())
     trace("net: pinnedCert=" & pinnedCert)
     trace("net: verifyMode=" & $verifyMode)
     trace("net: preferBundledCerts=" & $preferBundledCerts)
