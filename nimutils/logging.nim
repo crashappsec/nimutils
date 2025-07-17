@@ -2,13 +2,11 @@
 ## :Copyright: 2023, Crash Override, Inc.
 
 import std/[tables, options]
-import "."/[pubsub, sinks, rope_base, rope_construct, rope_ansirender, rope_styles]
+import "."/[pubsub, rope_base, rope_construct, rope_ansirender, rope_styles]
 
 type LogLevel* = enum
   ## LogLevel describes what kind of messages you want to see.
   llNone, llError, llWarn, llInfo, llTrace
-
-addDefaultSinks()
 
 const
   toLogLevelMap* = { "none"    : llNone,
@@ -110,16 +108,7 @@ proc logLevelFilter*(msg: string, info: StringTable): (string, bool) =
              "a valid value for 'loglevel' in the publish() call's 'aux' " &
              " field.")
 
-let
-  logTopic        = registerTopic("logs")
-  `cfg?`          = configSink(getSinkImplementation("stderr").get(),
-                               "default-log-config",
-                               filters = @[MsgFilter(logLevelFilter),
-                                           MsgFilter(logPrefixFilter)])
-  defaultLogHook* = `cfg?`.get()
-
-subscribe(logTopic, defaultLogHook)
-
+let logTopic* = registerTopic("logs")
 
 proc log*(level: LogLevel, msg: string) =
   ## Generic interface for publishing messages at a given log level.
@@ -140,13 +129,3 @@ template error*(msg: Rope)   = log(llError, $(msg))
 template warn*(msg: Rope)    = log(llWarn, $(msg))
 template info*(msg: Rope)    = log(llInfo, $(msg))
 template trace*(msg: Rope)   = log(llTrace, $(msg))
-
-when not defined(release):
-  let
-    debugTopic        = registerTopic("debug")
-    `debugHook?`      = configSink(getSinkImplementation("stderr").get(),
-                                   "default-debug-config")
-    defaultDebugHook* = `debugHook?`.get()
-
-  proc debug*(msg: string) =
-    discard publish(debugTopic, msg)

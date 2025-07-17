@@ -1,5 +1,5 @@
 import std/[net, httpclient, uri, math, os, streams, strutils, openssl]
-import "."/managedtmp
+import "."/[managedtmp, logging]
 
 proc getRootCAStoreContent(): string =
   const
@@ -214,22 +214,30 @@ proc createHttpContext(uri: Uri = parseUri(""),
       raise newException(ValueError, "Pinned cert not allowed with http " &
                                      "URL (only https).")
 
-  let
-    # always pass ssl context to client
-    # as otherwise if http server returns redirect to https
-    # nim segfaults vs throwing exception
-    context = getSSLContext(caFile             = pinnedCert,
-                            verifyMode         = verifyMode,
-                            preferBundledCerts = preferBundledCerts)
-    client  = newHttpClient(sslContext   = context,
-                            userAgent    = userAgent,
-                            timeout      = timeout,
-                            maxRedirects = maxRedirects)
+  try:
+    let
+      # always pass ssl context to client
+      # as otherwise if http server returns redirect to https
+      # nim segfaults vs throwing exception
+      context = getSSLContext(caFile             = pinnedCert,
+                              verifyMode         = verifyMode,
+                              preferBundledCerts = preferBundledCerts)
+      client  = newHttpClient(sslContext   = context,
+                              userAgent    = userAgent,
+                              timeout      = timeout,
+                              maxRedirects = maxRedirects)
 
-  if client == nil:
-    raise newException(ValueError, "Invalid HTTP configuration")
+    if client == nil:
+      raise newException(ValueError, "Invalid HTTP configuration")
 
-  return (context, client)
+    return (context, client)
+
+  except:
+    trace("net: could not get http client with ssl context: " & getCurrentExceptionMsg())
+    trace("net: pinnedCert=" & pinnedCert)
+    trace("net: verifyMode=" & $verifyMode)
+    trace("net: preferBundledCerts=" & $preferBundledCerts)
+    raise
 
 proc safeRequest*(url: Uri | string,
                   httpMethod: HttpMethod | string = HttpGet,
@@ -278,6 +286,7 @@ proc safeRequest*(url: Uri | string,
   except SslError:
     if pinnedCert != "" or not preferBundledCerts:
       raise
+    trace("net: retrying request without bundled certs: " & getCurrentExceptionMsg())
     # retry without bundled certs preference which will
     # attempt to use system root certs
     return safeRequest(
