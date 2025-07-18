@@ -209,7 +209,7 @@ proc getSSLContext(caFile:           string = "",
     except:
       return newContext(verifyMode = verifyMode, caFile = getCAStorePath())
 
-proc createHttpContext(uri: Uri = parseUri(""),
+proc createHttpContext(uri: Uri,
                        maxRedirects: int = 3,
                        timeout: int = 1000, # in ms - 1 second
                        pinnedCert: string = "",
@@ -218,13 +218,6 @@ proc createHttpContext(uri: Uri = parseUri(""),
                        disallowHttp: bool = false,
                        userAgent: string = defUserAgent,
                        ): (SslContext, HttpClient) =
-  if uri.scheme == "http":
-    if disallowHttp:
-      raise newException(ValueError, "http:// URLs not allowed (only https).")
-    elif pinnedCert != "":
-      raise newException(ValueError, "Pinned cert not allowed with http " &
-                                     "URL (only https).")
-
   try:
     let
       # always pass ssl context to client
@@ -272,6 +265,20 @@ proc safeRequest*(url: Uri | string,
     parseUri(url)
   else:
     url
+
+  var preferBundledCerts = preferBundledCerts
+  if uri.scheme == "http":
+    if disallowHttp:
+      raise newException(ValueError, "http:// URLs not allowed (only https).")
+    elif pinnedCert != "":
+      raise newException(ValueError, "Pinned cert not allowed with http " &
+                                     "URL (only https).")
+    # if we know we are making request to http://
+    # do not load system CA certs and instead attempt to use bundled certs
+    # in case of https direct but of course if that fails, fallback to
+    # system CA certs
+    preferBundledCerts = true
+
   let (context, client) = createHttpContext(
     uri                = uri,
     maxRedirects       = maxRedirects,
