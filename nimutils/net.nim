@@ -254,6 +254,7 @@ proc safeRequest*(url: Uri | string,
                   timeout: int = 1000,
                   pinnedCert: string = "",
                   preferBundledCerts: bool = false,
+                  autoPreferBundledCerts: bool = true,
                   verifyMode = CVerifyPeer,
                   maxRedirects: int = 3,
                   disallowHttp: bool = false,
@@ -273,11 +274,12 @@ proc safeRequest*(url: Uri | string,
     elif pinnedCert != "":
       raise newException(ValueError, "Pinned cert not allowed with http " &
                                      "URL (only https).")
-    # if we know we are making request to http://
-    # do not load system CA certs and instead attempt to use bundled certs
-    # in case of https direct but of course if that fails, fallback to
-    # system CA certs
-    preferBundledCerts = true
+    if autoPreferBundledCerts:
+      # if we know we are making request to http://
+      # do not load system CA certs and instead attempt to use bundled certs
+      # in case of https direct but of course if that fails, fallback to
+      # system CA certs
+      preferBundledCerts = true
 
   let (context, client) = createHttpContext(
     uri                = uri,
@@ -302,31 +304,36 @@ proc safeRequest*(url: Uri | string,
                               raiseWhenAbove    = raiseWhenAbove)
 
   except SslError:
-    if pinnedCert != "" or not preferBundledCerts:
+    if preferBundledCerts and pinnedCert != "":
+      # if the cert is not pinned and bundled certs are preferred
+      # ignore error to retry with system certs
+      discard
+    else:
       raise
-    trace("net: retrying request without bundled certs: " & getCurrentExceptionMsg())
-    # retry without bundled certs preference which will
-    # attempt to use system root certs
-    return safeRequest(
-      url                = uri,
-      httpMethod         = httpMethod,
-      body               = body,
-      headers            = headers,
-      multipart          = multipart,
-      retries            = retries,
-      connectRetries     = connectRetries,
-      firstRetryDelayMs  = firstRetryDelayMs,
-      timeout            = timeout,
-      pinnedCert         = pinnedCert,
-      preferBundledCerts = false,
-      verifyMode         = verifyMode,
-      maxRedirects       = maxRedirects,
-      disallowHttp       = disallowHttp,
-      only2xx            = only2xx,
-      raiseWhenAbove     = raiseWhenAbove,
-      userAgent          = userAgent,
-    )
-
   finally:
     context.destroyContext()
     client.close()
+
+  trace("net: retrying request without bundled certs: " & getCurrentExceptionMsg())
+  # retry without bundled certs preference which will
+  # attempt to use system root certs
+  return safeRequest(
+    url                    = uri,
+    httpMethod             = httpMethod,
+    body                   = body,
+    headers                = headers,
+    multipart              = multipart,
+    retries                = retries,
+    connectRetries         = connectRetries,
+    firstRetryDelayMs      = firstRetryDelayMs,
+    timeout                = timeout,
+    pinnedCert             = pinnedCert,
+    preferBundledCerts     = false,
+    autoPreferBundledCerts = false,
+    verifyMode             = verifyMode,
+    maxRedirects           = maxRedirects,
+    disallowHttp           = disallowHttp,
+    only2xx                = only2xx,
+    raiseWhenAbove         = raiseWhenAbove,
+    userAgent              = userAgent,
+  )
