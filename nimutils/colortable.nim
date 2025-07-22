@@ -1,6 +1,6 @@
 # Taken from:HTML color list as found at:
 # https://en.wikipedia.org/wiki/Web_colors
-import std/[tables, os, parseutils]
+import std/[tables, os, parseutils, terminal]
 
 ## This array contains all names we recognize for full 24-bit color.
 ## APIs that accept color names will also accept #abc123 style hex
@@ -323,7 +323,8 @@ var color8Bit* =  {
 }.toOrderedTable()
 
 var
-  showColor              = if existsEnv("NO_COLOR"): false else: true
+  isInteractive          = isatty(stdout) or isatty(stderr) or isatty(stdin)
+  showColor              = if existsEnv("NO_COLOR"): false else: isInteractive
   unicodeOverAnsi:  bool = true
   color24Bit:       bool = false
 
