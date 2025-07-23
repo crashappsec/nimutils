@@ -2,11 +2,20 @@
 ## :Copyright: 2023, Crash Override, Inc.
 
 import std/[tables, options]
-import "."/[pubsub, rope_base, rope_construct, rope_ansirender, rope_styles]
+import "."/[pubsub, rope_base, rope_construct, rope_ansirender, rope_styles,
+            colortable]
 
-type LogLevel* = enum
-  ## LogLevel describes what kind of messages you want to see.
-  llNone, llError, llWarn, llInfo, llTrace
+type
+  LogLevel* = enum
+    ## LogLevel describes what kind of messages you want to see.
+    llNone, llError, llWarn, llInfo, llTrace
+  # dynamically rendering rope on each log invocation is expensive
+  # (especially for trace logs) hence there is plain as well as rope
+  # variant of the log prefix
+  LogPrefix* = tuple[
+    plain: string,
+    rope: Rope,
+  ]
 
 const
   toLogLevelMap* = { "none"    : llNone,
@@ -25,12 +34,12 @@ const
                  llInfo:  "info",
                  llTrace: "trace" }.toTable()
 
-var logLevelPrefixes = {
-  llNone:  "",
-  llError: $(defaultBg(fgColor(atom("error: "), "red"))),
-  llWarn:  $(defaultBg(fgColor(atom("warn:  "), "yellow"))),
-  llInfo:  $(defaultBg(fgColor(atom("info:  "), "atomiclime"))),
-  llTrace: $(defaultBg(fgColor(atom("trace: "), "jazzberry")))
+var logLevelPrefixes: Table[LogLevel, LogPrefix] = {
+  llNone:  ("", atom("")),
+  llError: ("error: ", defaultBg(fgColor(atom("error: "), "red"))),
+  llWarn:  ("warn:  ", defaultBg(fgColor(atom("warn:  "), "yellow"))),
+  llInfo:  ("info:  ", defaultBg(fgColor(atom("info:  "), "atomiclime"))),
+  llTrace: ("trace: ", defaultBg(fgColor(atom("trace: "), "jazzberry"))),
 }.toTable()
 
 const keyLogLevel*  = "loglevel"
@@ -38,7 +47,7 @@ var currentLogLevel = llInfo
 
 proc `$`*(ll: LogLevel): string = llToStrMap[ll]
 
-proc setLogLevelPrefix*(ll: LogLevel, prefix: string) =
+proc setLogLevelPrefix*(ll: LogLevel, prefix: LogPrefix) =
   ## Set the prefix used for messages of a given log level.
   logLevelPrefixes[ll] = prefix
 
@@ -67,8 +76,11 @@ proc logPrefixFilter*(msg: string, info: StringTable): (string, bool) =
 
     if llStr in toLogLevelMap:
       msgLevel = toLogLevelMap[llStr]
-
-      result = (logLevelPrefixes[msgLevel] & msg, true)
+      let (plain, prefix) = logLevelPrefixes[msgLevel]
+      if getShowColor():
+        result = ($prefix & msg, true)
+      else:
+        result = (plain & msg, true)
     else:
       result = (llStr & msg, true)
 
