@@ -323,7 +323,7 @@ var color8Bit* =  {
 }.toOrderedTable()
 
 var
-  isInteractive          = isatty(stdout) or isatty(stderr) or isatty(stdin)
+  isInteractive*         = isatty(stdout) or isatty(stderr) or isatty(stdin)
   showColor              = if existsEnv("NO_COLOR"): false else: isInteractive
   unicodeOverAnsi:  bool = true
   color24Bit:       bool = false
