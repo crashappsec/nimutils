@@ -339,18 +339,31 @@ proc matchesRegexAnyOf(s: string, regexes: openArray[Regex]): bool =
       return true
   return false
 
-proc shouldIgnore(s: string,
-                  ignore:           openArray[string] = [],
-                  ignoreContains:   openArray[string] = [],
-                  ignoreStartsWith: openArray[string] = [],
-                  ignoreRegex:      openArray[Regex]  = [],
-                 ): bool =
-  return (
-    s in ignore or
-    s.containsAnyOf(ignoreContains) or
-    s.startsWithAnyOf(ignoreStartsWith) or
-    s.matchesRegexAnyOf(ignoreRegex)
-  )
+type IgnoreSpec = ref object
+  alwaysAllow:      seq[string]
+  alwaysContains:   seq[string]
+  alwaysStartsWith: seq[string]
+  alwaysRegex:      seq[Regex]
+  ignore:           seq[string]
+  ignoreContains:   seq[string]
+  ignoreStartsWith: seq[string]
+  ignoreRegex:      seq[Regex]
+
+proc shouldIgnore(s: string, spec: IgnoreSpec): bool =
+  if (
+    (len(spec.alwaysAllow) > 0 and s in spec.alwaysAllow) or
+    (len(spec.alwaysContains) > 0 and s.containsAnyOf(spec.alwaysContains)) or
+    (len(spec.alwaysStartsWith) > 0 and s.startsWithAnyOf(spec.alwaysStartsWith)) or
+    (len(spec.alwaysRegex) > 0 and s.matchesRegexAnyOf(spec.alwaysRegex))
+  ):
+    result = false
+  else:
+    result = (
+      s in spec.ignore or
+      s.containsAnyOf(spec.ignoreContains) or
+      s.startsWithAnyOf(spec.ignoreStartsWith) or
+      s.matchesRegexAnyOf(spec.ignoreRegex)
+    )
 
 proc popLeft[T](s: var OrderedSet[T]): T =
   for i in s:
@@ -401,22 +414,14 @@ proc asLink(p: PathInfo): PathInfo =
     )
   return p
 
-proc maybeGetLinkInfo(fullPath:         string,
-                      fsRef:            FsRef,
-                      ignore:           openArray[string] = [],
-                      ignoreContains:   openArray[string] = [],
-                      ignoreStartsWith: openArray[string] = [],
-                      ignoreRegex:      openArray[Regex]  = [],
+proc maybeGetLinkInfo(fullPath: string,
+                      fsRef:    FsRef,
+                      spec:     IgnoreSpec,
                       ): Option[PathInfo] =
   try:
     var linkstats: Stat
     let (expanded, srcKind, dstKind) = fullPath.expandLink()
-    if not expanded.shouldIgnore(
-      ignore           = ignore,
-      ignoreContains   = ignoreContains,
-      ignoreStartsWith = ignoreStartsWith,
-      ignoreRegex      = ignoreRegex,
-    ):
+    if not expanded.shouldIgnore(spec):
       if lstat(cstring(expanded), linkStats) >= 0:
         let
           dst = PathRef(
@@ -441,19 +446,11 @@ proc maybeGetLinkInfo(fullPath:         string,
     discard
   return none(PathInfo)
 
-proc maybeGetFileInfo(fullPath:         string,
-                      fsRef:            FsRef,
-                      ignore:           openArray[string] = [],
-                      ignoreContains:   openArray[string] = [],
-                      ignoreStartsWith: openArray[string] = [],
-                      ignoreRegex:      openArray[Regex]  = [],
+proc maybeGetFileInfo(fullPath: string,
+                      fsRef:    FsRef,
+                      spec:     IgnoreSpec,
                       ): Option[PathInfo] =
-  if fullpath.shouldIgnore(
-    ignore           = ignore,
-    ignoreContains   = ignoreContains,
-    ignoreStartsWith = ignoreStartsWith,
-    ignoreRegex      = ignoreRegex,
-  ):
+  if fullpath.shouldIgnore(spec):
     return none(PathInfo)
   let dst = PathRef(
     name:  fullPath,
@@ -465,19 +462,11 @@ proc maybeGetFileInfo(fullPath:         string,
     info:    dst,
   ))
 
-proc maybeGetDirInfo(fullPath:         string,
-                     fsRef:            FsRef,
-                     ignore:           openArray[string] = [],
-                     ignoreContains:   openArray[string] = [],
-                     ignoreStartsWith: openArray[string] = [],
-                     ignoreRegex:      openArray[Regex]  = [],
+proc maybeGetDirInfo(fullPath: string,
+                     fsRef:    FsRef,
+                     spec:     IgnoreSpec,
                      ): Option[PathInfo] =
-  if fullpath.shouldIgnore(
-    ignore           = ignore,
-    ignoreContains   = ignoreContains,
-    ignoreStartsWith = ignoreStartsWith,
-    ignoreRegex      = ignoreRegex,
-  ):
+  if fullpath.shouldIgnore(spec):
     return none(PathInfo)
   let dst = PathRef(
     name:  fullPath,
@@ -489,40 +478,28 @@ proc maybeGetDirInfo(fullPath:         string,
     info:    dst,
   ))
 
-proc maybeGetPathInfo(fullPath:         string,
-                      ignore:           openArray[string] = [],
-                      ignoreContains:   openArray[string] = [],
-                      ignoreStartsWith: openArray[string] = [],
-                      ignoreRegex:      openArray[Regex]  = [],
+proc maybeGetPathInfo(fullPath: string,
+                      spec: IgnoreSpec,
                       ): Option[PathInfo] =
   var stats: Stat
   if lstat(cstring(fullPath), stats) >= 0:
     if S_ISLNK(stats.st_mode):
       return maybeGetLinkInfo(
         fullPath,
-        fsRef            = (stats.st_dev, stats.st_ino),
-        ignore           = ignore,
-        ignoreContains   = ignoreContains,
-        ignoreStartsWith = ignoreStartsWith,
-        ignoreRegex      = ignoreRegex,
+        fsRef = (stats.st_dev, stats.st_ino),
+        spec  = spec,
       )
     elif S_ISREG(stats.st_mode):
       return maybeGetFileInfo(
         fullPath,
-        fsRef            = (stats.st_dev, stats.st_ino),
-        ignore           = ignore,
-        ignoreContains   = ignoreContains,
-        ignoreStartsWith = ignoreStartsWith,
-        ignoreRegex      = ignoreRegex,
+        fsRef = (stats.st_dev, stats.st_ino),
+        spec  = spec,
       )
     elif S_ISDIR(stats.st_mode):
       return maybeGetDirInfo(
         fullPath,
-        fsRef            = (stats.st_dev, stats.st_ino),
-        ignore           = ignore,
-        ignoreContains   = ignoreContains,
-        ignoreStartsWith = ignoreStartsWith,
-        ignoreRegex      = ignoreRegex,
+        fsRef = (stats.st_dev, stats.st_ino),
+        spec  = spec,
       )
     else:
       discard # Skip sockets, fifos, ...
@@ -558,15 +535,19 @@ iterator yieldFile(info:       PathInfo,
     discard
 
 iterator getAllFileNames*(path:             string,
-                          recurse                             = true,
-                          files                               = Yield,
-                          fileLinks                           = Follow,
-                          dirs                                = Ignore,
-                          dirLinks                            = Ignore,
-                          ignore:           openArray[string] = [],
-                          ignoreContains:   openArray[string] = [],
-                          ignoreStartsWith: openArray[string] = systemIgnoreStartsWithPaths,
-                          ignoreRegex:      openArray[Regex]  = [],
+                          recurse                       = true,
+                          files                         = Yield,
+                          fileLinks                     = Follow,
+                          dirs                          = Ignore,
+                          dirLinks                      = Ignore,
+                          alwaysAllow:      seq[string] = @[],
+                          alwaysContains:   seq[string] = @[],
+                          alwaysStartsWith: seq[string] = @[],
+                          alwaysRegex:      seq[Regex]  = @[],
+                          ignore:           seq[string] = @[],
+                          ignoreContains:   seq[string] = @[],
+                          ignoreStartsWith: seq[string] = systemIgnoreStartsWithPaths,
+                          ignoreRegex:      seq[Regex]  = @[],
                           ): PathInfo =
   ## This is a slightly more sane API for scanning for file names than the
   ## one provided in the nim standard API, primarily in that it is a single
@@ -574,12 +555,20 @@ iterator getAllFileNames*(path:             string,
   var
     seen    = initHashSet[(Dev, Ino)]()
     toLook  = initOrderedSet[PathInfo]()
+  let
+    spec    = IgnoreSpec(
+      alwaysAllow:      alwaysAllow,
+      alwaysContains:   alwaysContains,
+      alwaysStartsWith: alwaysStartsWith,
+      alwaysRegex:      alwaysRegex,
+      ignore:           ignore,
+      ignoreContains:   ignoreContains,
+      ignoreStartsWith: ignoreStartsWith,
+      ignoreRegex:      ignoreRegex,
+    )
     rootOpt = maybeGetPathInfo(
       path,
-      ignore           = ignore,
-      ignoreContains   = ignoreContains,
-      ignoreStartsWith = ignoreStartsWith,
-      ignoreRegex      = ignoreRegex,
+      spec = spec,
     )
   if rootOpt.isSome():
     toLook.incl(rootOpt.get())
@@ -658,11 +647,8 @@ iterator getAllFileNames*(path:             string,
             of DT_REG:
               let fOpt = maybeGetFileInfo(
                 fullPath,
-                fsRef            = (Dev(0), Ino(oneentry.d_ino)),
-                ignore           = ignore,
-                ignoreContains   = ignoreContains,
-                ignoreStartsWith = ignoreStartsWith,
-                ignoreRegex      = ignoreRegex,
+                fsRef = (Dev(0), Ino(oneentry.d_ino)),
+                spec  = spec,
               )
               if fOpt.isSome():
                 for i in yieldFile(fOpt.get(), files, fileLinks):
@@ -671,10 +657,7 @@ iterator getAllFileNames*(path:             string,
             of DT_DIR, DT_LNK:
               let dOpt = maybeGetPathInfo(
                 fullPath,
-                ignore           = ignore,
-                ignoreContains   = ignoreContains,
-                ignoreStartsWith = ignoreStartsWith,
-                ignoreRegex      = ignoreRegex,
+                spec = spec,
               )
               if dOpt.isSome():
                 toLook.incl(dOpt.get())
