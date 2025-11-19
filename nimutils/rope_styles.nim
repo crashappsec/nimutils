@@ -370,19 +370,6 @@ var
                              italic = ItalicOn, casing = CasingTitle)
     }.toTable()
 
-{.emit: """
-#include <stdatomic.h>
-#include <stdint.h>
-
-_Atomic(uint32_t) next_id = ATOMIC_VAR_INIT(0x1ffffff);
-
-uint32_t
-next_style_id() {
-  return atomic_fetch_add(&next_id, 1);
-}
-
-""" .}
-
 var debugId = 0
 
 type WalkInfo = object
@@ -460,9 +447,8 @@ proc repr*(r: Rope): string =
 # multi-threaded world, but I'm going to soon migrate it to my
 # lock-free, wait-free hash tables.
 
-proc next_style_id(): cuint {.importc, nodecl.}
-
 var
+  nextId = uint32(0x1ffffff)
   idToStyleMap: Table[uint32, FmtStyle]
   styleToIdMap: Table[FmtStyle, uint32]
 
@@ -478,7 +464,8 @@ proc getStyleId*(s: FmtStyle): uint32 =
   if s in styleToIdMap:
     return styleToIdMap[s]
 
-  result = uint32(next_style_id())
+  nextId += 1
+  result = uint32(nextId)
 
   idToStyleMap[result] = s
   styleToIdMap[s]      = result
