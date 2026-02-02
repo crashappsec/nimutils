@@ -294,6 +294,19 @@ function ensure_ffi {
     fi
 }
 
+function ensure_sodium {
+    if ! copy_from_package libsodium.a ; then
+        get_src libsodium https://github.com/jedisct1/libsodium.git
+        sh ./autogen.sh
+        ./configure
+        make
+        mv src/*/.libs/libsodium.a ${MY_LIBS}
+        if [[ -f ${MY_LIBS}/libsodium.a ]] ; then
+            echo $(color GREEN Installed libsodium to:) ${MY_LIBS}/libsodium.a
+        fi
+    fi
+}
+
 function remove_src {
   # Don't nuke the src if CON4M_DEV is on.
   if [[ -d ${SRC_DIR} ]] ; then
@@ -313,6 +326,7 @@ ensure_pcre
 ensure_gumbo
 ensure_hatrack
 ensure_ffi
+ensure_sodium
 
 colorln GREEN All dependencies satisfied.
 remove_src
