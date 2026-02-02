@@ -156,13 +156,21 @@ template withRetry(retries: int, firstRetryDelayMs: int, c: untyped) =
 
 proc check*(response: Response,
             url: Uri | string,
-            only2xx: bool = false,
-            raiseWhenAbove: int = 0,
+            acceptStatusCodes: openArray[Slice[int]] = @[],
+            rejectStatusCodes: openArray[Slice[int]] = @[],
            ): Response =
-  if only2xx and not response.code().is2xx():
-    raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
-  if raiseWhenAbove > 0 and response.code().int >= raiseWhenAbove:
-    raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
+  let code = int(response.code())
+  if len(acceptStatusCodes) > 0:
+    var matched = false
+    for range in acceptStatusCodes:
+      if range.contains(code):
+        matched = true
+        break
+    if not matched:
+      raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
+  for range in rejectStatusCodes:
+    if range.contains(code):
+      raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
   return response
 
 proc safeRequest(client: HttpClient,
@@ -174,8 +182,8 @@ proc safeRequest(client: HttpClient,
                  retries: int = 0,
                  connectRetries: int = 0,
                  firstRetryDelayMs: int = 0,
-                 only2xx: bool = false,
-                 raiseWhenAbove: int = 0,
+                 acceptStatusCodes: openArray[Slice[int]] = @[],
+                 rejectStatusCodes: openArray[Slice[int]] = @[],
                  ): Response =
   withRetry(connectRetries, firstRetryDelayMs):
     timeoutGuard(client, url)
@@ -186,9 +194,9 @@ proc safeRequest(client: HttpClient,
                                   body = body,
                                   headers = headers,
                                   multipart = multipart)
-    return response.check(url            = url,
-                          only2xx        = only2xx,
-                          raiseWhenAbove = raiseWhenAbove)
+    return response.check(url               = url,
+                          acceptStatusCodes = acceptStatusCodes,
+                          rejectStatusCodes = rejectStatusCodes)
 
 # https://github.com/nim-lang/Nim/blob/a45f43da3407dbbf8ecd15ce8ecb361af677add7/lib/pure/httpclient.nim#L380-L386
 # similar to stdlib but defaults to bundled CAs
@@ -258,8 +266,8 @@ proc safeRequest*(url: Uri | string,
                   verifyMode = CVerifyPeer,
                   maxRedirects: int = 3,
                   disallowHttp: bool = false,
-                  only2xx: bool = false,
-                  raiseWhenAbove: int = 0,
+                  acceptStatusCodes: openArray[Slice[int]] = @[],
+                  rejectStatusCodes: openArray[Slice[int]] = @[],
                   userAgent: string = defUserAgent,
                   ): Response =
   let uri = when url is string:
@@ -300,8 +308,8 @@ proc safeRequest*(url: Uri | string,
                               retries           = retries,
                               connectRetries    = connectRetries,
                               firstRetryDelayMs = firstRetryDelayMs,
-                              only2xx           = only2xx,
-                              raiseWhenAbove    = raiseWhenAbove)
+                              acceptStatusCodes = acceptStatusCodes,
+                              rejectStatusCodes = rejectStatusCodes)
 
   except SslError:
     if preferBundledCerts and pinnedCert != "":
@@ -333,7 +341,7 @@ proc safeRequest*(url: Uri | string,
     verifyMode             = verifyMode,
     maxRedirects           = maxRedirects,
     disallowHttp           = disallowHttp,
-    only2xx                = only2xx,
-    raiseWhenAbove         = raiseWhenAbove,
+    acceptStatusCodes      = acceptStatusCodes,
+    rejectStatusCodes      = rejectStatusCodes,
     userAgent              = userAgent,
   )

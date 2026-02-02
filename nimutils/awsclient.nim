@@ -168,7 +168,7 @@ proc request*(client: var AwsClient, params: Table, headers: HttpHeaders = newHt
     headers=authHeaders,
     retries=2,
     connectRetries=2,
-    only2xx=true,
+    acceptStatusCodes=[200..299],
     userAgent=client.userAgent,
     timeout=client.timeout,
   )
