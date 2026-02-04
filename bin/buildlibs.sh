@@ -297,6 +297,7 @@ function ensure_ffi {
 function ensure_sodium {
     if ! copy_from_package libsodium.a ; then
         get_src libsodium https://github.com/jedisct1/libsodium.git
+        git checkout stable
         sh ./autogen.sh
         ./configure
         make
