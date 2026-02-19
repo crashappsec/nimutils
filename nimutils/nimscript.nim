@@ -89,7 +89,7 @@ template applyCommonLinkOptions*(staticLink = true, quiet = true) =
     switch("cpu", targetArch)
     switch("passc", "-flto -target " & targetStr)
     switch("passl", "-flto -w -target " & targetStr &
-          "-Wl,-object_path_lto,lto.o")
+          " -Wl,-object_path_lto,lto.o")
   elif defined(linux):
     if staticLink:
       switch("passc", "-static")
