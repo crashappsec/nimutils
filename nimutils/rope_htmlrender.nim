@@ -88,7 +88,7 @@ proc toHtml*(r: Rope, indent = 0): string =
           cells.add(cell)
         else:
           cells.add(element("td", cell))
-      result = cells.join("\n")
+      result = element("tr", cells.join("\n"))
 
   for item in r.siblings:
     result &= item.toHtml()
