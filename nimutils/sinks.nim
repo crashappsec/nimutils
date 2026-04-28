@@ -255,9 +255,11 @@ type S3SinkState* = ref object of RootRef
   objPath*:  string
   nameBase*: string
   extra*:    string
+  endpoint*: string
 
 proc s3SinkInit(cfg: SinkConfig): bool =
   try:
+    var endpoint: string
     let
       uri                 = parseURI(cfg.params["uri"])
       bucket              = uri.hostname
@@ -266,13 +268,22 @@ proc s3SinkInit(cfg: SinkConfig): bool =
       token               = cfg.params.getOrDefault("token", "")
       region              = cfg.params.getOrDefault("region", defaultRegion)
       extra               = cfg.params.getOrDefault("extra", "")
-      baseObj             = uri.path[1 .. ^1] # Strip the leading /
+      # uri.path is "" when no path is given (e.g. s3://bucket); guard
+      # against that before slicing off the leading '/'.
+      rawPath             = uri.path
+      baseObj             = if rawPath.len > 1: rawPath[1 .. ^1] else: ""
       (objPath, nameBase) = splitPath(baseObj)
+
+    if "endpoint" in cfg.params:
+      endpoint = cfg.params["endpoint"]
+    else:
+      endpoint = ""
 
     cfg.private = S3SinkState(region: region, uri: uri, uid: uid,
                               secret: secret, token: token,
                               bucket: bucket, objPath: objPath,
-                              nameBase: nameBase,  extra: extra)
+                              nameBase: nameBase, extra: extra,
+                              endpoint: endpoint)
     return true
   except:
     return false
@@ -280,7 +291,12 @@ proc s3SinkInit(cfg: SinkConfig): bool =
 proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
   var
     state  = S3SinkState(cfg.private)
-    client = newS3Client((state.uid, state.secret, state.token), state.region)
+    client = if state.endpoint != "":
+               newS3Client((state.uid, state.secret, state.token),
+                           state.region, state.endpoint)
+             else:
+               newS3Client((state.uid, state.secret, state.token),
+                           state.region)
 
   cfg.iolog(t, "Open") # Not really a connect...
 
@@ -296,7 +312,11 @@ proc s3SinkOut(msg: string, cfg: SinkConfig, t: Topic, ignored: StringTable) =
 
   let
       newTail  = objParts.join("-")
-      newPath  = joinPath(state.objPath, newTail)
+      rawPath  = joinPath(state.objPath, newTail)
+      # put_object expects an absolute path; joinPath doesn't add a leading
+      # slash when objPath is empty, but the awsclient URL template requires
+      # one to separate the bucket name from the object key.
+      newPath  = if rawPath.startsWith("/"): rawPath else: "/" & rawPath
       response = client.put_object(state.bucket, newPath, msg)
 
   cfg.iolog(t, "Post to: " & newPath & "; response = " & response.status)
@@ -469,7 +489,8 @@ proc addS3Sink*() =
                "token"   : false,
                "uri"     : true,
                "region"  : false,
-               "extra"   : false
+               "extra"   : false,
+               "endpoint" : false
              }.toTable()
 
   record.initFunction   = some(InitCallback(s3SinkInit))
