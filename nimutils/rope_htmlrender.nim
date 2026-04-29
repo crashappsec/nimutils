@@ -83,7 +83,7 @@ proc toHtml*(r: Rope, indent = 0): string =
     var cells: seq[string]
     if r.cells.len() != 0:
       for item in r.cells:
-        var cell = item.toHtml().strip()
+        var cell = unicode.strip(item.toHtml())
         if cell.startswith("<td>") or cell.startswith("<th>"):
           cells.add(cell)
         else:
