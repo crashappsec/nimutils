@@ -259,7 +259,6 @@ type S3SinkState* = ref object of RootRef
 
 proc s3SinkInit(cfg: SinkConfig): bool =
   try:
-    var endpoint: string
     let
       uri                 = parseURI(cfg.params["uri"])
       bucket              = uri.hostname
