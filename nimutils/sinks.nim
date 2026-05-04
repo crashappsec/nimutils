@@ -273,11 +273,7 @@ proc s3SinkInit(cfg: SinkConfig): bool =
       rawPath             = uri.path
       baseObj             = if rawPath.len > 1: rawPath[1 .. ^1] else: ""
       (objPath, nameBase) = splitPath(baseObj)
-
-    if "endpoint" in cfg.params:
-      endpoint = cfg.params["endpoint"]
-    else:
-      endpoint = ""
+      endpoint = cfg.params.getOrDefault("endpoint", "")
 
     cfg.private = S3SinkState(region: region, uri: uri, uid: uid,
                               secret: secret, token: token,
