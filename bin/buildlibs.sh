@@ -308,6 +308,24 @@ function ensure_sodium {
     fi
 }
 
+function ensure_zlib {
+    if ! copy_from_package libz.a ; then
+        ensure_musl
+        get_src zlib https://github.com/madler/zlib.git
+        colorln CYAN "Building zlib"
+        ./configure --static
+        make libz.a
+        cp zlib.h zconf.h ${DEPS_DIR}/include/
+        mv libz.a ${MY_LIBS}
+        if [[ -f ${MY_LIBS}/libz.a ]] ; then
+            echo $(color GREEN Installed libz to:) ${MY_LIBS}/libz.a
+        else
+            colorln RED "Installation of zlib failed!"
+            exit 1
+        fi
+    fi
+}
+
 function remove_src {
   # Don't nuke the src if CON4M_DEV is on.
   if [[ -d ${SRC_DIR} ]] ; then
@@ -328,6 +346,7 @@ ensure_gumbo
 ensure_hatrack
 ensure_ffi
 ensure_sodium
+ensure_zlib
 
 colorln GREEN All dependencies satisfied.
 remove_src
