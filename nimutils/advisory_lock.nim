@@ -31,8 +31,7 @@ proc obtainLockFile*(fname: string, writeLock = false, timeout: int64 = 5000,
   result = open(cstring(fullpath), openflags)
 
   if result == -1:
-    raise newException(ValueError, "When trying to open " & fullpath &
-                       ", Got error = " & $(strerror(errno)))
+    raiseOSError(osLastError(), "When trying to open " & fullpath)
   var
     endtime: uint64 = if timeout < 0:
                       high(uint64)
