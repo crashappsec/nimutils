@@ -1,6 +1,14 @@
 import std/[net, httpclient, uri, math, os, streams, strutils, openssl, posix]
 import "."/[managedtmp, logging]
 
+var netDefaultUserAgent = defUserAgent
+
+proc getDefaultUserAgent*(): string =
+  netDefaultUserAgent
+
+proc setDefaultUserAgent*(agent: string) =
+  netDefaultUserAgent = agent
+
 proc getRootCAStoreContent(): string =
   const
     caWiki  = "https://wiki.mozilla.org/CA/Included_Certificates"
@@ -224,7 +232,7 @@ proc createHttpContext(uri: Uri,
                        preferBundledCerts: bool = false,
                        verifyMode = CVerifyPeer,
                        disallowHttp: bool = false,
-                       userAgent: string = defUserAgent,
+                       userAgent: string = netDefaultUserAgent,
                        ): (SslContext, HttpClient) =
   try:
     let
@@ -268,7 +276,7 @@ proc safeRequest*(url: Uri | string,
                   disallowHttp: bool = false,
                   acceptStatusCodes: openArray[Slice[int]] = @[],
                   rejectStatusCodes: openArray[Slice[int]] = @[],
-                  userAgent: string = defUserAgent,
+                  userAgent: string = netDefaultUserAgent,
                   ): Response =
   let uri = when url is string:
     parseUri(url)
