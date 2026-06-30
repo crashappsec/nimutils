@@ -1,5 +1,5 @@
 ## :Author: John Viega (john@crashoverride.com)
-## :Copyright: 2022, Crash Override, Inc.
+## :Copyright: 2022-2026, Crash Override, Inc.
 ##
 ## This module is for generic boxing of values, which is useful for
 ## compiler symbol tables, etc. However, this is also a more flexible
@@ -55,7 +55,7 @@
 ## * so beware!                                                       *
 ## ********************************************************************
 
-import std/[typetraits, hashes, strutils, tables, json, streams]
+import std/[typetraits, hashes, strutils, tables, json, streams, unicode]
 
 type
     MixedKind* = enum
@@ -326,7 +326,31 @@ proc boxToJson(s: Stream, b: Box) =
   of MkInt, MkFloat, MkBool:
     s.write($b)
   of MkStr:
-    s.write(escapeJson($b))
+    s.write('"')
+    for r in b.s.runes():
+      let cp = int(r)
+      case cp
+      of 0x22: s.write("\\\"")
+      of 0x5C: s.write("\\\\")
+      of 0x08: s.write("\\b")
+      of 0x0C: s.write("\\f")
+      of 0x0A: s.write("\\n")
+      of 0x0D: s.write("\\r")
+      of 0x09: s.write("\\t")
+      else:
+        if cp < 0x20:
+          s.write("\\u00" & toHex(cp, 2))
+        elif cp < 0x80:
+          s.write(char(cp))
+        elif cp < 0x10000:
+          s.write("\\u" & toHex(cp, 4))
+        else:
+          let
+            cp2  = cp - 0x10000
+            high = 0xD800 + (cp2 shr 10)
+            low  = 0xDC00 + (cp2 and 0x3FF)
+          s.write("\\u" & toHex(high, 4) & "\\u" & toHex(low, 4))
+    s.write('"')
   of MkSeq:
     s.write("[")
     for item in b.c.s:

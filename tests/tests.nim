@@ -91,6 +91,118 @@ suite "boxing":
     check r == n
     check r.value == 666
 
+suite "boxToJson string escaping":
+  # Round-trips a string through boxToJson → parseJson to verify the output is
+  # valid, parseable JSON that decodes back to the original value.
+  proc rts(s: string): string = parseJson(boxToJson(pack(s))).getStr()
+
+  test "empty string":
+    check boxToJson(pack("")) == "\"\""
+
+  test "ascii printable passthrough":
+    check boxToJson(pack("hello")) == "\"hello\""
+
+  # RFC 8259 §7 named escape sequences
+  test "named escape: double quote":
+    check boxToJson(pack("\"")) == "\"\\\"\""     # → "\""
+
+  test "named escape: backslash":
+    check boxToJson(pack("\\")) == "\"\\\\\""     # → "\\"
+
+  test "named escape: backspace":
+    check boxToJson(pack("\b")) == "\"\\b\""
+
+  test "named escape: form feed":
+    check boxToJson(pack("\f")) == "\"\\f\""
+
+  test "named escape: newline":
+    check boxToJson(pack("\n")) == "\"\\n\""
+
+  test "named escape: carriage return":
+    check boxToJson(pack("\r")) == "\"\\r\""
+
+  test "named escape: tab":
+    check boxToJson(pack("\t")) == "\"\\t\""
+
+  # RFC 8259 §7: U+0000..U+001F MUST be escaped; non-named ones use \u00XX
+  test "control chars use \\u00XX":
+    check boxToJson(pack("\x00")) == "\"\\u0000\""
+    check boxToJson(pack("\x01")) == "\"\\u0001\""
+    check boxToJson(pack("\x07")) == "\"\\u0007\""  # BEL
+    check boxToJson(pack("\x0B")) == "\"\\u000B\""  # VT (not \v in JSON)
+    check boxToJson(pack("\x0E")) == "\"\\u000E\""
+    check boxToJson(pack("\x1F")) == "\"\\u001F\""
+
+  # BMP non-ASCII → \uXXXX (uppercase hex per toHex)
+  # Cases drawn from JSONTestSuite y_string_* tests by Nicolas Seriot
+  test "BMP: U+A66D Ꙭ (JSONTestSuite y_string_unicode)":
+    check boxToJson(pack("ꙭ")) == "\"\\uA66D\""
+
+  test "BMP: U+200B zero-width space (y_string_unicode_U+200B)":
+    check boxToJson(pack("\u200B")) == "\"\\u200B\""
+
+  test "BMP: U+2028 line separator (y_string_unicode_U+2028_line_sep)":
+    check boxToJson(pack("\u2028")) == "\"\\u2028\""
+
+  test "BMP: U+2029 paragraph separator (y_string_unicode_U+2029_para_sep)":
+    check boxToJson(pack("\u2029")) == "\"\\u2029\""
+
+  test "BMP: U+FDD0 noncharacter (y_string_unicode_U+FDD0)":
+    check boxToJson(pack("\uFDD0")) == "\"\\uFDD0\""
+
+  test "BMP: U+FFFE noncharacter (y_string_unicode_U+FFFE_nonchar)":
+    check boxToJson(pack("\uFFFE")) == "\"\\uFFFE\""
+
+  test "BMP: U+FFFF noncharacter (y_string_escaped_noncharacter)":
+    check boxToJson(pack("\uFFFF")) == "\"\\uFFFF\""
+
+  # Supplementary chars (U+10000+) → UTF-16 surrogate pairs \uHHHH\uLLLL
+  test "supplementary: U+10000 minimum":
+    check boxToJson(pack("\u{10000}")) == "\"\\uD800\\uDC00\""
+
+  test "supplementary: U+1D11E 𝄞 musical G clef (y_string_surrogates_U+1D11E)":
+    check boxToJson(pack("\u{1D11E}")) == "\"\\uD834\\uDD1E\""
+
+  test "supplementary: U+10437 𐐷 (y_string_accepted_surrogate_pair)":
+    check boxToJson(pack("\u{10437}")) == "\"\\uD801\\uDC37\""
+
+  test "supplementary: U+1F600 😀 emoji":
+    check boxToJson(pack("\u{1F600}")) == "\"\\uD83D\\uDE00\""
+
+  test "supplementary: U+1FFFE noncharacter (y_string_unicode_U+1FFFE_nonchar)":
+    check boxToJson(pack("\u{1FFFE}")) == "\"\\uD83F\\uDFFE\""
+
+  test "supplementary: U+10FFFE noncharacter (y_string_unicode_U+10FFFE_nonchar)":
+    check boxToJson(pack("\u{10FFFE}")) == "\"\\uDBFF\\uDFFE\""
+
+  test "supplementary: U+10FFFF maximum (y_string_last_surrogates_1_and_2)":
+    check boxToJson(pack("\u{10FFFF}")) == "\"\\uDBFF\\uDFFF\""
+
+  # Round-trip tests: output must be parseable and decode back to the original
+  test "round-trip: named escapes":
+    for s in ["\"", "\\", "\b", "\f", "\n", "\r", "\t"]:
+      check rts(s) == s
+
+  test "round-trip: all control chars U+0000..U+001F":
+    for i in 0 .. 31:
+      check rts($chr(i)) == $chr(i)
+
+  # JSONTestSuite y_string_utf8: "€𝄞"
+  test "round-trip: BMP non-ASCII":
+    check rts("café") == "café"
+    check rts("中文") == "中文"
+    check rts("€𝄞") == "€𝄞"
+
+  test "round-trip: supplementary chars":
+    check rts("\u{1D11E}") == "\u{1D11E}"   # 𝄞
+    check rts("\u{1F600}") == "\u{1F600}"   # 😀
+    check rts("\u{10437}") == "\u{10437}"   # 𐐷
+    check rts("\u{10FFFF}") == "\u{10FFFF}"
+
+  test "round-trip: mixed content":
+    let s = "hello \"world\"\n\t中文\u{1F600}"
+    check rts(s) == s
+
 EitherDecl(EitherTest, string, int)
 
 suite "either":
