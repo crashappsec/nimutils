@@ -45,7 +45,7 @@ proc getRootCAStoreContent(): string =
 # while trying to use it
 var tmpCAStore = ""
 var tmpCaStorePid = getpid()
-proc getCAStorePath(): string =
+proc getCAStorePath*(): string =
   let pid = getpid()
   if tmpCaStorePid == pid and tmpCAStore != "":
     return tmpCAStore
