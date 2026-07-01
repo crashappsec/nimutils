@@ -373,7 +373,6 @@ function ensure_libgit2 {
         ensure_musl
         ensure_zlib
         ensure_openssl
-        ensure_libssh2
         get_src libgit2 https://github.com/libgit2/libgit2.git
         colorln CYAN "Building libgit2"
         mkdir -p build
@@ -381,15 +380,13 @@ function ensure_libgit2 {
         cmake .. \
             -DBUILD_SHARED_LIBS=OFF \
             -DBUILD_TESTS=OFF \
-            -DUSE_SSH=libssh2 \
+            -DUSE_SSH=exec \
             -DUSE_HTTPS=OpenSSL \
             -DUSE_NTLMCLIENT=OFF \
             -DREGEX_BACKEND=builtin \
             -DCMAKE_BUILD_TYPE=Release \
             -DOPENSSL_SSL_LIBRARY=${MY_LIBS}/libssl.a \
-            -DOPENSSL_CRYPTO_LIBRARY=${MY_LIBS}/libcrypto.a \
-            -DLIBSSH2_INCLUDE_DIR=${DEPS_DIR}/include \
-            -DLIBSSH2_LIBRARY=${MY_LIBS}/libssh2.a
+            -DOPENSSL_CRYPTO_LIBRARY=${MY_LIBS}/libcrypto.a
         make -j4
         cp libgit2.a ${MY_LIBS}
         if [[ -f ${MY_LIBS}/libgit2.a ]] ; then
@@ -410,7 +407,6 @@ ensure_hatrack
 ensure_ffi
 ensure_sodium
 ensure_zlib
-ensure_libssh2
 ensure_libgit2
 
 colorln GREEN All dependencies satisfied.
