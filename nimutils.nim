@@ -11,13 +11,13 @@
 ## few fixes have all been for compatability and are made under the
 ## same license. I also migrated the crypto to openssl.
 
-import nimutils/[box, random, unicodeid, pubsub, sinks, auth, misc, texttable,
+import nimutils/[box, random, unicodeid, pubsub, auth, misc, texttable,
                  file, filetable, encodings, advisory_lock, progress,
                  sha, aes, prp, hexdump, markdown, htmlparse, net, colortable,
                  rope_base, rope_styles, rope_construct, rope_prerender,
                  rope_ansirender, rope_htmlrender, rope_textrender,
                  switchboard, subproc, int128_t, dict, list, c4str, logging]
-export box, random, unicodeid, pubsub, sinks, auth, misc, random, texttable,
+export box, random, unicodeid, pubsub, auth, misc, random, texttable,
        file, filetable, encodings, advisory_lock, progress, sha,
        aes, prp, hexdump, markdown, htmlparse, net, colortable, rope_base,
        rope_styles, rope_construct, rope_prerender, rope_ansirender,
@@ -37,29 +37,6 @@ when defined(macosx):
 ## `randwords`  because it does have a huge data structure embedded, which
 ##              isn't worth it if you're not using it.
 
-# setup logging config doesnt belong here but currently there is no easier
-# way to avoid circular deps between:
-# * net.nim
-# * sinks.nim
-# * logging.nim
-addDefaultSinks()
-let
-  `cfg?`          = configSink(getSinkImplementation("stderr").get(),
-                               "default-log-config",
-                               filters = @[MsgFilter(logLevelFilter),
-                                           MsgFilter(logPrefixFilter)])
-  defaultLogHook* = `cfg?`.get()
-subscribe(logTopic, defaultLogHook)
-
-when not defined(release):
-  let
-    debugTopic        = registerTopic("debug")
-    `debugHook?`      = configSink(getSinkImplementation("stderr").get(),
-                                   "default-debug-config")
-    defaultDebugHook* = `debugHook?`.get()
-
-  proc debug*(msg: string) =
-    discard publish(debugTopic, msg)
 
 when isMainModule:
   import std/[tables, streams, algorithm, strutils]
