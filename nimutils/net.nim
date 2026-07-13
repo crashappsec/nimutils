@@ -1,6 +1,16 @@
 import std/[net, httpclient, uri, math, os, streams, strutils, openssl, posix]
 import "."/[managedtmp, logging]
 
+type HttpStatusError* = object of ValueError
+  code*: int
+
+proc newHttpException*(
+    code:            int,
+    message:         string,
+    parentException: ref Exception = nil,
+): ref HttpStatusError =
+  result = (ref HttpStatusError)(code: code, msg: message, parent: parentException)
+
 var netDefaultUserAgent = defUserAgent
 
 proc getDefaultUserAgent*(): string =
@@ -175,10 +185,16 @@ proc check*(response: Response,
         matched = true
         break
     if not matched:
-      raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
+      raise newHttpException(
+        code    = code,
+        message = $url & " failed with " & response.status & " " & response.body(),
+      )
   for range in rejectStatusCodes:
     if range.contains(code):
-      raise newException(ValueError, $url & " failed with " & response.status & " " & response.body())
+      raise newHttpException(
+        code    = code,
+        message = $url & " failed with " & response.status & " " & response.body(),
+      )
   return response
 
 proc safeRequest(client: HttpClient,
