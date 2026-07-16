@@ -208,16 +208,25 @@ proc safeRequest(client: HttpClient,
                  firstRetryDelayMs: int = 0,
                  acceptStatusCodes: openArray[Slice[int]] = @[],
                  rejectStatusCodes: openArray[Slice[int]] = @[],
+                 attemptHeader: string = "",
                  ): Response =
   withRetry(connectRetries, firstRetryDelayMs):
     timeoutGuard(client, url)
+  var
+    reqHeaders  = headers
+    attemptNum  = 0
   withRetry(retries, firstRetryDelayMs):
     # all vars are accessed from outer scope
-    let response = client.request(url = url,
+    attemptNum += 1
+    if attemptHeader != "":
+      if reqHeaders == nil:
+        reqHeaders = newHttpHeaders()
+      reqHeaders[attemptHeader] = $attemptNum
+    let response = client.request(url        = url,
                                   httpMethod = httpMethod,
-                                  body = body,
-                                  headers = headers,
-                                  multipart = multipart)
+                                  body       = body,
+                                  headers    = reqHeaders,
+                                  multipart  = multipart)
     return response.check(url               = url,
                           acceptStatusCodes = acceptStatusCodes,
                           rejectStatusCodes = rejectStatusCodes)
@@ -293,6 +302,7 @@ proc safeRequest*(url: Uri | string,
                   acceptStatusCodes: openArray[Slice[int]] = @[],
                   rejectStatusCodes: openArray[Slice[int]] = @[],
                   userAgent: string = netDefaultUserAgent,
+                  attemptHeader: string = "",
                   ): Response =
   let uri = when url is string:
     parseUri(url)
@@ -333,7 +343,8 @@ proc safeRequest*(url: Uri | string,
                               connectRetries    = connectRetries,
                               firstRetryDelayMs = firstRetryDelayMs,
                               acceptStatusCodes = acceptStatusCodes,
-                              rejectStatusCodes = rejectStatusCodes)
+                              rejectStatusCodes = rejectStatusCodes,
+                              attemptHeader     = attemptHeader)
 
   except SslError:
     if preferBundledCerts and pinnedCert != "":
