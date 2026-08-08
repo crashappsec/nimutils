@@ -1,6 +1,12 @@
 name: lint
 
-on: pull_request
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   pre-commit:
