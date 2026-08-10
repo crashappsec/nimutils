@@ -34,8 +34,6 @@ when defined(macosx):
 ## `logging`    because importing it sets up data structures that you might
 ##              not use; you should explicitly choose to import it.
 ## `managedtmp` because it adds a destructor you might not want.
-## `randwords`  because it does have a huge data structure embedded, which
-##              isn't worth it if you're not using it.
 
 
 when isMainModule:
@@ -365,7 +363,7 @@ when isMainModule:
     print(h2("Instant table tests"))
     var mess1 = @["a.out.dSYM", "encodings.nim", "managedtmp.nim",
                   "random.nim", "sinks.nim", "advisory_lock.nim", "file.nim",
-                  "markdown.nim", "randwords.nim", "subproc.c",
+                  "markdown.nim", "subproc.c",
                   "aes.nim", "filetable.nim", "misc", "rope_ansirender.nim",
                   "subproc.nim", "awsclient.nim", "hex.c", "misc.nim",
                   "rope_base.nim", "switchboard.c", "box.nim", "hexdump",

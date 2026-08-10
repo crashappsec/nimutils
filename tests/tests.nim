@@ -3,7 +3,6 @@
 import std/[unittest, tables, json, os]
 import nimutils
 import nimutils/[box, unicodeid]
-import nimutils/randwords # large code size, not imported by default.
 import nimutils/either    # Not working well, not imported by default.
 
 
@@ -296,14 +295,6 @@ suite "misc":
       expectedDir = currentSourcePath() / ".." / ".." / ".." / ".." / ".."
 
     check resolvePath("../../src/../../eoeoeo") == expectedDir / "eoeoeo"
-  test "random":
-    let
-      words = getRandomWords(3)
-      bits = wordsToInt(words).get()
-      back = intToWords(bits)
-
-    check back == words
-    echo "  Your words were: ", back
 
   test "flatten":
     var
